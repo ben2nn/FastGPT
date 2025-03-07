@@ -1,0 +1,91 @@
+import { MongoChat } from '@fastgpt/service/core/chat/chatSchema';
+import { MongoChatItem } from '@fastgpt/service/core/chat/chatItemSchema';
+import { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
+import { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type';
+import { parsePaginationRequest } from '@fastgpt/service/common/api/pagination';
+import { NextAPI } from '@/service/middleware/entry';
+import { connectToDatabase } from '@/service/mongo';
+import { jsonRes } from '@fastgpt/service/common/response';
+
+export type getChatHistoriesBody = {
+  appId: string;
+  chatIdList: string[];
+  keyword?: string;
+  startTime?: Date;
+  endTime?: Date;
+};
+
+export type getChatHistoriesResponse = ChatHistoryItemResType[] | {};
+
+async function handler(
+  req: ApiRequestProps<getChatHistoriesBody>,
+  res: ApiResponseType<any>
+): Promise<getChatHistoriesResponse> {
+  const dceHappy = req.headers['dce-happy'];
+  if (!dceHappy || dceHappy != 'dejaxshigekuailedeqingnian') {
+    return jsonRes(res, {
+      code: 403,
+      message: '访问受限'
+    });
+  }
+
+  const { appId, chatIdList, keyword, startTime, endTime } = req.body;
+
+  const { offset, pageSize } = parsePaginationRequest(req);
+
+  if (!appId || !chatIdList?.length) {
+    return {};
+  }
+
+  // 构建查询条件
+  const filter: Filter<Document> = {
+    appId: appId,
+    chatId: { $in: chatIdList }
+  };
+
+  // 时间范围过滤
+  if (startTime && endTime) {
+    filter.updateTime = {
+      $gte: startTime,
+      $lte: endTime
+    };
+  }
+
+  // 关键字搜索（同时匹配问题和回答）
+  if (keyword) {
+    const regex = new RegExp(keyword, 'i');
+    filter.title = { $regex: regex };
+  }
+
+  if (!filter) {
+    return {
+      list: [],
+      total: 0
+    };
+  }
+
+  await connectToDatabase();
+
+  // 并行查询
+  const [data, total] = await Promise.all([
+    await MongoChat.find(filter, 'chatId title appId updateTime')
+      .sort({ top: -1, updateTime: -1 })
+      .skip(offset)
+      .limit(pageSize)
+      .lean(),
+    MongoChat.countDocuments(filter)
+  ]);
+
+  // 结果转换
+  return {
+    list: data.map((item) => ({
+      chatId: item.chatId,
+      updateTime: item.updateTime,
+      appId: item.appId,
+      title: item.title
+    })),
+    total
+  };
+}
+
+export default NextAPI(handler);

@@ -7,7 +7,6 @@ import { hashStr } from '@fastgpt/global/common/string/tools';
 import { authCert } from '@fastgpt/service/support/permission/auth/common';
 
 export default async function handler(req, res) {
-  console.log('123');
   const { method } = req;
   await connectToDatabase();
 
