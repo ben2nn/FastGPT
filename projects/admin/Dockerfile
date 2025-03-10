@@ -30,8 +30,8 @@ ARG base_url
 
 # copy common node_modules and one project node_modules
 COPY package.json pnpm-workspace.yaml .npmrc tsconfig.json ./
-COPY --from=maindeps /admin/node_modules ./node_modules
-COPY --from=maindeps /admin/packages ./packages
+COPY --from=maindeps /app/node_modules ./node_modules
+COPY --from=maindeps /app/packages ./packages
 COPY ./projects/admin ./projects/admin
 COPY --from=maindeps /app/projects/admin/node_modules ./projects/admin/node_modules
 
@@ -41,7 +41,7 @@ RUN apk add --no-cache libc6-compat && npm install -g pnpm@9.4.0
 
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 ENV NEXT_PUBLIC_BASE_URL=$base_url
-RUN pnpm --filter=app build
+RUN pnpm --filter=admin build
 
 # --------- runner -----------
 FROM node:20.14.0-alpine AS runner
