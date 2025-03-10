@@ -39,7 +39,7 @@ async function handler(
   }
 
   // 构建查询条件
-  const filter = {
+  const filter: Filter<Document> = {
     appId: appId,
     chatId: { $in: chatIdList }
   };
