@@ -1,11 +1,10 @@
 import { MongoChat } from '@fastgpt/service/core/chat/chatSchema';
-import { MongoChatItem } from '@fastgpt/service/core/chat/chatItemSchema';
 import { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type';
 import { parsePaginationRequest } from '@fastgpt/service/common/api/pagination';
 import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/mongo';
-import { jsonRes } from '@fastgpt/service/common/response';
+import { NextApiResponse } from 'next/dist/shared/lib/utils';
 
 export type getChatHistoriesBody = {
   appId: string;
@@ -19,14 +18,12 @@ export type getChatHistoriesResponse = ChatHistoryItemResType[] | {};
 
 async function handler(
   req: ApiRequestProps<getChatHistoriesBody>,
-  res: ApiResponseType<any>
+  res: NextApiResponse
 ): Promise<getChatHistoriesResponse> {
   const dceHappy = req.headers['dce-happy'];
   if (!dceHappy || dceHappy != process.env.DCE_HAPPY) {
-    return jsonRes(res, {
-      code: 403,
-      message: '访问受限'
-    });
+    res.status(403).json({ message: '访问受限' });
+    return {};
   }
 
   const { appId, chatIdList, keyword, startTime, endTime } = req.body;

@@ -23,10 +23,8 @@ async function handler(
 ): Promise<getChatHistoriesResponse> {
   const dceHappy = req.headers['dce-happy'];
   if (!dceHappy || dceHappy != process.env.DCE_HAPPY) {
-    return jsonRes(res, {
-      code: 403,
-      message: '访问受限'
-    });
+    res.status(403).json({ message: '访问受限' });
+    return {};
   }
 
   const { appId, chatIdList, keyword, startTime, endTime } = req.body;
