@@ -21,9 +21,11 @@ async function handler(
   req: ApiRequestProps<getChatHistoriesBody>,
   res: ApiResponseType<any>
 ): Promise<getChatHistoriesResponse> {
+  await connectToDatabase();
+
   const dceHappy = req.headers['dce-happy'];
   if (!dceHappy || dceHappy != process.env.DCE_HAPPY) {
-    res.status(403).json({ message: '访问受限' });
+    res.status(403).json({ code: 403, message: '访问受限' });
     return {};
   }
 
@@ -61,8 +63,6 @@ async function handler(
       total: 0
     };
   }
-
-  await connectToDatabase();
 
   filter.obj = 'Human';
   const [data, total] = await Promise.all([
