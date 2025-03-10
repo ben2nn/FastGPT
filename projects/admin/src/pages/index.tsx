@@ -4,11 +4,14 @@ import Loading from '@fastgpt/web/components/common/MyLoading';
 import { useRouter } from 'next/router';
 
 const index = () => {
+  /**
   const router = useRouter();
   useEffect(() => {
     router.push('/user/list');
   }, [router]);
   return <Loading></Loading>;
+   **/
+  return;
 };
 
 export async function getServerSideProps(content: any) {

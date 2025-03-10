@@ -22,7 +22,7 @@ async function handler(
   res: ApiResponseType<any>
 ): Promise<getChatHistoriesResponse> {
   const dceHappy = req.headers['dce-happy'];
-  if (!dceHappy || dceHappy != '123') {
+  if (!dceHappy || dceHappy != process.env.DCE_HAPPY) {
     return jsonRes(res, {
       code: 403,
       message: '访问受限'
