@@ -6,6 +6,7 @@ import { parsePaginationRequest } from '@fastgpt/service/common/api/pagination';
 import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/mongo';
 import { jsonRes } from '@fastgpt/service/common/response';
+import { Filter } from 'jsondiffpatch';
 
 export type getChatHistoriesBody = {
   appId: string;
@@ -38,7 +39,7 @@ async function handler(
   }
 
   // 构建查询条件
-  const filter: Filter<Document> = {
+  const filter: { chatId: { $in: string[] }; appId: string } = {
     appId: appId,
     chatId: { $in: chatIdList }
   };
