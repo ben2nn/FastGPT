@@ -3,8 +3,9 @@ import { hashStr } from '@fastgpt/global/common/string/tools';
 import { MongoUser } from '@fastgpt/service/support/user/schema';
 import { MongoTeam } from '@fastgpt/service/support/user/team/teamSchema';
 import { MongoTeamMember } from '@fastgpt/service/support/user/team/teamMemberSchema';
+import { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 
-export default async function handler(req, res) {
+export default async function handler(req: ApiRequestProps, res: ApiResponseType<any>) {
   const {
     query: { id },
     method
@@ -38,7 +39,7 @@ export default async function handler(req, res) {
         };
 
         if (password) {
-          updateDoc.password = hashStr(password);
+          (updateDoc as any).password = hashStr(password);
         }
 
         const user = await MongoUser.findByIdAndUpdate(id, updateDoc, {

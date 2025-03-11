@@ -5,8 +5,9 @@ import { MongoTeam } from '@fastgpt/service/support/user/team/teamSchema';
 import { MongoTeamMember } from '@fastgpt/service/support/user/team/teamMemberSchema';
 import { hashStr } from '@fastgpt/global/common/string/tools';
 import { authCert } from '@fastgpt/service/support/permission/auth/common';
+import { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 
-export default async function handler(req, res) {
+export default async function handler(req: ApiRequestProps, res: ApiResponseType<any>) {
   const { method } = req;
   await connectToDatabase();
 

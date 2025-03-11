@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
 import {
   Box,
   Button,
@@ -21,16 +21,36 @@ import {
   ModalCloseButton,
   useDisclosure,
   useToast,
-  Select
+  Select,
+  Container,
+  Heading
 } from '@chakra-ui/react';
 import { serviceSideProps } from '@/web/common/utils/i18n';
+
+interface User {
+  _id?: string;
+  username: string;
+  password: string;
+  status: string;
+  avatar?: string;
+  balance: number;
+  promotionRate: number;
+  timezone: string;
+}
+
+// 定义组件props类型
+interface UserFormProps {
+  user?: User;
+  onSubmit: (formData: User) => void;
+}
+
 const fetchUsers = async () => {
   const response = await fetch('/api/extend/user');
   if (!response.ok) throw new Error('Failed to fetch users');
   return response.json();
 };
 
-const addUser = async (userData) => {
+const addUser = async (userData: User) => {
   const response = await fetch('/api/extend/user', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -40,7 +60,7 @@ const addUser = async (userData) => {
   return response.json();
 };
 
-const updateUser = async (userId, userData) => {
+const updateUser = async (userId: string, userData: User) => {
   const response = await fetch(`/api/extend/user/${userId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -50,15 +70,15 @@ const updateUser = async (userId, userData) => {
   return response.json();
 };
 
-const deleteUser = async (userId) => {
+const deleteUser = async (userId: string) => {
   const response = await fetch(`/api/extend/user/${userId}`, { method: 'DELETE' });
   if (!response.ok) throw new Error('Failed to delete user');
   return response.json();
 };
 
 export default function UserManagement() {
-  const [users, setUsers] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | undefined>(undefined);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
 
@@ -72,8 +92,8 @@ export default function UserManagement() {
       setUsers(fetchedUsers);
     } catch (error) {
       toast({
-        title: 'Failed to load users.',
-        description: error.message,
+        title: '加载用户失败。',
+        description: (error as any).message,
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -81,21 +101,21 @@ export default function UserManagement() {
     }
   };
 
-  const handleAddUser = async (userData) => {
+  const handleAddUser = async (userData: User) => {
     try {
       const newUser = await addUser(userData);
       setUsers([...users, newUser.user]);
       onClose();
       toast({
-        title: 'User added.',
+        title: '添加用户成功。',
         status: 'success',
         duration: 2000,
         isClosable: true
       });
     } catch (error) {
       toast({
-        title: 'Failed to add user.',
-        description: error.message,
+        title: '添加用户失败。',
+        description: (error as any).message,
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -103,21 +123,24 @@ export default function UserManagement() {
     }
   };
 
-  const handleUpdateUser = async (userData) => {
+  const handleUpdateUser = async (userData: User) => {
     try {
+      if (!currentUser || !currentUser._id) {
+        throw new Error('无效的用户ID');
+      }
       const updatedUser = await updateUser(currentUser._id, userData);
       setUsers(users.map((user) => (user._id === updatedUser._id ? updatedUser : user)));
       onClose();
       toast({
-        title: 'User updated.',
+        title: '更新用户成功。',
         status: 'success',
         duration: 2000,
         isClosable: true
       });
     } catch (error) {
       toast({
-        title: 'Failed to update user.',
-        description: error.message,
+        title: '更新用户失败。',
+        description: (error as any).message,
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -125,20 +148,20 @@ export default function UserManagement() {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
+  const handleDeleteUser = async (userId: string) => {
     try {
       await deleteUser(userId);
       setUsers(users.filter((user) => user._id !== userId));
       toast({
-        title: 'User deleted.',
+        title: '删除用户成功。',
         status: 'success',
         duration: 2000,
         isClosable: true
       });
     } catch (error) {
       toast({
-        title: 'Failed to delete user.',
-        description: error.message,
+        title: '删除用户失败。',
+        description: (error as any).message,
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -147,29 +170,32 @@ export default function UserManagement() {
   };
 
   const openAddModal = () => {
-    setCurrentUser(null);
+    setCurrentUser(undefined);
     onOpen();
   };
 
-  const openEditModal = (user) => {
+  const openEditModal = (user: User) => {
     setCurrentUser(user);
     onOpen();
   };
 
   return (
-    <Box p={5}>
+    <Container maxW="container.lg" py={8}>
+      <Heading as="h1" mb={6} textAlign="center">
+        用户管理
+      </Heading>
       <Button onClick={openAddModal} colorScheme="blue" mb={4}>
-        Add User
+        添加用户
       </Button>
-      <Table variant="simple">
+      <Table variant="striped" colorScheme="teal">
         <Thead>
           <Tr>
-            <Th>Username</Th>
-            <Th>Status</Th>
-            <Th>Balance</Th>
-            <Th>Promotion Rate</Th>
-            <Th>Timezone</Th>
-            <Th>Actions</Th>
+            <Th>用户名</Th>
+            <Th>状态</Th>
+            <Th>余额</Th>
+            <Th>分成比例</Th>
+            <Th>时区</Th>
+            <Th>操作</Th>
           </Tr>
         </Thead>
         <Tbody>
@@ -183,10 +209,10 @@ export default function UserManagement() {
               <Td>
                 <HStack spacing={2}>
                   <Button size="sm" onClick={() => openEditModal(user)}>
-                    Edit
+                    编辑
                   </Button>
-                  <Button size="sm" colorScheme="red" onClick={() => handleDeleteUser(user._id)}>
-                    Delete
+                  <Button size="sm" colorScheme="red" onClick={() => handleDeleteUser(user._id!)}>
+                    删除
                   </Button>
                 </HStack>
               </Td>
@@ -198,7 +224,7 @@ export default function UserManagement() {
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>{currentUser ? 'Edit User' : 'Add User'}</ModalHeader>
+          <ModalHeader>{currentUser ? '编辑用户' : '添加用户'}</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <UserForm
@@ -208,12 +234,12 @@ export default function UserManagement() {
           </ModalBody>
         </ModalContent>
       </Modal>
-    </Box>
+    </Container>
   );
 }
 
-function UserForm({ user, onSubmit }) {
-  const [formData, setFormData] = useState(
+function UserForm({ user, onSubmit }: UserFormProps) {
+  const [formData, setFormData] = useState<User>(
     user || {
       username: '',
       password: '',
@@ -224,12 +250,17 @@ function UserForm({ user, onSubmit }) {
     }
   );
 
-  const handleChange = (e) => {
+  // 处理表单字段变化
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === 'balance' || name === 'promotionRate' ? Number(value) : value
+    }));
   };
 
-  const handleSubmit = (e) => {
+  // 处理表单提交
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     onSubmit(formData);
   };
@@ -238,12 +269,12 @@ function UserForm({ user, onSubmit }) {
     <form onSubmit={handleSubmit}>
       <VStack spacing={4}>
         <FormControl isRequired>
-          <FormLabel>Username</FormLabel>
+          <FormLabel>用户名</FormLabel>
           <Input name="username" value={formData.username} onChange={handleChange} />
         </FormControl>
         {!user && (
           <FormControl isRequired>
-            <FormLabel>Password</FormLabel>
+            <FormLabel>密码</FormLabel>
             <Input
               name="password"
               type="password"
@@ -253,18 +284,18 @@ function UserForm({ user, onSubmit }) {
           </FormControl>
         )}
         <FormControl>
-          <FormLabel>Status</FormLabel>
+          <FormLabel>状态</FormLabel>
           <Select name="status" value={formData.status} onChange={handleChange}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </Select>
         </FormControl>
         <FormControl>
-          <FormLabel>Balance</FormLabel>
+          <FormLabel>余额</FormLabel>
           <Input name="balance" type="number" value={formData.balance} onChange={handleChange} />
         </FormControl>
         <FormControl>
-          <FormLabel>Promotion Rate (%)</FormLabel>
+          <FormLabel>分成比例 (%)</FormLabel>
           <Input
             name="promotionRate"
             type="number"
@@ -273,21 +304,13 @@ function UserForm({ user, onSubmit }) {
           />
         </FormControl>
         <FormControl>
-          <FormLabel>Timezone</FormLabel>
+          <FormLabel>时区</FormLabel>
           <Input name="timezone" value={formData.timezone} onChange={handleChange} />
         </FormControl>
         <Button type="submit" colorScheme="blue">
-          {user ? 'Update' : 'Add'} User
+          {user ? '更新用户' : '添加用户'}
         </Button>
       </VStack>
     </form>
   );
-}
-
-export async function getServerSideProps(content: any) {
-  return {
-    props: {
-      ...(await serviceSideProps(content, ['publish', 'user']))
-    }
-  };
 }

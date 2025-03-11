@@ -42,27 +42,7 @@ export async function getInitConfig() {
   return Promise.all([initSystemConfig(), loadSystemModels()]);
 }
 
-export async function initSystemConfig() {
-  // load config
-  const [{ config: dbConfig }] = await Promise.all([getFastGPTConfigFromDB()]);
-  const fileRes = json5.parse(fileConfig) as FastGPTConfigFileType;
-
-  // get config from database
-  const config: FastGPTConfigFileType = {
-    feConfigs: {},
-    systemEnv: {
-      ...fileRes.systemEnv,
-      ...(dbConfig.systemEnv || {})
-    }
-  };
-
-  // set config
-  initFastGPTConfig(config);
-
-  console.log({
-    systemEnv: global.systemEnv
-  });
-}
+export async function initSystemConfig() {}
 
 export async function initSystemPluginGroups() {
   try {

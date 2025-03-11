@@ -5,8 +5,6 @@ import { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type';
 import { parsePaginationRequest } from '@fastgpt/service/common/api/pagination';
 import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/mongo';
-import { jsonRes } from '@fastgpt/service/common/response';
-import { Filter } from 'jsondiffpatch';
 
 export type getChatHistoriesBody = {
   appId: string;
@@ -25,6 +23,7 @@ async function handler(
   await connectToDatabase();
 
   const dceHappy = req.headers['dce-happy'];
+
   if (!dceHappy || dceHappy != process.env.DCE_HAPPY) {
     res.status(403).json({ code: 403, message: '访问受限' });
     return {};
@@ -38,45 +37,47 @@ async function handler(
     return {};
   }
 
-  // 构建查询条件
-  const filter: Filter<Document> = {
-    appId: appId,
-    chatId: { $in: chatIdList }
-  };
-
-  // 时间范围过滤
-  if (startTime && endTime) {
-    filter.time = {
-      $gte: startTime,
-      $lte: endTime
+  const match = await (async () => {
+    // 初始化基础过滤条件
+    const matchFilter: Record<string, any> = {
+      appId: appId,
+      chatId: { $in: chatIdList }
     };
-  }
 
-  // 关键字搜索（同时匹配问题和回答）
-  if (keyword) {
-    const regex = new RegExp(keyword, 'i');
-    filter.value = { $regex: regex };
-  }
+    // 添加时间范围过滤
+    if (startTime && endTime) {
+      matchFilter.time = {
+        $gte: startTime,
+        $lte: endTime
+      };
+    }
 
-  if (!filter) {
+    // 添加关键字搜索（使用正则表达式）
+    if (keyword?.trim()) {
+      matchFilter.$or = [{ 'value[0].text.content': { $regex: keyword, $options: 'i' } }];
+    }
+    return matchFilter;
+  })();
+
+  if (!match) {
     return {
       list: [],
       total: 0
     };
   }
 
-  filter.obj = 'Human';
+  match.obj = 'Human';
   const [data, total] = await Promise.all([
-    await MongoChatItem.find(filter, 'appId chatId obj value time')
+    await MongoChatItem.find(match, 'appId chatId obj value time')
       .sort({ top: -1, updateTime: -1 })
       .skip(offset)
       .limit(pageSize)
       .lean(),
-    MongoChatItem.countDocuments(filter)
+    MongoChatItem.countDocuments(match)
   ]);
 
-  filter.obj = 'AI';
-  const items = await MongoChatItem.find(filter, 'appId chatId obj value time')
+  match.obj = 'AI';
+  const items = await MongoChatItem.find(match, 'appId chatId obj value time')
     .sort({ top: -1, updateTime: -1 })
     .skip(offset)
     .limit(pageSize)
@@ -84,8 +85,8 @@ async function handler(
 
   const maps = items.reduce((acc, item) => {
     acc.set(item.chatId, {
-      content: item.value[1]?.text?.content,
-      reasoning_content: item.value[0]?.reasoning?.content
+      content: (item.value[1] as any)?.text?.content,
+      reasoning_content: (item.value[0] as any)?.reasoning?.content
     });
     return acc;
   }, new Map<string, any>());

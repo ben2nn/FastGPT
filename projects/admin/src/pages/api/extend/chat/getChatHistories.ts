@@ -4,8 +4,6 @@ import { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type';
 import { parsePaginationRequest } from '@fastgpt/service/common/api/pagination';
 import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/mongo';
-import { NextApiResponse } from 'next/dist/shared/lib/utils';
-import { Filter } from 'jsondiffpatch';
 
 export type getChatHistoriesBody = {
   appId: string;
@@ -19,7 +17,7 @@ export type getChatHistoriesResponse = ChatHistoryItemResType[] | {};
 
 async function handler(
   req: ApiRequestProps<getChatHistoriesBody>,
-  res: NextApiResponse
+  res: ApiResponseType
 ): Promise<getChatHistoriesResponse> {
   await connectToDatabase();
 
@@ -37,27 +35,29 @@ async function handler(
     return {};
   }
 
-  // 构建查询条件
-  const filter: Filter<Document> = {
-    appId: appId,
-    chatId: { $in: chatIdList }
-  };
-
-  // 时间范围过滤
-  if (startTime && endTime) {
-    filter.updateTime = {
-      $gte: startTime,
-      $lte: endTime
+  const match = await (async () => {
+    // 初始化基础过滤条件
+    const matchFilter: Record<string, any> = {
+      appId: appId,
+      chatId: { $in: chatIdList }
     };
-  }
 
-  // 关键字搜索（同时匹配问题和回答）
-  if (keyword) {
-    const regex = new RegExp(keyword, 'i');
-    filter.title = { $regex: regex };
-  }
+    // 添加时间范围过滤
+    if (startTime && endTime) {
+      matchFilter.time = {
+        $gte: startTime,
+        $lte: endTime
+      };
+    }
 
-  if (!filter) {
+    // 添加关键字搜索（使用正则表达式）
+    if (keyword?.trim()) {
+      matchFilter.$or = [{ 'value[0].text.content': { $regex: keyword, $options: 'i' } }];
+    }
+    return matchFilter;
+  })();
+
+  if (!match) {
     return {
       list: [],
       total: 0
@@ -66,12 +66,12 @@ async function handler(
 
   // 并行查询
   const [data, total] = await Promise.all([
-    await MongoChat.find(filter, 'chatId title appId updateTime')
+    await MongoChat.find(match, 'chatId title appId updateTime')
       .sort({ top: -1, updateTime: -1 })
       .skip(offset)
       .limit(pageSize)
       .lean(),
-    MongoChat.countDocuments(filter)
+    MongoChat.countDocuments(match)
   ]);
 
   // 结果转换
