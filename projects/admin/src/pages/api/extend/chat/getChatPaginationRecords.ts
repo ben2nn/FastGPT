@@ -67,7 +67,7 @@ async function handler(
     };
   }
 
-  const app = await MongoApp.findOne({ appId }, '_id name').lean();
+  const app = await MongoApp.findOne({ _id: appId }, '_id name').lean();
 
   match.obj = 'Human';
   const [data, total] = await Promise.all([
