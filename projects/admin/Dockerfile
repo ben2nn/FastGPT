@@ -78,7 +78,7 @@ COPY --from=maindeps /app/node_modules/@zilliz/milvus2-sdk-node ./node_modules/@
 COPY --from=builder /app/projects/admin/package.json ./package.json
 
 # copy config
-COPY ./projects/app/data /app/data
+COPY ./projects/admin/data /app/data
 RUN chown -R nextjs:nodejs /app/data
 
 # Add tmp directory permission control

@@ -5,6 +5,7 @@ import { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type';
 import { parsePaginationRequest } from '@fastgpt/service/common/api/pagination';
 import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/mongo';
+import { MongoApp } from '@fastgpt/service/core/app/schema';
 
 export type getChatHistoriesBody = {
   appId: string;
@@ -66,6 +67,8 @@ async function handler(
     };
   }
 
+  const app = await MongoApp.findOne({ appId }, '_id name').lean();
+
   match.obj = 'Human';
   const [data, total] = await Promise.all([
     await MongoChatItem.find(match, 'appId chatId obj value time')
@@ -97,6 +100,7 @@ async function handler(
       chatId: item.chatId,
       time: item.time,
       appId: item.appId,
+      appName: app?.name,
       title: item.value[0]?.text?.content,
       value: maps.get(item.chatId)
     })),
