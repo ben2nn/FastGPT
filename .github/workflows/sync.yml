@@ -1,0 +1,24 @@
+name: Sync Fork
+on:
+  schedule:
+    - cron: '20 14 * * *'  # 每6小时同步一次
+  workflow_dispatch:  # 手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整提交历史
+
+      - name: Sync upstream changes
+        run: |
+          git fetch upstream
+          git merge upstream/main --allow-unrelated-histories
+
+      - name: Push to Gitee
+        run: |
+          git remote add gitee https://osyangxc:812e8ad59a5c4052e2c8606e2ef5097e@gitee.com/osyangxc/FastGPT.git
+          git push gitee main:main
