@@ -15,6 +15,7 @@ jobs:
 
       - name: Sync upstream changes
         run: |
+          git remote add upstream https://github.com/ben2nn/FastGPT
           git fetch upstream
           git merge upstream/main --allow-unrelated-histories
 
