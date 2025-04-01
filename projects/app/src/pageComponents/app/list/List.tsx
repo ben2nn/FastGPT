@@ -50,7 +50,7 @@ const ListItem = () => {
     content: t('app:move.hint')
   });
 
-  const { myApps, loadMyApps, onUpdateApp, setMoveAppId, folderDetail } = useContextSelector(
+  const { myApps, loadMyApps, onUpdateApp, setMoveAppId, folderDetail, setSearchKey } = useContextSelector(
     AppListContext,
     (v) => v
   );
@@ -177,6 +177,7 @@ const ListItem = () => {
                 }}
                 onClick={() => {
                   if (AppFolderTypeList.includes(app.type)) {
+                    setSearchKey('');
                     router.push({
                       query: {
                         ...router.query,
@@ -212,7 +213,9 @@ const ListItem = () => {
                   fontSize={'xs'}
                   color={'myGray.500'}
                 >
-                  <Box className={'textEllipsis2'}>{app.intro || t('common:common.no_intro')}</Box>
+                  <Box className={'textEllipsis2'} whiteSpace={'pre-wrap'}>
+                    {app.intro || t('common:common.no_intro')}
+                  </Box>
                 </Box>
                 <Flex
                   h={'24px'}
