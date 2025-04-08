@@ -17,8 +17,10 @@ jobs:
         run: |
           git remote add upstream https://github.com/labring/FastGPT.git
           git fetch upstream
-          git merge upstream/main --allow-unrelated-histories
-
+          git checkout main
+          git merge upstream/main
+          git push origin main
+          
       - name: Push to Gitee
         run: |
           git remote add gitee https://osyangxc:812e8ad59a5c4052e2c8606e2ef5097e@gitee.com/osyangxc/FastGPT.git
