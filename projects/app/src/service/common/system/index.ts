@@ -23,6 +23,7 @@ import {
   getProApiDatasetFileListRequest,
   getProApiDatasetFilePreviewUrlRequest
 } from '@/service/core/dataset/apiDataset/controller';
+import { isProVersion } from './constants';
 
 export const readConfigData = async (name: string) => {
   const splitName = name.split('.');
@@ -50,6 +51,7 @@ export const readConfigData = async (name: string) => {
 export function initGlobalVariables() {
   function initPlusRequest() {
     global.textCensorHandler = function textCensorHandler({ text }: { text: string }) {
+      if (!isProVersion()) return Promise.resolve({ code: 200 });
       return POST<{ code: number; message?: string }>('/common/censor/check', { text });
     };
 
@@ -58,14 +60,17 @@ export function initGlobalVariables() {
     };
 
     global.authOpenApiHandler = function authOpenApiHandler(data: AuthOpenApiLimitProps) {
+      if (!isProVersion()) return Promise.resolve();
       return POST<AuthOpenApiLimitProps>('/support/openapi/authLimit', data);
     };
 
     global.createUsageHandler = function createUsageHandler(data: CreateUsageProps) {
+      if (!isProVersion()) return;
       return POST('/support/wallet/usage/createUsage', data);
     };
 
     global.concatUsageHandler = function concatUsageHandler(data: ConcatUsageProps) {
+      if (!isProVersion()) return;
       return POST('/support/wallet/usage/concatUsage', data);
     };
 
