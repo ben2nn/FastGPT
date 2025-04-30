@@ -22,7 +22,7 @@ import { getCollectionSourceData } from '@fastgpt/global/core/dataset/collection
 import Markdown from '.';
 import { getSourceNameIcon } from '@fastgpt/global/core/dataset/utils';
 
-const A = ({ children, ...props }: any) => {
+const A = ({ children, chatAuthData, ...props }: any) => {
   const { t } = useTranslation();
 
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -52,7 +52,7 @@ const A = ({ children, ...props }: any) => {
       data: quoteData,
       loading,
       runAsync: getQuoteDataById
-    } = useRequest2(getQuoteData, {
+    } = useRequest2((id: string) => getQuoteData({ id, ...chatAuthData }), {
       manual: true
     });
     const sourceData = useMemo(
@@ -89,7 +89,7 @@ const A = ({ children, ...props }: any) => {
             />
           </Button>
         </PopoverTrigger>
-        <PopoverContent boxShadow={'lg'} w={'500px'} py={4}>
+        <PopoverContent boxShadow={'lg'} w={'500px'} maxW={'90vw'} py={4}>
           <MyBox isLoading={loading}>
             <PopoverArrow />
             <PopoverBody py={0} px={0} fontSize={'sm'}>
@@ -149,4 +149,4 @@ const A = ({ children, ...props }: any) => {
   return <Link {...props}>{children}</Link>;
 };
 
-export default A;
+export default React.memo(A);
