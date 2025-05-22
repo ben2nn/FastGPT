@@ -3,22 +3,12 @@ import { useTranslation } from 'next-i18next';
 import { strIsLink } from '@fastgpt/global/common/string/tools';
 import { useToast } from '@fastgpt/web/hooks/useToast';
 import { useForm } from 'react-hook-form';
-import { useConfirm } from '@fastgpt/web/hooks/useConfirm';
 import { getDocPath } from '@/web/common/system/doc';
 import { useSystemStore } from '@/web/common/system/useSystemStore';
 import { useMyStep } from '@fastgpt/web/hooks/useStep';
 import MyDivider from '@fastgpt/web/components/common/MyDivider';
-import React, { useRef } from 'react';
-import {
-  Box,
-  Link,
-  Input,
-  Button,
-  ModalBody,
-  ModalFooter,
-  Textarea,
-  Stack
-} from '@chakra-ui/react';
+import React from 'react';
+import { Box, Link, Input, Button, ModalBody, ModalFooter, Stack } from '@chakra-ui/react';
 import {
   DataChunkSplitModeEnum,
   DatasetCollectionDataProcessModeEnum
@@ -32,7 +22,8 @@ import CollectionChunkForm, {
   type CollectionChunkFormType
 } from '../Form/CollectionChunkForm';
 import { getLLMDefaultChunkSize } from '@fastgpt/global/core/dataset/training/utils';
-import { ChunkSettingsType } from '@fastgpt/global/core/dataset/type';
+import { type ChunkSettingsType } from '@fastgpt/global/core/dataset/type';
+import PopoverConfirm from '@fastgpt/web/components/common/MyPopover/PopoverConfirm';
 
 export type WebsiteConfigFormType = {
   websiteConfig: {
@@ -77,10 +68,6 @@ const WebsiteConfigModal = ({
   });
 
   const isEdit = !!websiteConfig?.url;
-
-  const { ConfirmModal, openConfirm } = useConfirm({
-    type: 'common'
-  });
 
   const { activeStep, goToPrevious, goToNext, MyStep } = useMyStep({
     defaultStep: 0,
@@ -134,7 +121,7 @@ const WebsiteConfigModal = ({
                   textDecoration={'underline'}
                   color={'blue.700'}
                 >
-                  {t('common:common.course.Read Course')}
+                  {t('common:read_course')}
                 </Link>
               )}
             </Box>
@@ -149,7 +136,7 @@ const WebsiteConfigModal = ({
             </Box>
             <Box mt={3}>
               <Box>
-                {t('common:core.dataset.website.Selector')}({t('common:common.choosable')})
+                {t('common:core.dataset.website.Selector')}({t('common:choosable')})
               </Box>
               <Input {...websiteInfoForm('selector')} placeholder="body .content #document" />
             </Box>
@@ -161,7 +148,7 @@ const WebsiteConfigModal = ({
         {activeStep == 0 && (
           <>
             <Button variant={'whiteBase'} onClick={onClose}>
-              {t('common:common.Close')}
+              {t('common:Close')}
             </Button>
             <Button
               ml={2}
@@ -171,88 +158,46 @@ const WebsiteConfigModal = ({
                 if (!strIsLink(data.url)) {
                   return toast({
                     status: 'warning',
-                    title: t('common:common.link.UnValid')
+                    title: t('common:link.UnValid')
                   });
                 }
                 goToNext();
               })}
             >
-              {t('common:common.Next Step')}
+              {t('common:next_step')}
             </Button>
           </>
         )}
         {activeStep == 1 && (
           <>
             <Button variant={'whiteBase'} onClick={goToPrevious}>
-              {t('common:common.Last Step')}
+              {t('common:last_step')}
             </Button>
-            <Button
-              ml={2}
-              onClick={form.handleSubmit((data) => {
-                openConfirm(
-                  () =>
-                    onSuccess({
-                      websiteConfig: websiteInfoGetValues(),
-                      chunkSettings: collectionChunkForm2StoreChunkData({
-                        ...data,
-                        agentModel: datasetDetail.agentModel,
-                        vectorModel: datasetDetail.vectorModel
-                      })
-                    }),
-                  undefined,
-                  isEdit
-                    ? t('common:core.dataset.website.Confirm Update Tips')
-                    : t('common:core.dataset.website.Confirm Create Tips')
-                )();
-              })}
-            >
-              {t('common:core.dataset.website.Start Sync')}
-            </Button>
+            <PopoverConfirm
+              Trigger={<Button ml={2}>{t('common:core.dataset.website.Start Sync')}</Button>}
+              content={
+                isEdit
+                  ? t('common:core.dataset.website.Confirm Update Tips')
+                  : t('common:core.dataset.website.Confirm Create Tips')
+              }
+              onConfirm={() =>
+                form.handleSubmit((data) =>
+                  onSuccess({
+                    websiteConfig: websiteInfoGetValues(),
+                    chunkSettings: collectionChunkForm2StoreChunkData({
+                      ...data,
+                      agentModel: datasetDetail.agentModel,
+                      vectorModel: datasetDetail.vectorModel
+                    })
+                  })
+                )()
+              }
+            />
           </>
         )}
       </ModalFooter>
-      <ConfirmModal />
     </MyModal>
   );
 };
 
 export default WebsiteConfigModal;
-
-const PromptTextarea = ({
-  defaultValue,
-  onChange,
-  onClose
-}: {
-  defaultValue: string;
-  onChange: (e: string) => void;
-  onClose: () => void;
-}) => {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const { t } = useTranslation();
-
-  return (
-    <MyModal
-      isOpen
-      title={t('common:core.dataset.import.Custom prompt')}
-      iconSrc="modal/edit"
-      w={'600px'}
-      onClose={onClose}
-    >
-      <ModalBody whiteSpace={'pre-wrap'} fontSize={'sm'} px={[3, 6]} pt={[3, 6]}>
-        <Textarea ref={ref} rows={8} fontSize={'sm'} defaultValue={defaultValue} />
-        <Box>{Prompt_AgentQA.fixedText}</Box>
-      </ModalBody>
-      <ModalFooter>
-        <Button
-          onClick={() => {
-            const val = ref.current?.value || Prompt_AgentQA.description;
-            onChange(val);
-            onClose();
-          }}
-        >
-          {t('common:common.Confirm')}
-        </Button>
-      </ModalFooter>
-    </MyModal>
-  );
-};

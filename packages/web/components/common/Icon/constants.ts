@@ -2,6 +2,7 @@
 
 export const iconPaths = {
   alignLeft: () => import('./icons/alignLeft.svg'),
+  backup: () => import('./icons/backup.svg'),
   book: () => import('./icons/book.svg'),
   change: () => import('./icons/change.svg'),
   chatSend: () => import('./icons/chatSend.svg'),
@@ -439,6 +440,7 @@ export const iconPaths = {
   point: () => import('./icons/point.svg'),
   preview: () => import('./icons/preview.svg'),
   'price/bg': () => import('./icons/price/bg.svg'),
+  'price/pricearrow': () => import('./icons/price/pricearrow.svg'),
   'price/right': () => import('./icons/price/right.svg'),
   save: () => import('./icons/save.svg'),
   sliderTag: () => import('./icons/sliderTag.svg'),

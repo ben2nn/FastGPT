@@ -1,6 +1,6 @@
 import MyModal from '@fastgpt/web/components/common/MyModal';
 import { useTranslation } from 'next-i18next';
-import { UseFormReturn } from 'react-hook-form';
+import { type UseFormReturn } from 'react-hook-form';
 import { useSystemStore } from '@/web/common/system/useSystemStore';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -42,7 +42,7 @@ import {
   minChunkSize
 } from '@fastgpt/global/core/dataset/training/utils';
 import RadioGroup from '@fastgpt/web/components/common/Radio/RadioGroup';
-import { ChunkSettingsType } from '@fastgpt/global/core/dataset/type';
+import { type ChunkSettingsType } from '@fastgpt/global/core/dataset/type';
 import type { LLMModelItemType, EmbeddingModelItemType } from '@fastgpt/global/core/ai/model.d';
 
 const PromptTextarea = ({
@@ -77,7 +77,7 @@ const PromptTextarea = ({
             onClose();
           }}
         >
-          {t('common:common.Confirm')}
+          {t('common:Confirm')}
         </Button>
       </ModalFooter>
     </MyModal>
@@ -118,14 +118,18 @@ const CollectionChunkForm = ({ form }: { form: UseFormReturn<CollectionChunkForm
   const imageIndex = watch('imageIndex');
 
   const trainingModeList = useMemo(() => {
-    const list = Object.entries(DatasetCollectionDataProcessModeMap);
-    return list
-      .filter(([key]) => key !== DatasetCollectionDataProcessModeEnum.auto)
-      .map(([key, value]) => ({
-        title: t(value.label as any),
-        value: key as DatasetCollectionDataProcessModeEnum,
-        tooltip: t(value.tooltip as any)
-      }));
+    const list = {
+      [DatasetCollectionDataProcessModeEnum.chunk]:
+        DatasetCollectionDataProcessModeMap[DatasetCollectionDataProcessModeEnum.chunk],
+      [DatasetCollectionDataProcessModeEnum.qa]:
+        DatasetCollectionDataProcessModeMap[DatasetCollectionDataProcessModeEnum.qa]
+    };
+
+    return Object.entries(list).map(([key, value]) => ({
+      title: t(value.label as any),
+      value: key as DatasetCollectionDataProcessModeEnum,
+      tooltip: t(value.tooltip as any)
+    }));
   }, [t]);
   const {
     chunkSizeField,
@@ -218,47 +222,48 @@ const CollectionChunkForm = ({ form }: { form: UseFormReturn<CollectionChunkForm
           gridTemplateColumns={'repeat(2, 1fr)'}
         />
       </Box>
-      {trainingType === DatasetCollectionDataProcessModeEnum.chunk && (
-        <Box mt={6}>
-          <Box fontSize={'sm'} mb={2} color={'myGray.600'}>
-            {t('dataset:enhanced_indexes')}
+      {trainingType === DatasetCollectionDataProcessModeEnum.chunk &&
+        feConfigs?.show_dataset_enhance !== false && (
+          <Box mt={6}>
+            <Box fontSize={'sm'} mb={2} color={'myGray.600'}>
+              {t('dataset:enhanced_indexes')}
+            </Box>
+            <HStack gap={[3, 7]}>
+              <HStack flex={'1'} spacing={1}>
+                <MyTooltip label={!feConfigs?.isPlus ? t('common:commercial_function_tip') : ''}>
+                  <Checkbox
+                    isDisabled={!feConfigs?.isPlus}
+                    isChecked={autoIndexes}
+                    {...register('autoIndexes')}
+                  >
+                    <FormLabel>{t('dataset:auto_indexes')}</FormLabel>
+                  </Checkbox>
+                </MyTooltip>
+                <QuestionTip label={t('dataset:auto_indexes_tips')} />
+              </HStack>
+              <HStack flex={'1'} spacing={1}>
+                <MyTooltip
+                  label={
+                    !feConfigs?.isPlus
+                      ? t('common:commercial_function_tip')
+                      : !datasetDetail?.vlmModel
+                        ? t('common:error_vlm_not_config')
+                        : ''
+                  }
+                >
+                  <Checkbox
+                    isDisabled={!feConfigs?.isPlus || !datasetDetail?.vlmModel}
+                    isChecked={imageIndex}
+                    {...register('imageIndex')}
+                  >
+                    <FormLabel>{t('dataset:image_auto_parse')}</FormLabel>
+                  </Checkbox>
+                </MyTooltip>
+                <QuestionTip label={t('dataset:image_auto_parse_tips')} />
+              </HStack>
+            </HStack>
           </Box>
-          <HStack gap={[3, 7]}>
-            <HStack flex={'1'} spacing={1}>
-              <MyTooltip label={!feConfigs?.isPlus ? t('common:commercial_function_tip') : ''}>
-                <Checkbox
-                  isDisabled={!feConfigs?.isPlus}
-                  isChecked={autoIndexes}
-                  {...register('autoIndexes')}
-                >
-                  <FormLabel>{t('dataset:auto_indexes')}</FormLabel>
-                </Checkbox>
-              </MyTooltip>
-              <QuestionTip label={t('dataset:auto_indexes_tips')} />
-            </HStack>
-            <HStack flex={'1'} spacing={1}>
-              <MyTooltip
-                label={
-                  !feConfigs?.isPlus
-                    ? t('common:commercial_function_tip')
-                    : !datasetDetail?.vlmModel
-                      ? t('common:error_vlm_not_config')
-                      : ''
-                }
-              >
-                <Checkbox
-                  isDisabled={!feConfigs?.isPlus || !datasetDetail?.vlmModel}
-                  isChecked={imageIndex}
-                  {...register('imageIndex')}
-                >
-                  <FormLabel>{t('dataset:image_auto_parse')}</FormLabel>
-                </Checkbox>
-              </MyTooltip>
-              <QuestionTip label={t('dataset:image_auto_parse_tips')} />
-            </HStack>
-          </HStack>
-        </Box>
-      )}
+        )}
       <Box mt={6}>
         <Box fontSize={'sm'} mb={2} color={'myGray.600'}>
           {t('dataset:params_setting')}
