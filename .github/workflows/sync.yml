@@ -16,6 +16,8 @@ jobs:
       - name: Sync upstream changes
         run: |
           git remote add upstream https://github.com/labring/FastGPT.git
+          git config --global user.email "benyxc@gmail.com"
+          git config --global user.name "benyxc"
           git fetch upstream
           git checkout main
           git merge upstream/main
