@@ -1,4 +1,8 @@
-import { NodeOutputKeyEnum, WorkflowIOValueTypeEnum } from '../../workflow/constants';
+import {
+  NodeInputKeyEnum,
+  NodeOutputKeyEnum,
+  WorkflowIOValueTypeEnum
+} from '../../workflow/constants';
 import {
   FlowNodeInputTypeEnum,
   FlowNodeOutputTypeEnum,
@@ -8,15 +12,19 @@ import { nanoid } from 'nanoid';
 import { type McpToolConfigType } from '../type';
 import { i18nT } from '../../../../web/i18n/utils';
 import { type RuntimeNodeItemType } from '../../workflow/runtime/type';
+import { type StoreSecretValueType } from '../../../common/secret/type';
+import { jsonSchema2NodeInput } from '../jsonschema';
 
 export const getMCPToolSetRuntimeNode = ({
   url,
   toolList,
+  headerSecret,
   name,
   avatar
 }: {
   url: string;
   toolList: McpToolConfigType[];
+  headerSecret?: StoreSecretValueType;
   name?: string;
   avatar?: string;
 }): RuntimeNodeItemType => {
@@ -27,11 +35,15 @@ export const getMCPToolSetRuntimeNode = ({
     intro: 'MCP Tools',
     inputs: [
       {
-        key: 'toolSetData',
+        key: NodeInputKeyEnum.toolSetData,
         label: 'Tool Set Data',
         valueType: WorkflowIOValueTypeEnum.object,
         renderTypeList: [FlowNodeInputTypeEnum.hidden],
-        value: { url, toolList }
+        value: {
+          url,
+          headerSecret,
+          toolList
+        }
       }
     ],
     outputs: [],
@@ -43,10 +55,12 @@ export const getMCPToolSetRuntimeNode = ({
 export const getMCPToolRuntimeNode = ({
   tool,
   url,
+  headerSecret,
   avatar = 'core/app/type/mcpToolsFill'
 }: {
   tool: McpToolConfigType;
   url: string;
+  headerSecret?: StoreSecretValueType;
   avatar?: string;
 }): RuntimeNodeItemType => {
   return {
@@ -56,29 +70,17 @@ export const getMCPToolRuntimeNode = ({
     intro: tool.description,
     inputs: [
       {
-        key: 'toolData',
+        key: NodeInputKeyEnum.toolData,
         label: 'Tool Data',
         valueType: WorkflowIOValueTypeEnum.object,
         renderTypeList: [FlowNodeInputTypeEnum.hidden],
-        value: { ...tool, url }
+        value: {
+          ...tool,
+          url,
+          headerSecret
+        }
       },
-      ...Object.entries(tool.inputSchema?.properties || {}).map(([key, value]) => ({
-        key,
-        label: key,
-        valueType: value.type as WorkflowIOValueTypeEnum, // TODO: 这里需要做一个映射
-        description: value.description,
-        toolDescription: value.description || key,
-        required: tool.inputSchema?.required?.includes(key) || false,
-        renderTypeList: [
-          value.type === 'string'
-            ? FlowNodeInputTypeEnum.input
-            : value.type === 'number'
-              ? FlowNodeInputTypeEnum.numberInput
-              : value.type === 'boolean'
-                ? FlowNodeInputTypeEnum.switch
-                : FlowNodeInputTypeEnum.JSONEditor
-        ]
-      }))
+      ...jsonSchema2NodeInput(tool.inputSchema)
     ],
     outputs: [
       {

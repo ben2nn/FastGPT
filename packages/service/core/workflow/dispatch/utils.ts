@@ -14,6 +14,7 @@ import { getNanoid } from '@fastgpt/global/common/string/tools';
 import { type SearchDataResponseItemType } from '@fastgpt/global/core/dataset/type';
 import { getMCPToolRuntimeNode } from '@fastgpt/global/core/app/mcpTools/utils';
 import { FlowNodeTypeEnum } from '@fastgpt/global/core/workflow/node/constant';
+import type { McpToolSetDataType } from '@fastgpt/global/core/app/mcpTools/type';
 
 export const getWorkflowResponseWrite = ({
   res,
@@ -161,14 +162,23 @@ export const rewriteRuntimeWorkFlow = (
 
   for (const toolSetNode of toolSetNodes) {
     nodeIdsToRemove.add(toolSetNode.nodeId);
-    const toolList =
-      toolSetNode.inputs.find((input) => input.key === 'toolSetData')?.value?.toolList || [];
-    const url = toolSetNode.inputs.find((input) => input.key === 'toolSetData')?.value?.url;
+    const toolSetValue = toolSetNode.inputs[0]?.value as McpToolSetDataType | undefined;
+
+    if (!toolSetValue) continue;
+
+    const toolList = toolSetValue.toolList;
+    const url = toolSetValue.url;
+    const headerSecret = toolSetValue.headerSecret;
 
     const incomingEdges = edges.filter((edge) => edge.target === toolSetNode.nodeId);
 
     for (const tool of toolList) {
-      const newToolNode = getMCPToolRuntimeNode({ avatar: toolSetNode.avatar, tool, url });
+      const newToolNode = getMCPToolRuntimeNode({
+        avatar: toolSetNode.avatar,
+        tool,
+        url,
+        headerSecret
+      });
 
       nodes.push({ ...newToolNode, name: `${toolSetNode.name} / ${tool.name}` });
 
