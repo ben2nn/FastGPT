@@ -4,7 +4,7 @@ import { Box, Grid, HStack, useTheme } from '@chakra-ui/react';
 import MyBox from '@fastgpt/web/components/common/MyBox';
 import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
 import { useTranslation } from 'next-i18next';
-import { addDays, addHours } from 'date-fns';
+import { addHours } from 'date-fns';
 import dayjs from 'dayjs';
 import DateRangePicker, {
   type DateRangeType
@@ -14,7 +14,7 @@ import MySelect from '@fastgpt/web/components/common/MySelect';
 import { getChannelList, getDashboardV2 } from '@/web/core/ai/channel';
 import { getSystemModelList } from '@/web/core/ai/config';
 import { getModelProvider } from '@fastgpt/global/core/ai/provider';
-import LineChartComponent from './LineChartComponent';
+import LineChartComponent from '@fastgpt/web/components/common/charts/LineChartComponent';
 import FillRowTabs from '@fastgpt/web/components/common/Tabs/FillRowTabs';
 import { useSystemStore } from '@/web/common/system/useSystemStore';
 import DataTableComponent from './DataTableComponent';
@@ -349,7 +349,7 @@ const ModelDashboard = ({ Tab }: { Tab: React.ReactNode }) => {
         inputTokens,
         outputTokens,
         totalTokens,
-        totalCost,
+        totalCost: Math.floor(totalCost),
         avgResponseTime: Math.round(avgResponseTime * 100) / 100,
         avgTtfb: Math.round(avgTtfb * 100) / 100,
         maxRpm,
