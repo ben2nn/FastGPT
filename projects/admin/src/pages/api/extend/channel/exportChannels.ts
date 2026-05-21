@@ -1,10 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
 
-const AIPROXY_API_ENDPOINT = process.env.AIPROXY_API_ENDPOINT;
-const AIPROXY_API_TOKEN = process.env.AIPROXY_API_TOKEN;
-
 async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const AIPROXY_API_ENDPOINT = process.env.AIPROXY_API_ENDPOINT;
+  const AIPROXY_API_TOKEN = process.env.AIPROXY_API_TOKEN;
+
   try {
     // 1. 验证请求方法
     if (req.method !== 'POST') {
@@ -30,7 +30,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     const data = await response.json();
-    const channels = data.data || [];
+    if (!Array.isArray(data.data)) {
+      throw new Error('Invalid API response: data.data is not an array');
+    }
+    const channels = data.data;
 
     // 4. 过滤敏感信息（不导出 key）
     const safeChannels = channels.map((channel: Record<string, unknown>) => ({
