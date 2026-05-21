@@ -4,6 +4,8 @@ import { connectToDatabase } from '@/service/common/mongo';
 import { MongoSystemModel } from '@fastgpt/service/core/ai/config/schema';
 import { authCert } from '@fastgpt/service/support/permission/auth/common';
 
+const EXPORT_LIMIT = 10000;
+
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     // 1. 连接数据库
@@ -30,7 +32,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 6. 查询模型配置
-    const models = await MongoSystemModel.find(query).lean();
+    const models = await MongoSystemModel.find(query).limit(EXPORT_LIMIT).lean();
 
     // 7. 组装导出数据
     const exportData = {
