@@ -127,6 +127,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           if (updateResponse.ok) {
             updatedCount++;
           } else {
+            console.warn(
+              `Failed to update channel "${channel.name}": ${updateResponse.status}`
+            );
             failedCount++;
           }
         } else {
@@ -154,6 +157,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           if (createResponse.ok) {
             insertedCount++;
           } else {
+            console.warn(
+              `Failed to create channel "${channel.name}": ${createResponse.status}`
+            );
             failedCount++;
           }
         }
