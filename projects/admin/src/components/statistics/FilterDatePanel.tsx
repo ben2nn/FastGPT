@@ -8,6 +8,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 import type { StatisticsQuery } from '@/service/core/statistics/statistics';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 /**
  * 快捷时间选项
@@ -78,8 +79,8 @@ const FilterDatePanel: React.FC<FilterPanelProps> = ({
           start = now.subtract(7, 'day');
       }
 
-      const newStartTime = start.tz('Asia/Shanghai').format();
-      const newEndTime = end.tz('Asia/Shanghai').format();
+      const newStartTime = start.tz(DEFAULT_TIMEZONE).format();
+      const newEndTime = end.tz(DEFAULT_TIMEZONE).format();
 
       console.log('[FilterDatePanel] 计算的时间范围:', {
         value,

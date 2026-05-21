@@ -8,6 +8,7 @@ import { getPostgresPool, testConnection } from '@/service/common/postgres';
 import { getSchemaStatements } from '@/service/sql';
 import { SystemError, ErrorType } from '@/service/common/errors';
 import { connectToDatabase } from '@/service/common/mongo';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 // 初始化状态枚举
 export enum InitializationStatus {
@@ -325,7 +326,7 @@ async function loadInitialTaskConfigs(): Promise<void> {
             config.name,
             config.description || null,
             config.cronExpression,
-            config.timezone || 'Asia/Shanghai',
+            config.timezone || DEFAULT_TIMEZONE,
             config.enabled,
             config.executorName,
             config.defaultParams ? JSON.stringify(config.defaultParams) : null,

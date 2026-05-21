@@ -1,7 +1,7 @@
 import { connectToDatabase } from '@/service/common/mongo';
 import { MongoTeam } from '@fastgpt/service/support/user/team/teamSchema';
 import { MongoTeamMember } from '@fastgpt/service/support/user/team/teamMemberSchema';
-import { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
+import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { NextAPI } from '@/service/middleware/entry';
 

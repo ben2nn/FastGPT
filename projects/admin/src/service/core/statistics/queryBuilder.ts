@@ -5,6 +5,7 @@
  */
 
 import type { StatisticsQuery, TimeGranularity } from '@/service/core/statistics/statistics';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 /**
  * SQL 查询结果接口
@@ -74,18 +75,15 @@ export class QueryBuilder {
   /**
    * 构建时间范围条件
    *
-   * 注意：数据库中存储的时间戳是北京时间（UTC+8），但格式化成了 UTC 字符串
-   * 因此需要将存储的时间戳转换为真正的 UTC 时间再进行比较
+   * 数据库中 call_timestamp 为 TIMESTAMP 类型，pg 库以 UTC 写入，存储的是 UTC 时间。
+   * 前端传入的 startTime/endTime 也是 UTC ISO 字符串，因此直接比较即可。
    */
   buildTimeRangeCondition(
     startTime: string,
     endTime: string,
     paramIndex: number
   ): { clause: string; values: any[] } {
-    // 将数据库中的时间戳（北京时间）转换为 UTC 时间再比较
-    // call_timestamp AT TIME ZONE 'Asia/Shanghai' 表示将时间戳解释为北京时间
-    // AT TIME ZONE 'UTC' 表示转换为 UTC 时间
-    const clause = `call_timestamp AT TIME ZONE 'Asia/Shanghai' AT TIME ZONE 'UTC' >= $${paramIndex} AND call_timestamp AT TIME ZONE 'Asia/Shanghai' AT TIME ZONE 'UTC' <= $${paramIndex + 1}`;
+    const clause = `call_timestamp >= $${paramIndex} AND call_timestamp <= $${paramIndex + 1}`;
     const values = [startTime, endTime];
     return { clause, values };
   }
@@ -241,13 +239,13 @@ export class QueryBuilder {
 
     const text = `
       SELECT 
-        DATE_TRUNC('${granularity}', call_timestamp) as timestamp,
+        (DATE_TRUNC('${granularity}', call_timestamp AT TIME ZONE 'UTC' AT TIME ZONE '${DEFAULT_TIMEZONE}') AT TIME ZONE '${DEFAULT_TIMEZONE}' AT TIME ZONE 'UTC') as timestamp,
         COUNT(*) as call_count,
         COALESCE(SUM(total_tokens), 0) as total_tokens,
         COALESCE(SUM(total_points), 0) as total_points
       FROM model_call_logs
       ${clause}
-      GROUP BY DATE_TRUNC('${granularity}', call_timestamp)
+      GROUP BY DATE_TRUNC('${granularity}', call_timestamp AT TIME ZONE 'UTC' AT TIME ZONE '${DEFAULT_TIMEZONE}') AT TIME ZONE '${DEFAULT_TIMEZONE}' AT TIME ZONE 'UTC'
       ORDER BY timestamp ASC
     `;
 

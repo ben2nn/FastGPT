@@ -1,6 +1,6 @@
 // pages/_error.tsx
 import { Container, Heading, Text, Button } from '@chakra-ui/react';
-import { NextPageContext } from 'next';
+import type { NextPageContext } from 'next';
 import Link from 'next/link';
 
 interface ErrorPageProps {

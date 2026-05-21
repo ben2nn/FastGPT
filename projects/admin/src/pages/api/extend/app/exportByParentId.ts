@@ -3,7 +3,7 @@ import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/common/mongo';
 import { findAppAndAllChildren } from '@fastgpt/service/core/app/controller';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
-import { authCert } from '@fastgpt/service/support/permission/auth/common';
+import { authJWT } from '@fastgpt/service/support/permission/controller';
 
 const EXPORT_LIMIT = 50000;
 
@@ -17,8 +17,34 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    // 3. 验证身份
-    const { teamId } = await authCert({ req, authToken: true });
+    // 3. 验证 JWT Token
+    const authHeader = req.headers.authorization;
+    const token = req.headers.token as string | undefined;
+
+    let jwtToken: string | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      jwtToken = authHeader.substring(7);
+    } else if (token) {
+      jwtToken = token;
+    }
+
+    if (!jwtToken) {
+      return res.status(401).json({ success: false, error: 'Token 不存在' });
+    }
+
+    let decoded;
+    try {
+      decoded = await authJWT(jwtToken);
+    } catch (error) {
+      return res.status(401).json({ success: false, error: 'Token 无效或已过期' });
+    }
+
+    // 从 JWT payload 中获取 teamId
+    const teamId = decoded?.team?.teamId;
+    if (!teamId) {
+      return res.status(401).json({ success: false, error: '无法获取团队信息' });
+    }
 
     // 4. 获取并验证 parentId
     const { parentId } = req.body;

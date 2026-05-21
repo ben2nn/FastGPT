@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 // 扩展 dayjs 插件
 dayjs.extend(utc);
@@ -15,7 +16,7 @@ dayjs.extend(weekOfYear);
 export class ParameterParser {
   private timezone: string;
 
-  constructor(timezone: string = 'Asia/Shanghai') {
+  constructor(timezone: string = DEFAULT_TIMEZONE) {
     this.timezone = timezone;
   }
 

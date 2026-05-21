@@ -12,6 +12,7 @@ import cron from 'node-cron';
 import { parseExpression } from 'cron-parser';
 
 import { NextAPI } from '@/service/middleware/entry';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 /**
  * 请求参数类型
@@ -49,7 +50,7 @@ async function handler(
     }
 
     // 2. 解析参数
-    const { cronExpression, timezone = 'Asia/Shanghai' } = req.body;
+    const { cronExpression, timezone = DEFAULT_TIMEZONE } = req.body;
 
     if (!cronExpression) {
       return res.status(400).json({

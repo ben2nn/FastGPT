@@ -3,13 +3,15 @@
  * 负责任务的注册、调度、执行和历史管理
  */
 
-import cron, { ScheduledTask } from 'node-cron';
+import type { ScheduledTask } from 'node-cron';
+import cron from 'node-cron';
 import { parseExpression } from 'cron-parser';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
 import { addLog } from '@fastgpt/service/common/system/log';
 
 import { TaskStorage } from './TaskStorage';
 import { ParameterParser } from './ParameterParser';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 import type { TaskConfig, TaskExecution, TaskResult, QueryOptions } from '@/types/task';
 import { TaskError, TaskErrorType } from '@/service/common/errors';
@@ -203,7 +205,7 @@ export class TaskManager {
         },
         {
           scheduled: true,
-          timezone: config.timezone || 'Asia/Shanghai'
+          timezone: config.timezone || DEFAULT_TIMEZONE
         }
       );
 
@@ -689,7 +691,7 @@ export class TaskManager {
       // 使用 cron-parser 解析 cron 表达式
       const interval = parseExpression(config.cronExpression, {
         currentDate: new Date(),
-        tz: config.timezone || 'Asia/Shanghai'
+        tz: config.timezone || DEFAULT_TIMEZONE
       });
 
       // 获取下次执行时间

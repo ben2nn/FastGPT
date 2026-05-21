@@ -6,7 +6,9 @@ import { MongoDatasetCollection } from '@fastgpt/service/core/dataset/collection
 import { MongoDatasetData } from '@fastgpt/service/core/dataset/data/schema';
 import { MongoDatasetDataText } from '@fastgpt/service/core/dataset/data/dataTextSchema';
 import { MongoDatasetCollectionTags } from '@fastgpt/service/core/dataset/tag/schema';
-import { authCert } from '@fastgpt/service/support/permission/auth/common';
+import { authJWT } from '@fastgpt/service/support/permission/controller';
+
+const EXPORT_LIMIT = 50000;
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -18,8 +20,34 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // 3. 验证身份
-    const { teamId } = await authCert({ req, authToken: true });
+    // 3. 验证 JWT Token
+    const authHeader = req.headers.authorization;
+    const token = req.headers.token as string | undefined;
+
+    let jwtToken: string | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      jwtToken = authHeader.substring(7);
+    } else if (token) {
+      jwtToken = token;
+    }
+
+    if (!jwtToken) {
+      return res.status(401).json({ error: 'Token 不存在' });
+    }
+
+    let decoded;
+    try {
+      decoded = await authJWT(jwtToken);
+    } catch (error) {
+      return res.status(401).json({ error: 'Token 无效或已过期' });
+    }
+
+    // 从 JWT payload 中获取 teamId
+    const teamId = decoded?.team?.teamId;
+    if (!teamId) {
+      return res.status(401).json({ error: '无法获取团队信息' });
+    }
 
     // 4. 获取并验证 parentId
     const { parentId } = req.body;
@@ -35,15 +63,38 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const datasetIds = datasets.map((d) => d._id);
 
-    // 6. 并行查询所有相关集合
-    const [collections, datas, dataTexts, collectionTags] = await Promise.all([
-      MongoDatasetCollection.find({ datasetId: { $in: datasetIds } }).lean(),
-      MongoDatasetData.find({ datasetId: { $in: datasetIds } }).lean(),
-      MongoDatasetDataText.find({ datasetId: { $in: datasetIds } }).lean(),
-      MongoDatasetCollectionTags.find({ datasetId: { $in: datasetIds } }).lean()
+    // 6. 检查数据量是否超过限制
+    const [collectionCount, dataCount, dataTextCount, tagCount] = await Promise.all([
+      MongoDatasetCollection.countDocuments({ datasetId: { $in: datasetIds } }),
+      MongoDatasetData.countDocuments({ datasetId: { $in: datasetIds } }),
+      MongoDatasetDataText.countDocuments({ datasetId: { $in: datasetIds } }),
+      MongoDatasetCollectionTags.countDocuments({ datasetId: { $in: datasetIds } })
     ]);
 
-    // 7. 组装导出数据
+    const totalCount = collectionCount + dataCount + dataTextCount + tagCount;
+    if (totalCount > EXPORT_LIMIT) {
+      return res.status(400).json({
+        error: `数据量过大（共 ${totalCount} 条，限制 ${EXPORT_LIMIT} 条），请缩小导出范围后重试`
+      });
+    }
+
+    // 7. 并行查询所有相关集合
+    const [collections, datas, dataTexts, collectionTags] = await Promise.all([
+      MongoDatasetCollection.find({ datasetId: { $in: datasetIds } })
+        .limit(EXPORT_LIMIT)
+        .lean(),
+      MongoDatasetData.find({ datasetId: { $in: datasetIds } })
+        .limit(EXPORT_LIMIT)
+        .lean(),
+      MongoDatasetDataText.find({ datasetId: { $in: datasetIds } })
+        .limit(EXPORT_LIMIT)
+        .lean(),
+      MongoDatasetCollectionTags.find({ datasetId: { $in: datasetIds } })
+        .limit(EXPORT_LIMIT)
+        .lean()
+    ]);
+
+    // 8. 组装导出数据
     const exportData = {
       version: '1.0',
       type: 'dataset',
@@ -56,7 +107,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       collectionTags
     };
 
-    // 8. 设置响应头并返回
+    // 9. 设置响应头并返回
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader(
       'Content-Disposition',

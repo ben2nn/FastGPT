@@ -2,7 +2,8 @@ import React from 'react';
 import { Box, Container, Flex, Heading, VStack, useToast, Text } from '@chakra-ui/react';
 import { useAuth } from '@/web/context/AuthContext';
 import { getWebReqUrl } from '@/web/common/utils';
-import LoginForm, { LoginFormData } from '../../components/LoginForm';
+import type { LoginFormData } from '../../components/LoginForm';
+import LoginForm from '../../components/LoginForm';
 
 export default function LoginPage() {
   const { login } = useAuth();

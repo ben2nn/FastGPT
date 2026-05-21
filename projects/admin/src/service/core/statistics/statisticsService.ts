@@ -3,10 +3,12 @@
  * 负责执行统计查询并处理结果
  */
 
-import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import type { Pool, QueryResult, QueryResultRow } from 'pg';
+import { PoolClient } from 'pg';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { getPostgresPool } from '@/service/common/postgres';
-import { QueryBuilder, SqlQuery } from './queryBuilder';
+import type { SqlQuery } from './queryBuilder';
+import { QueryBuilder } from './queryBuilder';
 import { calculateGranularity } from './validation';
 import type {
   StatisticsQuery,

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, FormEvent } from 'react';
+import type { FormEvent } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -32,7 +33,7 @@ import {
 } from '@chakra-ui/react';
 import { AddIcon, EditIcon, DeleteIcon } from '@chakra-ui/icons';
 import { ProtectedRoute } from '@/web/context/ProtectedRoute';
-import { User, Team } from '@/types/user';
+import type { User, Team } from '@/types/user';
 import {
   fetchUsers,
   fetchTeams,
@@ -55,7 +56,7 @@ interface TeamMember {
   role: string;
 }
 
-export default function TeamManagement() {
+export default function TeamManagement({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) {
   const [users, setUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -241,7 +242,7 @@ export default function TeamManagement() {
   );
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
       <Layout title="团队管理">
         <Flex gap={4} h="calc(100vh - 200px)">
           {/* 左侧：团队列表 */}
@@ -670,7 +671,7 @@ export async function getServerSideProps(context: any) {
     }
 
     return {
-      props: {}
+      props: { ssrAuthenticated: true }
     };
   } catch (error) {
     console.error('getServerSideProps error:', error);

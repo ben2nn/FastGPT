@@ -1,8 +1,9 @@
 // pages/_app.tsx
 import { ChakraProvider, ColorModeScript, theme } from '@chakra-ui/react';
-import { NextPage } from 'next';
-import { ReactElement, useState } from 'react';
-import { AppProps } from 'next/app';
+import type { NextPage } from 'next';
+import type { ReactElement} from 'react';
+import { useState } from 'react';
+import type { AppProps } from 'next/app';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { AuthProvider } from '../web/context/AuthContext';
@@ -18,15 +19,14 @@ type AppPropsWithLayout = AppProps & {
 };
 
 function App({ Component, pageProps }: AppPropsWithLayout) {
-  // 为每个请求创建新的 QueryClient 实例
   const [queryClient] = useState(
     () =>
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 5 * 60 * 1000, // 5 分钟
-            cacheTime: 10 * 60 * 1000, // 10 分钟
-            retry: 2,
+            staleTime: 60_000, // 1 分钟
+            cacheTime: 5 * 60_000, // 5 分钟
+            retry: 1,
             refetchOnWindowFocus: false
           }
         }

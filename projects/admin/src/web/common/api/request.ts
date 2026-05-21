@@ -3,12 +3,13 @@
  * 封装 axios 请求，提供统一的错误处理和请求拦截
  */
 
-import axios, {
+import type {
   Method,
   InternalAxiosRequestConfig,
   AxiosResponse,
   AxiosProgressEvent
 } from 'axios';
+import axios from 'axios';
 
 interface ConfigType {
   headers?: { [key: string]: string };

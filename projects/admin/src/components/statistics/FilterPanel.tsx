@@ -19,6 +19,7 @@ dayjs.extend(timezone);
 
 import ExportButton from './ExportButton';
 import type { StatisticsQuery } from '@/service/core/statistics/statistics';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 /**
  * 调用状态选项
@@ -102,8 +103,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       // 立即应用筛选
       // 将本地时间解析为上海时区的时间
       const filters: StatisticsQuery = {
-        startTime: start.tz('Asia/Shanghai').format(),
-        endTime: end.tz('Asia/Shanghai').format()
+        startTime: start.tz(DEFAULT_TIMEZONE).format(),
+        endTime: end.tz(DEFAULT_TIMEZONE).format()
       };
 
       // 保留其他筛选条件
@@ -128,8 +129,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   const handleApplyFilter = useCallback(() => {
     // 将用户输入的本地时间字符串解析为上海时区的时间
     // 例如：用户输入 "2026-01-04T16:41" 表示上海时间的 16:41
-    const startUTC = dayjs.tz(startTime, 'Asia/Shanghai').format();
-    const endUTC = dayjs.tz(endTime, 'Asia/Shanghai').format();
+    const startUTC = dayjs.tz(startTime, DEFAULT_TIMEZONE).format();
+    const endUTC = dayjs.tz(endTime, DEFAULT_TIMEZONE).format();
 
     const filters: StatisticsQuery = {
       startTime: startUTC,
@@ -166,8 +167,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     // 触发筛选
     // 将本地时间解析为上海时区的时间
     onFilterChange({
-      startTime: start.tz('Asia/Shanghai').format(),
-      endTime: now.tz('Asia/Shanghai').format()
+      startTime: start.tz(DEFAULT_TIMEZONE).format(),
+      endTime: now.tz(DEFAULT_TIMEZONE).format()
     });
   }, [onFilterChange]);
 
@@ -215,15 +216,15 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       const now = dayjs();
       const start = now.subtract(7, 'day');
       return {
-        startTime: start.tz('Asia/Shanghai').format(),
-        endTime: now.tz('Asia/Shanghai').format()
+        startTime: start.tz(DEFAULT_TIMEZONE).format(),
+        endTime: now.tz(DEFAULT_TIMEZONE).format()
       };
     }
 
     // 将用户输入的本地时间字符串解析为上海时区的时间
     const filters: StatisticsQuery = {
-      startTime: dayjs.tz(startTime, 'Asia/Shanghai').format(),
-      endTime: dayjs.tz(endTime, 'Asia/Shanghai').format()
+      startTime: dayjs.tz(startTime, DEFAULT_TIMEZONE).format(),
+      endTime: dayjs.tz(endTime, DEFAULT_TIMEZONE).format()
     };
 
     if (appName.trim()) {

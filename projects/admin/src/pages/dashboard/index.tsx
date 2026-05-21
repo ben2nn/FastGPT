@@ -19,7 +19,7 @@ import type { StatisticsQuery } from '@/service/core/statistics/statistics';
  * 统计页面
  * 整合所有统计组件，提供完整的数据统计和可视化功能
  */
-export default function Statistics() {
+export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) {
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -29,10 +29,8 @@ export default function Statistics() {
     return { startTime, endTime };
   });
 
-  // 调试：监听 filters 变化
-  useEffect(() => {
-    console.log('[Dashboard] Filters 状态更新:', filters);
-  }, [filters]);
+  // 防抖定时器
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 自动刷新状态
   const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
@@ -40,13 +38,15 @@ export default function Statistics() {
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
-   * 处理筛选条件变化
+   * 处理筛选条件变化（带 300ms 防抖）
    */
   const handleFilterChange = useCallback((newFilters: StatisticsQuery) => {
-    console.log('[Dashboard] 筛选条件变化:', {
-      new: newFilters
-    });
-    setFilters(newFilters);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setFilters(newFilters);
+    }, 300);
   }, []);
 
   /**
@@ -138,8 +138,17 @@ export default function Statistics() {
     };
   }, [autoRefresh, refreshInterval, refreshAllData]);
 
+  // 清理防抖定时器
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
   return (
-    <ProtectedRoute>
+    <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
       <Layout title="首页">
         <VStack spacing={6} align="stretch" w="100%">
           {/* 第一行：筛选面板 */}
@@ -179,11 +188,9 @@ export default function Statistics() {
 
 export async function getServerSideProps(context: any) {
   try {
-    // 检查认证状态
     const token = context.req.cookies?.admin_token;
 
     if (!token) {
-      // 未登录，重定向到登录页
       return {
         redirect: {
           destination: '/login',
@@ -192,13 +199,11 @@ export async function getServerSideProps(context: any) {
       };
     }
 
-    // 返回页面 props
     return {
-      props: {}
+      props: { ssrAuthenticated: true }
     };
   } catch (error) {
     console.error('getServerSideProps error:', error);
-    // 发生错误时重定向到登录页
     return {
       redirect: {
         destination: '/login',

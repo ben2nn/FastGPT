@@ -6,7 +6,7 @@ import { MongoDatasetCollection } from '@fastgpt/service/core/dataset/collection
 import { MongoDatasetData } from '@fastgpt/service/core/dataset/data/schema';
 import { MongoDatasetDataText } from '@fastgpt/service/core/dataset/data/dataTextSchema';
 import { MongoDatasetCollectionTags } from '@fastgpt/service/core/dataset/tag/schema';
-import { authCert } from '@fastgpt/service/support/permission/auth/common';
+import { authJWT } from '@fastgpt/service/support/permission/controller';
 import { Types } from 'mongoose';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,8 +19,35 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // 3. 验证身份
-    const { teamId, tmbId } = await authCert({ req, authToken: true });
+    // 3. 验证 JWT Token
+    const authHeader = req.headers.authorization;
+    const token = req.headers.token as string | undefined;
+
+    let jwtToken: string | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      jwtToken = authHeader.substring(7);
+    } else if (token) {
+      jwtToken = token;
+    }
+
+    if (!jwtToken) {
+      return res.status(401).json({ error: 'Token 不存在' });
+    }
+
+    let decoded;
+    try {
+      decoded = await authJWT(jwtToken);
+    } catch (error) {
+      return res.status(401).json({ error: 'Token 无效或已过期' });
+    }
+
+    // 从 JWT payload 中获取 teamId 和 tmbId
+    const teamId = decoded?.team?.teamId;
+    const tmbId = decoded?.team?.tmbId;
+    if (!teamId || !tmbId) {
+      return res.status(401).json({ error: '无法获取团队信息' });
+    }
 
     // 4. 解析请求体
     const { file, keepOriginalId, targetParentId } = req.body;

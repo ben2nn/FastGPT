@@ -1,5 +1,6 @@
 import React from 'react';
-import { Spinner, Flex, Box, SpinnerProps } from '@chakra-ui/react';
+import type { SpinnerProps } from '@chakra-ui/react';
+import { Spinner, Flex, Box } from '@chakra-ui/react';
 
 const Loading = ({
   fixed = true,

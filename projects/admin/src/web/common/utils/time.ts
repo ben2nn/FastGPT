@@ -4,6 +4,7 @@
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 // 启用 UTC 和时区插件
 dayjs.extend(utc);
@@ -24,23 +25,23 @@ export function formatUTCToLocal(
   format: string = 'YYYY-MM-DD HH:mm:ss'
 ): string {
   if (!utcTime) return '-';
-  return dayjs(utcTime).format(format);
+  return dayjs(utcTime).tz(DEFAULT_TIMEZONE).format(format);
 }
 
 /**
  * 将 UTC 时间转换为指定时区的时间字符串
  * @param utcTime UTC 时间字符串（ISO 8601 格式）
- * @param timezone 时区，默认 'Asia/Shanghai'（北京时间）
+ * @param timezone 时区，默认 DEFAULT_TIMEZONE（北京时间）
  * @param format 输出格式，默认 'YYYY-MM-DD HH:mm:ss'
  * @returns 指定时区的时间字符串
  *
  * @example
- * formatUTCToTimezone('2025-11-13T07:12:49.808Z', 'Asia/Shanghai')
+ * formatUTCToTimezone('2025-11-13T07:12:49.808Z', DEFAULT_TIMEZONE)
  * // 返回: '2025-11-13 15:12:49'
  */
 export function formatUTCToTimezone(
   utcTime: string | Date,
-  timezone: string = 'Asia/Shanghai',
+  timezone: string = DEFAULT_TIMEZONE,
   format: string = 'YYYY-MM-DD HH:mm:ss'
 ): string {
   if (!utcTime) return '-';
@@ -56,7 +57,7 @@ export function formatUTCToTimezone(
  * // 返回: '2025-11-13T15:12:49+08:00'
  */
 export function getCurrentUTCString(): string {
-  return dayjs().tz('Asia/Shanghai').format('YYYY-MM-DDTHH:mm:ssZ');
+  return dayjs().tz(DEFAULT_TIMEZONE).format('YYYY-MM-DDTHH:mm:ssZ');
 }
 
 /**
@@ -69,7 +70,7 @@ export function getCurrentUTCString(): string {
  * // 返回 7 天前的上海时区时间
  */
 export function getUTCStringDaysAgo(days: number): string {
-  return dayjs().subtract(days, 'day').tz('Asia/Shanghai').format('YYYY-MM-DDTHH:mm:ssZ');
+  return dayjs().tz(DEFAULT_TIMEZONE).subtract(days, 'day').format('YYYY-MM-DDTHH:mm:ssZ');
 }
 
 /**
@@ -123,7 +124,7 @@ export function formatRelativeTime(time: string | Date): string {
  * // 返回: '2025-11-13T00:00:00+08:00' (上海时间 2025-11-13 00:00:00)
  */
 export function getTodayStartUTC(): string {
-  return dayjs().tz('Asia/Shanghai').startOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
+  return dayjs().tz(DEFAULT_TIMEZONE).startOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
 }
 
 /**
@@ -135,7 +136,7 @@ export function getTodayStartUTC(): string {
  * // 返回: '2025-11-13T23:59:59+08:00' (上海时间 2025-11-13 23:59:59)
  */
 export function getTodayEndUTC(): string {
-  return dayjs().tz('Asia/Shanghai').endOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
+  return dayjs().tz(DEFAULT_TIMEZONE).endOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
 }
 
 /**
@@ -148,7 +149,7 @@ export function getTodayEndUTC(): string {
  * // 返回 7 天前 00:00:00 的上海时区时间
  */
 export function getDaysAgoStartUTC(days: number): string {
-  return dayjs().subtract(days, 'day').tz('Asia/Shanghai').startOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
+  return dayjs().tz(DEFAULT_TIMEZONE).subtract(days, 'day').startOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
 }
 
 /**
@@ -161,7 +162,7 @@ export function getDaysAgoStartUTC(days: number): string {
  * // 返回 7 天前 23:59:59 的上海时区时间
  */
 export function getDaysAgoEndUTC(days: number): string {
-  return dayjs().subtract(days, 'day').tz('Asia/Shanghai').endOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
+  return dayjs().tz(DEFAULT_TIMEZONE).subtract(days, 'day').endOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
 }
 
 /**
@@ -183,7 +184,7 @@ export function getDefaultTimeRange(days: number = 7): {
   startTime: string;
   endTime: string;
 } {
-  const now = dayjs().tz('Asia/Shanghai');
+  const now = dayjs().tz(DEFAULT_TIMEZONE);
   return {
     startTime: now.subtract(days, 'day').format('YYYY-MM-DDTHH:mm:ssZ'), // 当前时间 - N天
     endTime: now.format('YYYY-MM-DDTHH:mm:ssZ') // 当前时间

@@ -1,10 +1,12 @@
+import type {
+  ReactNode
+} from 'react';
 import React, {
   createContext,
   useContext,
   useState,
   useEffect,
-  useCallback,
-  ReactNode
+  useCallback
 } from 'react';
 import { useRouter } from 'next/router';
 import { hashStr } from '@fastgpt/global/common/string/tools';

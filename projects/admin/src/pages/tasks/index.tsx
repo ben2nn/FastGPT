@@ -43,7 +43,7 @@ dayjs.locale('zh-cn');
 /**
  * 任务列表页面组件
  */
-const TaskListPage = () => {
+const TaskListPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
   const toast = useToast();
 
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
@@ -160,7 +160,7 @@ const TaskListPage = () => {
   };
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
       <Layout title="任务管理">
         <Box>
           {/* 页面标题 */}
@@ -342,3 +342,30 @@ const TaskListPage = () => {
 };
 
 export default TaskListPage;
+
+export async function getServerSideProps(context: any) {
+  try {
+    const token = context.req.cookies?.admin_token;
+
+    if (!token) {
+      return {
+        redirect: {
+          destination: '/login',
+          permanent: false
+        }
+      };
+    }
+
+    return {
+      props: { ssrAuthenticated: true }
+    };
+  } catch (error) {
+    console.error('getServerSideProps error:', error);
+    return {
+      redirect: {
+        destination: '/login',
+        permanent: false
+      }
+    };
+  }
+}

@@ -2,7 +2,7 @@
 /**
  * 数据提取系统的类型定义
  */
-import { Types } from '@fastgpt/service/common/mongo';
+import type { Types } from '@fastgpt/service/common/mongo';
 
 // 为了方便使用，创建 ObjectId 类型别名
 type ObjectId = Types.ObjectId;

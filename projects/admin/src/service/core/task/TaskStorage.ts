@@ -3,8 +3,9 @@
  * 负责任务配置和执行历史的数据库操作
  */
 
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
 import { addLog } from '@fastgpt/service/common/system/log';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 import type {
   TaskConfig,
   TaskExecution,
@@ -65,7 +66,7 @@ export class TaskStorage {
           config.name,
           config.description || null,
           config.cronExpression,
-          config.timezone || 'Asia/Shanghai',
+          config.timezone || DEFAULT_TIMEZONE,
           config.enabled,
           config.executorName,
           config.defaultParams ? JSON.stringify(config.defaultParams) : null,

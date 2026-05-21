@@ -5,7 +5,7 @@ import { MongoTeam } from '@fastgpt/service/support/user/team/teamSchema';
 import { MongoTeamMember } from '@fastgpt/service/support/user/team/teamMemberSchema';
 import { hashStr } from '@fastgpt/global/common/string/tools';
 import { authCert } from '@fastgpt/service/support/permission/auth/common';
-import { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
+import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { NextAPI } from '@/service/middleware/entry';
 

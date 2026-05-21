@@ -554,9 +554,9 @@ function ImportResultStats({
 
 // ========== 主页面 ==========
 
-export default function ImportExportPage() {
+export default function ImportExportPage({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
       <Layout title="导入导出">
         <Tabs colorScheme="blue" variant="enclosed">
           <TabList>
@@ -592,7 +592,7 @@ export async function getServerSideProps(context: any) {
     if (!token) {
       return { redirect: { destination: '/login', permanent: false } };
     }
-    return { props: {} };
+    return { props: { ssrAuthenticated: true } };
   } catch (error) {
     console.error('getServerSideProps error:', error);
     return { redirect: { destination: '/login', permanent: false } };

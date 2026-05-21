@@ -1,7 +1,7 @@
 import { MongoChat } from '@fastgpt/service/core/chat/chatSchema';
 import { MongoChatItem } from '@fastgpt/service/core/chat/chatItemSchema';
-import { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
-import { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type';
+import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
+import type { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type';
 import { parsePaginationRequest } from '@fastgpt/service/common/api/pagination';
 import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/common/mongo';

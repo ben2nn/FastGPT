@@ -3,7 +3,8 @@
  * 封装统计数据查询逻辑，使用 react-query 管理数据状态
  */
 
-import { useQuery, UseQueryOptions } from '@tanstack/react-query';
+import type { UseQueryOptions} from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 import {
   getOverviewStatistics,
@@ -38,8 +39,7 @@ export const useOverviewStatistics = (
   return useQuery<OverviewStatistics, Error>({
     queryKey: ['statistics', 'overview', filters],
     queryFn: () => getOverviewStatistics(filters),
-    staleTime: 30000, // 30 秒内数据视为新鲜
-    keepPreviousData: true, // 保留上一次的数据，避免刷新时闪烁
+    placeholderData: keepPreviousData,
     ...options
   });
 };
@@ -58,8 +58,7 @@ export const useAppStatistics = (
   return useQuery<AppStatisticsResponse, Error>({
     queryKey: ['statistics', 'by-app', filters],
     queryFn: () => getAppStatistics(filters),
-    staleTime: 30000,
-    keepPreviousData: true, // 保留上一次的数据，避免刷新时闪烁
+    placeholderData: keepPreviousData,
     ...options
   });
 };
@@ -78,8 +77,7 @@ export const useModelStatistics = (
   return useQuery<ModelStatisticsResponse, Error>({
     queryKey: ['statistics', 'by-model', filters],
     queryFn: () => getModelStatistics(filters),
-    staleTime: 30000,
-    keepPreviousData: true, // 保留上一次的数据，避免刷新时闪烁
+    placeholderData: keepPreviousData,
     ...options
   });
 };
@@ -100,8 +98,7 @@ export const useTrendStatistics = (
   return useQuery<TrendStatisticsResponse, Error>({
     queryKey: ['statistics', 'trend', filters, granularity],
     queryFn: () => getTrendStatistics({ ...filters, granularity }),
-    staleTime: 30000,
-    keepPreviousData: true, // 保留上一次的数据，避免刷新时闪烁
+    placeholderData: keepPreviousData,
     ...options
   });
 };
@@ -120,8 +117,7 @@ export const useStatusStatistics = (
   return useQuery<StatusStatisticsResponse, Error>({
     queryKey: ['statistics', 'status', filters],
     queryFn: () => getStatusStatistics(filters),
-    staleTime: 30000,
-    keepPreviousData: true, // 保留上一次的数据，避免刷新时闪烁
+    placeholderData: keepPreviousData,
     ...options
   });
 };
@@ -140,8 +136,7 @@ export const useStatisticsList = (
   return useQuery<StatisticsListResponse, Error>({
     queryKey: ['statistics', 'list', filters],
     queryFn: () => getStatisticsList(filters),
-    staleTime: 30000,
-    keepPreviousData: true, // 保留上一次的数据，避免分页时闪烁
+    placeholderData: keepPreviousData,
     ...options
   });
 };

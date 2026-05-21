@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/common/mongo';
 import { MongoSystemModel } from '@fastgpt/service/core/ai/config/schema';
-import { authCert } from '@fastgpt/service/support/permission/auth/common';
+import { authJWT } from '@fastgpt/service/support/permission/controller';
 
 const EXPORT_LIMIT = 10000;
 
@@ -16,8 +16,27 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    // 3. 验证身份
-    await authCert({ req, authToken: true });
+    // 3. 验证 JWT Token
+    const authHeader = req.headers.authorization;
+    const token = req.headers.token as string | undefined;
+
+    let jwtToken: string | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      jwtToken = authHeader.substring(7);
+    } else if (token) {
+      jwtToken = token;
+    }
+
+    if (!jwtToken) {
+      return res.status(401).json({ success: false, error: 'Token 不存在' });
+    }
+
+    try {
+      await authJWT(jwtToken);
+    } catch (error) {
+      return res.status(401).json({ success: false, error: 'Token 无效或已过期' });
+    }
 
     // 4. 获取筛选参数
     const { provider, modelType } = req.body;

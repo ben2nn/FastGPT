@@ -8,6 +8,7 @@ import {
   dataCleanupExecutor,
   reportGenerationExecutor
 } from './taskExecutors';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 /**
  * 任务配置列表
@@ -18,7 +19,7 @@ export const taskConfigs: TaskConfig[] = [
     name: '数据处理任务',
     description: '处理前一天的数据，生成统计报告',
     cronExpression: '0 2 * * *', // 每天凌晨 2 点执行
-    timezone: 'Asia/Shanghai',
+    timezone: DEFAULT_TIMEZONE,
     enabled: true,
     executorName: 'dataProcessExecutor',
     defaultParams: {
@@ -37,7 +38,7 @@ export const taskConfigs: TaskConfig[] = [
     name: '数据清理任务',
     description: '清理 30 天前的过期数据',
     cronExpression: '0 3 * * 0', // 每周日凌晨 3 点执行
-    timezone: 'Asia/Shanghai',
+    timezone: DEFAULT_TIMEZONE,
     enabled: false,
     executorName: 'dataCleanupExecutor',
     defaultParams: {
@@ -53,7 +54,7 @@ export const taskConfigs: TaskConfig[] = [
     name: '报告生成任务',
     description: '生成上月的统计报告',
     cronExpression: '0 4 1 * *', // 每月 1 号凌晨 4 点执行
-    timezone: 'Asia/Shanghai',
+    timezone: DEFAULT_TIMEZONE,
     enabled: false,
     executorName: 'reportGenerationExecutor',
     defaultParams: {

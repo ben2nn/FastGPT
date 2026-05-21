@@ -1,4 +1,5 @@
-import React, { useState, useEffect, FormEvent } from 'react';
+import type { FormEvent } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -31,11 +32,12 @@ import {
 } from '@chakra-ui/react';
 import { AddIcon, EditIcon } from '@chakra-ui/icons';
 import { ProtectedRoute } from '@/web/context/ProtectedRoute';
-import { User } from '@/types/user';
+import type { User } from '@/types/user';
 import { fetchUsers, addUser, updateUser, deleteUser } from '@/web/core/extend/api';
 import Layout from '@/web/context/Layout';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
-export default function UserManagement() {
+export default function UserManagement({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) {
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | undefined>(undefined);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -116,7 +118,7 @@ export default function UserManagement() {
   );
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
       <Layout title="用户管理">
         <Box bg={bgColor} borderWidth="1px" borderColor={borderColor} borderRadius="md" p={6}>
           <Flex justify="space-between" align="center" mb={6}>
@@ -314,7 +316,7 @@ function UserForm({ user, onSubmit }: UserFormProps) {
       avatar: '',
       balance: 100000,
       promotionRate: 10,
-      timezone: 'Asia/Shanghai'
+      timezone: DEFAULT_TIMEZONE
     }
   );
 
@@ -541,11 +543,9 @@ function UserForm({ user, onSubmit }: UserFormProps) {
 
 export async function getServerSideProps(context: any) {
   try {
-    // 检查认证状态
     const token = context.req.cookies?.admin_token;
 
     if (!token) {
-      // 未登录，重定向到登录页
       return {
         redirect: {
           destination: '/login',
@@ -554,13 +554,11 @@ export async function getServerSideProps(context: any) {
       };
     }
 
-    // 返回页面 props
     return {
-      props: {}
+      props: { ssrAuthenticated: true }
     };
   } catch (error) {
     console.error('getServerSideProps error:', error);
-    // 发生错误时重定向到登录页
     return {
       redirect: {
         destination: '/login',

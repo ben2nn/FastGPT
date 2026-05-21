@@ -1,7 +1,7 @@
 import { connectToDatabase } from '@/service/common/mongo';
 import { MongoUser } from '@fastgpt/service/support/user/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
-import { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
+import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { NextAPI } from '@/service/middleware/entry';
 
@@ -58,8 +58,8 @@ async function handler(req: ApiRequestProps, res: ApiResponseType<VerifyResponse
       });
     }
 
-    // 查询用户信息
-    const user = await MongoUser.findById(decoded.userId);
+    // 查询用户信息 (JWT 中用户 ID 字段为 _id)
+    const user = await MongoUser.findById(decoded._id);
 
     if (!user) {
       return res.status(404).json({

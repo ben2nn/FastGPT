@@ -46,6 +46,7 @@ import ExecuteTaskDialog from '@/components/tasks/ExecuteTaskDialog';
 import ExecutionCharts from '@/components/tasks/ExecutionCharts';
 import { ProtectedRoute } from '@/web/context/ProtectedRoute';
 import Layout from '@/web/context/Layout';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
 // 配置 dayjs
 dayjs.extend(relativeTime);
@@ -54,7 +55,7 @@ dayjs.locale('zh-cn');
 /**
  * 任务详情页面组件
  */
-const TaskDetailPage = () => {
+const TaskDetailPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
   const router = useRouter();
   const toast = useToast();
   const { taskId } = router.query as { taskId: string };
@@ -176,7 +177,7 @@ const TaskDetailPage = () => {
 
   if (loading) {
     return (
-      <ProtectedRoute>
+      <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
         <Layout title="任务详情">
           <Flex justify="center" align="center" h="400px">
             <Spinner size="xl" color="blue.500" />
@@ -188,7 +189,7 @@ const TaskDetailPage = () => {
 
   if (error || !taskDetail) {
     return (
-      <ProtectedRoute>
+      <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
         <Layout title="任务详情">
           <Alert status="error" borderRadius="md">
             <AlertIcon />
@@ -269,7 +270,7 @@ const TaskDetailPage = () => {
                   <Text fontWeight="medium" color="gray.600">
                     时区
                   </Text>
-                  <Text>{taskDetail.config.timezone || 'Asia/Shanghai'}</Text>
+                  <Text>{taskDetail.config.timezone || DEFAULT_TIMEZONE}</Text>
                 </Flex>
                 <Flex justify="space-between">
                   <Text fontWeight="medium" color="gray.600">
@@ -523,3 +524,30 @@ const TaskDetailPage = () => {
 };
 
 export default TaskDetailPage;
+
+export async function getServerSideProps(context: any) {
+  try {
+    const token = context.req.cookies?.admin_token;
+
+    if (!token) {
+      return {
+        redirect: {
+          destination: '/login',
+          permanent: false
+        }
+      };
+    }
+
+    return {
+      props: { ssrAuthenticated: true }
+    };
+  } catch (error) {
+    console.error('getServerSideProps error:', error);
+    return {
+      redirect: {
+        destination: '/login',
+        permanent: false
+      }
+    };
+  }
+}
