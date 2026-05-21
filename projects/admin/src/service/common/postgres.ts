@@ -1,0 +1,101 @@
+/**
+ * PostgreSQL 连接池管理
+ * 负责管理全局 PostgreSQL 连接池
+ */
+
+import { Pool } from 'pg';
+import { addLog } from '@fastgpt/service/common/system/log';
+import { SystemError, ErrorType } from '@/service/common/errors';
+
+// 全局连接池实例
+declare global {
+  var __postgresPool: Pool | undefined;
+}
+
+/**
+ * 获取或创建全局 PostgreSQL 连接池
+ * 统一管理连接池，避免重复创建
+ */
+export function getPostgresPool(): Pool {
+  if (!global.__postgresPool) {
+    // 从环境变量获取连接字符串
+    const connectionString = process.env.PG_URL;
+
+    if (!connectionString) {
+      throw new SystemError(ErrorType.CONFIGURATION_ERROR, 'PG_URL 环境变量未设置');
+    }
+
+    // 获取最大连接数配置
+    const maxConnections = process.env.POSTGRES_MAX_CONNECTIONS
+      ? parseInt(process.env.POSTGRES_MAX_CONNECTIONS, 10)
+      : 10;
+
+    addLog.info('创建全局 PostgreSQL 连接池', {
+      maxConnections
+    });
+
+    global.__postgresPool = new Pool({
+      connectionString,
+      max: maxConnections,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000
+    });
+
+    // 监听连接池错误
+    global.__postgresPool.on('error', (err) => {
+      addLog.error('PostgreSQL 连接池错误', err);
+    });
+
+    addLog.info('PostgreSQL 连接池创建成功');
+  }
+
+  return global.__postgresPool;
+}
+
+/**
+ * 测试数据库连接
+ */
+export async function testConnection(): Promise<boolean> {
+  try {
+    const pool = getPostgresPool();
+    const client = await pool.connect();
+    await client.query('SELECT NOW()');
+    client.release();
+    addLog.info('PostgreSQL 连接测试成功');
+    return true;
+  } catch (error) {
+    addLog.error('PostgreSQL 连接测试失败', error as Error);
+    return false;
+  }
+}
+
+/**
+ * PostgreSQL 健康检查
+ */
+export async function checkPostgresHealth(): Promise<{ connected: boolean; latency: number }> {
+  try {
+    const pool = getPostgresPool();
+    const startTime = Date.now();
+    const client = await pool.connect();
+    await client.query('SELECT 1');
+    client.release();
+    const latency = Date.now() - startTime;
+
+    return { connected: true, latency };
+  } catch (error) {
+    addLog.error('PostgreSQL 健康检查失败', error as Error);
+    return { connected: false, latency: -1 };
+  }
+}
+
+/**
+ * 关闭全局连接池
+ */
+export async function closePostgresPool(): Promise<void> {
+  if (global.__postgresPool) {
+    addLog.info('关闭全局 PostgreSQL 连接池');
+    await global.__postgresPool.end();
+    global.__postgresPool = undefined;
+    addLog.info('PostgreSQL 连接池已关闭');
+  }
+}

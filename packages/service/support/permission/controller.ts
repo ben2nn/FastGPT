@@ -19,6 +19,7 @@ import { MongoTeamMember } from '../../support/user/team/teamMemberSchema';
 import { MongoOrgModel } from './org/orgSchema';
 import { MongoMemberGroupModel } from './memberGroup/memberGroupSchema';
 import { DEFAULT_ORG_AVATAR, DEFAULT_TEAM_AVATAR } from '@fastgpt/global/common/system/constants';
+import jwt from 'jsonwebtoken';
 
 /** get resource permission for a team member
  * If there is no permission for the team member, it will return undefined
@@ -237,4 +238,28 @@ export const createResourceDefaultCollaborators = async ({
   }
 
   await MongoResourcePermission.bulkWrite(ops, { session });
+};
+
+/**
+ * 创建 JWT Token
+ */
+export const createJWT = (payload: Record<string, any>): string => {
+  const secret = process.env.TOKEN_KEY || 'default-secret-key';
+  return jwt.sign(payload, secret, { expiresIn: '7d' });
+};
+
+/**
+ * 验证 JWT Token
+ */
+export const authJWT = async (token: string): Promise<any> => {
+  const secret = process.env.TOKEN_KEY || 'default-secret-key';
+  return new Promise((resolve, reject) => {
+    jwt.verify(token, secret, (err, decoded) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(decoded);
+      }
+    });
+  });
 };

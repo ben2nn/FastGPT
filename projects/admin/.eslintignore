@@ -1,0 +1,23 @@
+# 构建输出
+.next/
+out/
+build/
+dist/
+
+# 依赖
+node_modules/
+
+# 脚本文件（纯 Node.js，不需要 Next.js Babel）
+scripts/
+
+# 配置文件
+*.config.js
+next-env.d.ts
+
+# 测试
+coverage/
+.nyc_output/
+
+# 其他
+.DS_Store
+*.log
