@@ -44,6 +44,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const { datasets, collections, datas, dataTexts, collectionTags } = importData;
 
+    // 验证数组字段
+    if (
+      !Array.isArray(datasets) ||
+      !Array.isArray(collections) ||
+      !Array.isArray(datas) ||
+      !Array.isArray(dataTexts) ||
+      !Array.isArray(collectionTags)
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid import file structure: missing required arrays'
+      });
+    }
+
     // 7. 处理 ID 映射
     const idMap = new Map<string, string>();
 
@@ -97,13 +111,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // 10. 批量写入数据库
     const [datasetsResult, collectionsResult, datasResult, dataTextsResult, collectionTagsResult] =
       await Promise.all([
-        MongoDataset.insertMany(updatedDatasets, { ordered: false }).catch(() => []),
-        MongoDatasetCollection.insertMany(updatedCollections, { ordered: false }).catch(() => []),
-        MongoDatasetData.insertMany(updatedDatas, { ordered: false }).catch(() => []),
-        MongoDatasetDataText.insertMany(updatedDataTexts, { ordered: false }).catch(() => []),
-        MongoDatasetCollectionTags.insertMany(updatedCollectionTags, { ordered: false }).catch(
-          () => []
-        )
+        MongoDataset.insertMany(updatedDatasets, { ordered: false }),
+        MongoDatasetCollection.insertMany(updatedCollections, { ordered: false }),
+        MongoDatasetData.insertMany(updatedDatas, { ordered: false }),
+        MongoDatasetDataText.insertMany(updatedDataTexts, { ordered: false }),
+        MongoDatasetCollectionTags.insertMany(updatedCollectionTags, { ordered: false })
       ]);
 
     // 11. 返回导入结果
@@ -119,7 +131,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     });
   } catch (error) {
     console.error('Import dataset error:', error);
-    res.status(500).json({ error: 'Import failed' });
+    res.status(500).json({ success: false, error: 'Import failed' });
   }
 }
 
