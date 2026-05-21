@@ -1,12 +1,13 @@
 import type {
-  APIFileItem,
+  APIFileItemType,
   ApiFileReadContentResponse,
   ApiDatasetDetailResponse,
   FeishuServer
 } from '@fastgpt/global/core/dataset/apiDataset/type';
 import { type ParentIdType } from '@fastgpt/global/common/parentFolder/type';
-import axios, { type Method } from 'axios';
+import { type Method } from 'axios';
 import { addLog } from '../../../../common/system/log';
+import { createProxyAxios, axios } from '../../../../common/api/axios';
 
 type ResponseDataType = {
   success: boolean;
@@ -32,7 +33,7 @@ type FeishuFileListResponse = {
 const feishuBaseUrl = process.env.FEISHU_BASE_URL || 'https://open.feishu.cn';
 
 export const useFeishuDatasetRequest = ({ feishuServer }: { feishuServer: FeishuServer }) => {
-  const instance = axios.create({
+  const instance = createProxyAxios({
     baseURL: feishuBaseUrl,
     timeout: 60000
   });
@@ -104,7 +105,11 @@ export const useFeishuDatasetRequest = ({ feishuServer }: { feishuServer: Feishu
       .catch((err) => responseError(err));
   };
 
-  const listFiles = async ({ parentId }: { parentId?: ParentIdType }): Promise<APIFileItem[]> => {
+  const listFiles = async ({
+    parentId
+  }: {
+    parentId?: ParentIdType;
+  }): Promise<APIFileItemType[]> => {
     const fetchFiles = async (pageToken?: string): Promise<FeishuFileListResponse['files']> => {
       const data = await request<FeishuFileListResponse>(
         `/open-apis/drive/v1/files`,
@@ -130,6 +135,7 @@ export const useFeishuDatasetRequest = ({ feishuServer }: { feishuServer: Feishu
       .filter((file) => ['folder', 'docx'].includes(file.type))
       .map((file) => ({
         id: file.token,
+        rawId: file.token,
         parentId: file.parent_token,
         name: file.name,
         type: file.type === 'folder' ? ('folder' as const) : ('file' as const),
@@ -186,23 +192,33 @@ export const useFeishuDatasetRequest = ({ feishuServer }: { feishuServer: Feishu
   }: {
     apiFileId: string;
   }): Promise<ApiDatasetDetailResponse> => {
-    const { document } = await request<{ document: { title: string } }>(
+    const { document } = await request<{ document: { title: string; type: string } }>(
       `/open-apis/docx/v1/documents/${apiFileId}`,
       {},
       'GET'
     );
 
     return {
+      rawId: apiFileId,
       name: document?.title,
       parentId: null,
-      id: apiFileId
+      id: apiFileId,
+      type: document.type === 'folder' ? ('folder' as const) : ('file' as const),
+      hasChild: document.type === 'folder',
+      updateTime: new Date(),
+      createTime: new Date()
     };
+  };
+
+  const getFileRawId = (fileId: string) => {
+    return fileId;
   };
 
   return {
     getFileContent,
     listFiles,
     getFilePreviewUrl,
-    getFileDetail
+    getFileDetail,
+    getFileRawId
   };
 };

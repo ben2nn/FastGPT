@@ -58,10 +58,8 @@ const DatasetCollectionSchema = new Schema({
 
   // Metadata
   // local file collection
-  fileId: {
-    type: Schema.Types.ObjectId,
-    ref: 'dataset.files'
-  },
+  // Support both GridFS ObjectId (string) and S3 key (string)
+  fileId: String,
   // web link collection
   rawLink: String,
   // Api collection
@@ -72,17 +70,17 @@ const DatasetCollectionSchema = new Schema({
 
   rawTextLength: Number,
   hashRawText: String,
+
   metadata: {
     type: Object,
     default: {}
   },
 
   forbid: Boolean,
-  // next sync time
-  nextSyncTime: Date,
 
   // Parse settings
   customPdfParse: Boolean,
+  apiFileParentId: String,
 
   // Chunk settings
   ...ChunkSettings
@@ -111,16 +109,6 @@ try {
   DatasetCollectionSchema.index({ teamId: 1, datasetId: 1, tags: 1 });
   // create time filter
   DatasetCollectionSchema.index({ teamId: 1, datasetId: 1, createTime: 1 });
-
-  // next sync time filter
-  DatasetCollectionSchema.index(
-    { type: 1, nextSyncTime: -1 },
-    {
-      partialFilterExpression: {
-        nextSyncTime: { $exists: true }
-      }
-    }
-  );
 
   // Get collection by external file id
   DatasetCollectionSchema.index(

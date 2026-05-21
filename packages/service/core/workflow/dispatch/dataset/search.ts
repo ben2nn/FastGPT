@@ -1,7 +1,4 @@
-import {
-  type DispatchNodeResponseType,
-  type DispatchNodeResultType
-} from '@fastgpt/global/core/workflow/runtime/type.d';
+import { type DispatchNodeResultType } from '@fastgpt/global/core/workflow/runtime/type.d';
 import { formatModelChars2Points } from '../../../../support/wallet/usage/utils';
 import type { SelectedDatasetType } from '@fastgpt/global/core/workflow/type/io';
 import type { SearchDataResponseItemType } from '@fastgpt/global/core/dataset/type';
@@ -15,11 +12,12 @@ import { type ChatNodeUsageType } from '@fastgpt/global/support/wallet/bill/type
 import { MongoDataset } from '../../../dataset/schema';
 import { i18nT } from '../../../../../web/i18n/utils';
 import { filterDatasetsByTmbId } from '../../../dataset/utils';
-import { ModelTypeEnum } from '@fastgpt/global/core/ai/model';
 import { getDatasetSearchToolResponsePrompt } from '../../../../../global/core/ai/prompt/dataset';
+import { getNodeErrResponse } from '../utils';
+import { addLog } from '../../../../common/system/log';
 
 type DatasetSearchProps = ModuleDispatchProps<{
-  [NodeInputKeyEnum.datasetSelectList]: SelectedDatasetType;
+  [NodeInputKeyEnum.datasetSelectList]: SelectedDatasetType[];
   [NodeInputKeyEnum.datasetSimilarity]: number;
   [NodeInputKeyEnum.datasetMaxTokens]: number;
   [NodeInputKeyEnum.userChatInput]?: string;
@@ -83,11 +81,13 @@ export async function dispatchDatasetSearch(
   }
 
   if (datasets.length === 0) {
-    return Promise.reject(i18nT('common:core.chat.error.Select dataset empty'));
+    return getNodeErrResponse({ error: i18nT('common:core.chat.error.Select dataset empty') });
   }
 
-  const emptyResult = {
-    quoteQA: [],
+  const emptyResult: DatasetSearchResponse = {
+    data: {
+      quoteQA: []
+    },
     [DispatchNodeResponseKeyEnum.nodeResponse]: {
       totalPoints: 0,
       query: '',
@@ -102,124 +102,126 @@ export async function dispatchDatasetSearch(
     return emptyResult;
   }
 
-  const datasetIds = authTmbId
-    ? await filterDatasetsByTmbId({
-        datasetIds: datasets.map((item) => item.datasetId),
-        tmbId
-      })
-    : await Promise.resolve(datasets.map((item) => item.datasetId));
+  try {
+    const datasetIds = authTmbId
+      ? await filterDatasetsByTmbId({
+          datasetIds: datasets.map((item) => item.datasetId),
+          tmbId
+        })
+      : await Promise.resolve(datasets.map((item) => item.datasetId));
 
-  if (datasetIds.length === 0) {
-    return emptyResult;
-  }
+    if (datasetIds.length === 0) {
+      return emptyResult;
+    }
 
-  // get vector
-  const vectorModel = getEmbeddingModel(
-    (await MongoDataset.findById(datasets[0].datasetId, 'vectorModel').lean())?.vectorModel
-  );
-  // Get Rerank Model
-  const rerankModelData = getRerankModel(rerankModel);
+    // Get vector model
+    const vectorModel = getEmbeddingModel(
+      (await MongoDataset.findById(datasets[0].datasetId, 'vectorModel').lean())?.vectorModel
+    );
+    // Get Rerank Model
+    const rerankModelData = getRerankModel(rerankModel);
 
-  // start search
-  const searchData = {
-    histories,
-    teamId,
-    reRankQuery: userChatInput,
-    queries: [userChatInput],
-    model: vectorModel.model,
-    similarity,
-    limit,
-    datasetIds,
-    searchMode,
-    embeddingWeight,
-    usingReRank,
-    rerankModel: rerankModelData,
-    rerankWeight,
-    collectionFilterMatch
-  };
-  const {
-    searchRes,
-    embeddingTokens,
-    reRankInputTokens,
-    usingSimilarityFilter,
-    usingReRank: searchUsingReRank,
-    queryExtensionResult,
-    deepSearchResult
-  } = datasetDeepSearch
-    ? await deepRagSearch({
-        ...searchData,
-        datasetDeepSearchModel,
-        datasetDeepSearchMaxTimes,
-        datasetDeepSearchBg
-      })
-    : await defaultSearchDatasetData({
-        ...searchData,
-        datasetSearchUsingExtensionQuery,
-        datasetSearchExtensionModel,
-        datasetSearchExtensionBg
-      });
-
-  // count bill results
-  const nodeDispatchUsages: ChatNodeUsageType[] = [];
-  // vector
-  const { totalPoints: embeddingTotalPoints, modelName: embeddingModelName } =
-    formatModelChars2Points({
+    // start search
+    const searchData = {
+      histories,
+      teamId,
+      reRankQuery: userChatInput,
+      queries: [userChatInput],
       model: vectorModel.model,
-      inputTokens: embeddingTokens,
-      modelType: ModelTypeEnum.embedding
-    });
-  nodeDispatchUsages.push({
-    totalPoints: embeddingTotalPoints,
-    moduleName: node.name,
-    model: embeddingModelName,
-    inputTokens: embeddingTokens
-  });
-  // Rerank
-  const { totalPoints: reRankTotalPoints, modelName: reRankModelName } = formatModelChars2Points({
-    model: rerankModelData?.model,
-    inputTokens: reRankInputTokens,
-    modelType: ModelTypeEnum.rerank
-  });
-  if (usingReRank) {
-    nodeDispatchUsages.push({
-      totalPoints: reRankTotalPoints,
-      moduleName: node.name,
-      model: reRankModelName,
-      inputTokens: reRankInputTokens
-    });
-  }
-  // Query extension
-  (() => {
-    if (queryExtensionResult) {
-      const { totalPoints, modelName } = formatModelChars2Points({
-        model: queryExtensionResult.model,
-        inputTokens: queryExtensionResult.inputTokens,
-        outputTokens: queryExtensionResult.outputTokens,
-        modelType: ModelTypeEnum.llm
+      similarity,
+      limit,
+      datasetIds,
+      searchMode,
+      embeddingWeight,
+      usingReRank,
+      rerankModel: rerankModelData,
+      rerankWeight,
+      collectionFilterMatch
+    };
+    const {
+      searchRes,
+      embeddingTokens,
+      reRankInputTokens,
+      usingSimilarityFilter,
+      usingReRank: searchUsingReRank,
+      queryExtensionResult,
+      deepSearchResult
+    } = datasetDeepSearch
+      ? await deepRagSearch({
+          ...searchData,
+          datasetDeepSearchModel,
+          datasetDeepSearchMaxTimes,
+          datasetDeepSearchBg
+        })
+      : await defaultSearchDatasetData({
+          ...searchData,
+          datasetSearchUsingExtensionQuery,
+          datasetSearchExtensionModel,
+          datasetSearchExtensionBg
+        });
+
+    // count bill results
+    const nodeDispatchUsages: ChatNodeUsageType[] = [];
+    // 1. Search vector
+    const { totalPoints: embeddingTotalPoints, modelName: embeddingModelName } =
+      formatModelChars2Points({
+        model: vectorModel.model,
+        inputTokens: embeddingTokens
       });
+    nodeDispatchUsages.push({
+      totalPoints: embeddingTotalPoints,
+      moduleName: node.name,
+      model: embeddingModelName,
+      inputTokens: embeddingTokens
+    });
+    // 2. Rerank
+    if (usingReRank) {
+      const { totalPoints: reRankTotalPoints, modelName: reRankModelName } =
+        formatModelChars2Points({
+          model: rerankModelData?.model,
+          inputTokens: reRankInputTokens
+        });
       nodeDispatchUsages.push({
-        totalPoints,
-        moduleName: i18nT('common:core.module.template.Query extension'),
-        model: modelName,
+        totalPoints: reRankTotalPoints,
+        moduleName: i18nT('account_usage:rerank'),
+        model: reRankModelName,
+        inputTokens: reRankInputTokens
+      });
+    }
+    // 3. Query extension
+    if (queryExtensionResult) {
+      const { totalPoints: llmPoints, modelName: llmModelName } = formatModelChars2Points({
+        model: queryExtensionResult.llmModel,
         inputTokens: queryExtensionResult.inputTokens,
         outputTokens: queryExtensionResult.outputTokens
       });
-      return {
-        totalPoints
-      };
+      nodeDispatchUsages.push({
+        totalPoints: llmPoints,
+        moduleName: i18nT('common:core.module.template.Query extension'),
+        model: llmModelName,
+        inputTokens: queryExtensionResult.inputTokens,
+        outputTokens: queryExtensionResult.outputTokens
+      });
+
+      const { totalPoints: embeddingPoints, modelName: embeddingModelName } =
+        formatModelChars2Points({
+          model: queryExtensionResult.embeddingModel,
+          inputTokens: queryExtensionResult.embeddingTokens
+        });
+      nodeDispatchUsages.push({
+        totalPoints: embeddingPoints,
+        moduleName: `${i18nT('account_usage:ai.query_extension_embedding')}`,
+        model: embeddingModelName,
+        inputTokens: queryExtensionResult.embeddingTokens,
+        outputTokens: 0
+      });
     }
-    return {
-      totalPoints: 0
-    };
-  })();
-  // Deep search
-  (() => {
+    // 4. Deep search
     if (deepSearchResult) {
       const { totalPoints, modelName } = formatModelChars2Points({
         model: deepSearchResult.model,
         inputTokens: deepSearchResult.inputTokens,
-        outputTokens: deepSearchResult.outputTokens,
-        modelType: ModelTypeEnum.llm
+        outputTokens: deepSearchResult.outputTokens
       });
       nodeDispatchUsages.push({
         totalPoints,
@@ -228,51 +230,58 @@ export async function dispatchDatasetSearch(
         inputTokens: deepSearchResult.inputTokens,
         outputTokens: deepSearchResult.outputTokens
       });
-      return {
-        totalPoints
-      };
     }
+    const totalPoints = nodeDispatchUsages.reduce((acc, item) => acc + item.totalPoints, 0);
+
     return {
-      totalPoints: 0
+      data: {
+        quoteQA: searchRes
+      },
+      [DispatchNodeResponseKeyEnum.nodeResponse]: {
+        totalPoints,
+        query: userChatInput,
+        embeddingModel: vectorModel.name,
+        embeddingTokens,
+        similarity: usingSimilarityFilter ? similarity : undefined,
+        limit,
+        searchMode,
+        embeddingWeight:
+          searchMode === DatasetSearchModeEnum.mixedRecall ? embeddingWeight : undefined,
+        // Rerank
+        ...(searchUsingReRank && {
+          rerankModel: rerankModelData?.name,
+          rerankWeight: rerankWeight,
+          reRankInputTokens
+        }),
+        searchUsingReRank,
+        queryExtensionResult: queryExtensionResult
+          ? {
+              model: queryExtensionResult.llmModel,
+              inputTokens: queryExtensionResult.inputTokens,
+              outputTokens: queryExtensionResult.outputTokens,
+              query: queryExtensionResult.query
+            }
+          : undefined,
+        deepSearchResult,
+        // Results
+        quoteList: searchRes
+      },
+      nodeDispatchUsages,
+      [DispatchNodeResponseKeyEnum.toolResponses]:
+        searchRes.length > 0
+          ? {
+              prompt: getDatasetSearchToolResponsePrompt(),
+              cites: searchRes.map((item) => ({
+                id: item.id,
+                sourceName: item.sourceName,
+                updateTime: item.updateTime,
+                content: `${item.q}\n${item.a}`.trim()
+              }))
+            }
+          : 'No results'
     };
-  })();
-
-  const totalPoints = nodeDispatchUsages.reduce((acc, item) => acc + item.totalPoints, 0);
-
-  const responseData: DispatchNodeResponseType & { totalPoints: number } = {
-    totalPoints,
-    query: userChatInput,
-    embeddingModel: vectorModel.name,
-    embeddingTokens,
-    similarity: usingSimilarityFilter ? similarity : undefined,
-    limit,
-    searchMode,
-    embeddingWeight: searchMode === DatasetSearchModeEnum.mixedRecall ? embeddingWeight : undefined,
-    // Rerank
-    ...(searchUsingReRank && {
-      rerankModel: rerankModelData?.name,
-      rerankWeight: rerankWeight,
-      reRankInputTokens
-    }),
-    searchUsingReRank,
-    // Results
-    quoteList: searchRes,
-    queryExtensionResult,
-    deepSearchResult
-  };
-
-  return {
-    quoteQA: searchRes,
-    [DispatchNodeResponseKeyEnum.nodeResponse]: responseData,
-    nodeDispatchUsages,
-    [DispatchNodeResponseKeyEnum.toolResponses]: {
-      prompt: getDatasetSearchToolResponsePrompt(),
-      cites: searchRes.map((item) => ({
-        id: item.id,
-        sourceName: item.sourceName,
-        updateTime: item.updateTime,
-        content: `${item.q}\n${item.a}`.trim()
-      }))
-    }
-  };
+  } catch (error) {
+    addLog.error(`[Dataset search] error`, error);
+    return getNodeErrResponse({ error });
+  }
 }

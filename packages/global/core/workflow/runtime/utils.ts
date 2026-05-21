@@ -19,17 +19,22 @@ import type { FlowNodeOutputItemType, ReferenceValueType } from '../type/io';
 import type { StoreNodeItemType } from '../type/node';
 import { isValidReferenceValueFormat } from '../utils';
 import type { RuntimeEdgeItemType, RuntimeNodeItemType } from './type';
+import { isSecretValue } from '../../../common/secret/utils';
+import { isChildInteractive } from '../template/system/interactive/constants';
 
 export const extractDeepestInteractive = (
   interactive: WorkflowInteractiveResponseType
 ): WorkflowInteractiveResponseType => {
-  if (
-    (interactive?.type === 'childrenInteractive' || interactive?.type === 'loopInteractive') &&
-    interactive.params?.childrenResponse
-  ) {
-    return extractDeepestInteractive(interactive.params.childrenResponse);
+  const MAX_DEPTH = 100;
+  let current = interactive;
+  let depth = 0;
+
+  while (depth < MAX_DEPTH && 'childrenResponse' in current.params) {
+    current = current.params.childrenResponse;
+    depth++;
   }
-  return interactive;
+
+  return current;
 };
 export const getMaxHistoryLimitFromNodes = (nodes: StoreNodeItemType[]): number => {
   let limit = 10;
@@ -49,7 +54,7 @@ export const getMaxHistoryLimitFromNodes = (nodes: StoreNodeItemType[]): number 
 };
 
 /* value type format */
-export const valueTypeFormat = (value: any, type?: WorkflowIOValueTypeEnum) => {
+export const valueTypeFormat = (value: any, valueType?: WorkflowIOValueTypeEnum) => {
   const isObjectString = (value: any) => {
     if (typeof value === 'string' && value !== 'false' && value !== 'true') {
       const trimmedValue = value.trim();
@@ -61,35 +66,39 @@ export const valueTypeFormat = (value: any, type?: WorkflowIOValueTypeEnum) => {
     return false;
   };
 
-  // 1. any值，忽略格式化
+  // Handle null/undefined, return default value by type
   if (value === undefined || value === null) return value;
-  if (!type || type === WorkflowIOValueTypeEnum.any) return value;
+  if (!valueType || valueType === WorkflowIOValueTypeEnum.any) return value;
+
+  // Password check
+  if (valueType === WorkflowIOValueTypeEnum.string && isSecretValue(value)) return value;
 
   // 2. 如果值已经符合目标类型，直接返回
   if (
-    (type === WorkflowIOValueTypeEnum.string && typeof value === 'string') ||
-    (type === WorkflowIOValueTypeEnum.number && typeof value === 'number') ||
-    (type === WorkflowIOValueTypeEnum.boolean && typeof value === 'boolean') ||
-    (type.startsWith('array') && Array.isArray(value)) ||
-    (type === WorkflowIOValueTypeEnum.object && typeof value === 'object') ||
-    (type === WorkflowIOValueTypeEnum.chatHistory &&
+    (valueType === WorkflowIOValueTypeEnum.string && typeof value === 'string') ||
+    (valueType === WorkflowIOValueTypeEnum.number && typeof value === 'number') ||
+    (valueType === WorkflowIOValueTypeEnum.boolean && typeof value === 'boolean') ||
+    (valueType?.startsWith('array') && Array.isArray(value)) ||
+    (valueType === WorkflowIOValueTypeEnum.object && typeof value === 'object') ||
+    (valueType === WorkflowIOValueTypeEnum.chatHistory &&
       (Array.isArray(value) || typeof value === 'number')) ||
-    (type === WorkflowIOValueTypeEnum.datasetQuote && Array.isArray(value)) ||
-    (type === WorkflowIOValueTypeEnum.selectDataset && Array.isArray(value)) ||
-    (type === WorkflowIOValueTypeEnum.selectApp && typeof value === 'object')
+    (valueType === WorkflowIOValueTypeEnum.datasetQuote && Array.isArray(value)) ||
+    (valueType === WorkflowIOValueTypeEnum.selectDataset && Array.isArray(value)) ||
+    (valueType === WorkflowIOValueTypeEnum.selectApp && typeof value === 'object')
   ) {
     return value;
   }
 
   // 4. 按目标类型，进行格式转化
   // 4.1 基本类型转换
-  if (type === WorkflowIOValueTypeEnum.string) {
+  if (valueType === WorkflowIOValueTypeEnum.string) {
     return typeof value === 'object' ? JSON.stringify(value) : String(value);
   }
-  if (type === WorkflowIOValueTypeEnum.number) {
+  if (valueType === WorkflowIOValueTypeEnum.number) {
+    if (value === '') return null;
     return Number(value);
   }
-  if (type === WorkflowIOValueTypeEnum.boolean) {
+  if (valueType === WorkflowIOValueTypeEnum.boolean) {
     if (typeof value === 'string') {
       return value.toLowerCase() === 'true';
     }
@@ -97,58 +106,50 @@ export const valueTypeFormat = (value: any, type?: WorkflowIOValueTypeEnum) => {
   }
 
   // 4.3 字符串转对象
-  if (
-    (type === WorkflowIOValueTypeEnum.object || type.startsWith('array')) &&
-    typeof value === 'string' &&
-    value.trim()
-  ) {
-    const trimmedValue = value.trim();
-    const isJsonString = isObjectString(trimmedValue);
-
-    if (isJsonString) {
+  if (valueType === WorkflowIOValueTypeEnum.object) {
+    if (isObjectString(value)) {
+      const trimmedValue = value.trim();
       try {
-        const parsed = json5.parse(trimmedValue);
-        // 检测解析结果与目标类型是否一致
-        if (type.startsWith('array') && Array.isArray(parsed)) return parsed;
-        if (type === WorkflowIOValueTypeEnum.object && typeof parsed === 'object') return parsed;
+        return json5.parse(trimmedValue);
       } catch (error) {}
     }
+    return {};
   }
 
   // 4.4 数组类型(这里 value 不是数组类型)（TODO: 嵌套数据类型转化）
-  if (type.startsWith('array')) {
+  if (valueType?.startsWith('array')) {
+    if (isObjectString(value)) {
+      try {
+        return json5.parse(value);
+      } catch (error) {}
+    }
     return [value];
   }
 
   // 4.5 特殊类型处理
   if (
-    [WorkflowIOValueTypeEnum.datasetQuote, WorkflowIOValueTypeEnum.selectDataset].includes(type)
+    [
+      WorkflowIOValueTypeEnum.datasetQuote,
+      WorkflowIOValueTypeEnum.selectDataset,
+      WorkflowIOValueTypeEnum.selectApp
+    ].includes(valueType as any)
   ) {
     if (isObjectString(value)) {
       try {
         return json5.parse(value);
-      } catch (error) {
-        return [];
-      }
+      } catch (error) {}
     }
     return [];
   }
-  if (
-    [WorkflowIOValueTypeEnum.selectApp, WorkflowIOValueTypeEnum.object].includes(type) &&
-    typeof value === 'string'
-  ) {
+
+  // Invalid history type
+  if (valueType === WorkflowIOValueTypeEnum.chatHistory) {
     if (isObjectString(value)) {
       try {
         return json5.parse(value);
-      } catch (error) {
-        return {};
-      }
+      } catch (error) {}
     }
-    return {};
-  }
-  // Invalid history type
-  if (type === WorkflowIOValueTypeEnum.chatHistory) {
-    return 0;
+    return [];
   }
 
   // 5. 默认返回原值
@@ -177,10 +178,7 @@ export const getLastInteractiveValue = (
       return;
     }
 
-    if (
-      lastValue.interactive.type === 'childrenInteractive' ||
-      lastValue.interactive.type === 'loopInteractive'
-    ) {
+    if (isChildInteractive(lastValue.interactive.type)) {
       return lastValue.interactive;
     }
 
@@ -194,6 +192,10 @@ export const getLastInteractiveValue = (
 
     // Check is user input
     if (lastValue.interactive.type === 'userInput' && !lastValue.interactive.params.submitted) {
+      return lastValue.interactive;
+    }
+
+    if (lastValue.interactive.type === 'paymentPause' && !lastValue.interactive.params.continue) {
       return lastValue.interactive;
     }
   }
@@ -252,6 +254,7 @@ export const storeNodes2RuntimeNodes = (
         name: node.name,
         avatar: node.avatar,
         intro: node.intro,
+        toolDescription: node.toolDescription,
         flowNodeType: node.flowNodeType,
         showStatus: node.showStatus,
         isEntry: entryNodeIds.includes(node.nodeId),
@@ -259,7 +262,8 @@ export const storeNodes2RuntimeNodes = (
         outputs: node.outputs,
         pluginId: node.pluginId,
         version: node.version,
-        toolConfig: node.toolConfig
+        toolConfig: node.toolConfig,
+        catchError: node.catchError
       };
     }) || []
   );
@@ -274,85 +278,111 @@ export const filterWorkflowEdges = (edges: RuntimeEdgeItemType[]) => {
 };
 
 /*
-  1. 输入线分类：普通线和递归线（可以追溯到自身）
-  2. 起始线全部非 waiting 执行，或递归线全部非 waiting 执行
+  1. 输入线分类：普通线(实际上就是从 start 直接过来的分支）和递归线（可以追溯到自身的分支）
+  2. 递归线，会根据最近的一个 target 分支进行分类，同一个分支的属于一组
+  2. 起始线全部非 waiting 执行，或递归线任意一组全部非 waiting 执行
 */
 export const checkNodeRunStatus = ({
+  nodesMap,
   node,
   runtimeEdges
 }: {
+  nodesMap: Map<string, RuntimeNodeItemType>;
   node: RuntimeNodeItemType;
   runtimeEdges: RuntimeEdgeItemType[];
 }) => {
-  /*
-    区分普通连线和递归连线
-    递归连线：可以通过往上查询 nodes，最终追溯到自身
-  */
-  const splitEdges2WorkflowEdges = ({
-    sourceEdges,
-    allEdges,
-    currentNode
-  }: {
-    sourceEdges: RuntimeEdgeItemType[];
-    allEdges: RuntimeEdgeItemType[];
-    currentNode: RuntimeNodeItemType;
-  }) => {
-    const commonEdges: RuntimeEdgeItemType[] = [];
-    const recursiveEdges: RuntimeEdgeItemType[] = [];
-
-    const checkIsCircular = (edge: RuntimeEdgeItemType, visited: Set<string>): boolean => {
-      if (edge.source === currentNode.nodeId) {
-        return true; // 检测到环,并且环中包含当前节点
-      }
-      if (visited.has(edge.source)) {
-        return false; // 检测到环,但不包含当前节点(子节点成环)
-      }
-      visited.add(edge.source);
-
-      // 递归检测后面的 edge，如果有其中一个成环，则返回 true
-      const nextEdges = allEdges.filter((item) => item.target === edge.source);
-      return nextEdges.some((nextEdge) => checkIsCircular(nextEdge, new Set(visited)));
+  const isStartNode = (nodeType: string) => {
+    const map: Record<any, boolean> = {
+      [FlowNodeTypeEnum.workflowStart]: true,
+      [FlowNodeTypeEnum.pluginInput]: true,
+      [FlowNodeTypeEnum.loopStart]: true
     };
+    return !!map[nodeType];
+  };
+  const splitNodeEdges = (targetNode: RuntimeNodeItemType) => {
+    const commonEdges: RuntimeEdgeItemType[] = [];
+    const recursiveEdgeGroupsMap = new Map<string, RuntimeEdgeItemType[]>();
 
-    sourceEdges.forEach((edge) => {
-      if (checkIsCircular(edge, new Set([currentNode.nodeId]))) {
-        recursiveEdges.push(edge);
-      } else {
-        commonEdges.push(edge);
+    const sourceEdges = runtimeEdges.filter((item) => item.target === targetNode.nodeId);
+
+    sourceEdges.forEach((sourceEdge) => {
+      const stack: Array<{
+        edge: RuntimeEdgeItemType;
+        visited: Set<string>;
+      }> = [
+        {
+          edge: sourceEdge,
+          visited: new Set([targetNode.nodeId])
+        }
+      ];
+      const MAX_DEPTH = 3000;
+      let iterations = 0;
+
+      while (stack.length > 0 && iterations < MAX_DEPTH) {
+        iterations++;
+        const { edge, visited } = stack.pop()!;
+
+        // Start node
+        const sourceNode = nodesMap.get(edge.source);
+        if (!sourceNode) continue;
+
+        if (isStartNode(sourceNode.flowNodeType) || sourceEdge.sourceHandle === 'selectedTools') {
+          commonEdges.push(sourceEdge);
+          continue;
+        }
+
+        // Circle detected
+        if (edge.source === targetNode.nodeId) {
+          recursiveEdgeGroupsMap.set(edge.target, [
+            ...(recursiveEdgeGroupsMap.get(edge.target) || []),
+            sourceEdge
+          ]);
+          continue;
+        }
+
+        if (visited.has(edge.source)) {
+          continue; // 已访问过此节点，跳过（避免子环干扰）
+        }
+
+        const newVisited = new Set(visited);
+        newVisited.add(edge.source);
+
+        // 查找目标节点的 source edges 并加入栈中
+        const nextEdges = runtimeEdges.filter((item) => item.target === edge.source);
+
+        for (const nextEdge of nextEdges) {
+          stack.push({
+            edge: nextEdge,
+            visited: newVisited
+          });
+        }
       }
     });
 
-    return { commonEdges, recursiveEdges };
+    return { commonEdges, recursiveEdgeGroups: Array.from(recursiveEdgeGroupsMap.values()) };
   };
 
-  const runtimeNodeSourceEdge = filterWorkflowEdges(runtimeEdges).filter(
-    (item) => item.target === node.nodeId
-  );
+  // Classify edges
+  const { commonEdges, recursiveEdgeGroups } = splitNodeEdges(node);
 
   // Entry
-  if (runtimeNodeSourceEdge.length === 0) {
+  if (commonEdges.length === 0 && recursiveEdgeGroups.length === 0) {
     return 'run';
   }
 
-  // Classify edges
-  const { commonEdges, recursiveEdges } = splitEdges2WorkflowEdges({
-    sourceEdges: runtimeNodeSourceEdge,
-    allEdges: runtimeEdges,
-    currentNode: node
-  });
-
   // check active（其中一组边，至少有一个 active，且没有 waiting 即可运行）
   if (
-    commonEdges.length > 0 &&
     commonEdges.some((item) => item.status === 'active') &&
     commonEdges.every((item) => item.status !== 'waiting')
   ) {
     return 'run';
   }
   if (
-    recursiveEdges.length > 0 &&
-    recursiveEdges.some((item) => item.status === 'active') &&
-    recursiveEdges.every((item) => item.status !== 'waiting')
+    recursiveEdgeGroups.some(
+      (item) =>
+        item.some((item) => item.status === 'active') &&
+        item.every((item) => item.status !== 'waiting')
+    )
   ) {
     return 'run';
   }
@@ -361,7 +391,10 @@ export const checkNodeRunStatus = ({
   if (commonEdges.length > 0 && commonEdges.every((item) => item.status === 'skipped')) {
     return 'skip';
   }
-  if (recursiveEdges.length > 0 && recursiveEdges.every((item) => item.status === 'skipped')) {
+  if (
+    recursiveEdgeGroups.length > 0 &&
+    recursiveEdgeGroups.some((item) => item.every((item) => item.status === 'skipped'))
+  ) {
     return 'skip';
   }
 
@@ -446,27 +479,63 @@ export const formatVariableValByType = (val: any, valueType?: WorkflowIOValueTyp
 
   return val;
 };
+
 // replace {{$xx.xx$}} variables for text
 export function replaceEditorVariable({
   text,
   nodes,
-  variables
+  variables,
+  depth = 0
 }: {
   text: any;
   nodes: RuntimeNodeItemType[];
   variables: Record<string, any>; // global variables
+  depth?: number;
 }) {
   if (typeof text !== 'string') return text;
+  if (text === '') return text;
+
+  const MAX_REPLACEMENT_DEPTH = 10;
+  const processedVariables = new Set<string>();
+
+  // Prevent infinite recursion
+  if (depth > MAX_REPLACEMENT_DEPTH) {
+    return text;
+  }
 
   text = replaceVariable(text, variables);
+
+  // Check for circular references in variable values
+  const hasCircularReference = (value: any, targetKey: string): boolean => {
+    if (typeof value !== 'string') return false;
+
+    // Check if the value contains the target variable pattern (direct self-reference)
+    const selfRefPattern = new RegExp(
+      `\\{\\{\\$${targetKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\$\\}\\}`,
+      'g'
+    );
+    return selfRefPattern.test(value);
+  };
 
   const variablePattern = /\{\{\$([^.]+)\.([^$]+)\$\}\}/g;
   const matches = [...text.matchAll(variablePattern)];
   if (matches.length === 0) return text;
 
-  matches.forEach((match) => {
+  let result = text;
+  let hasReplacements = false;
+
+  // Build replacement map first to avoid modifying string during iteration
+  const replacements: Array<{ pattern: string; replacement: string }> = [];
+
+  for (const match of matches) {
     const nodeId = match[1];
     const id = match[2];
+    const variableKey = `${nodeId}.${id}`;
+
+    // Skip if already processed to avoid immediate circular reference
+    if (processedVariables.has(variableKey)) {
+      continue;
+    }
 
     const variableVal = (() => {
       if (nodeId === VARIABLE_NODE_ID) {
@@ -484,13 +553,35 @@ export function replaceEditorVariable({
       if (input) return getReferenceVariableValue({ value: input.value, nodes, variables });
     })();
 
-    const formatVal = valToStr(variableVal);
+    // Check for direct circular reference
+    if (hasCircularReference(String(variableVal), variableKey)) {
+      continue;
+    }
 
-    const regex = new RegExp(`\\{\\{\\$(${nodeId}\\.${id})\\$\\}\\}`, 'g');
-    text = text.replace(regex, () => formatVal);
+    const formatVal = valToStr(variableVal);
+    const escapedNodeId = nodeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    replacements.push({
+      pattern: `\\{\\{\\$(${escapedNodeId}\\.${escapedId})\\$\\}\\}`,
+      replacement: formatVal
+    });
+
+    processedVariables.add(variableKey);
+    hasReplacements = true;
+  }
+
+  // Apply all replacements
+  replacements.forEach(({ pattern, replacement }) => {
+    result = result.replace(new RegExp(pattern, 'g'), replacement);
   });
 
-  return text || '';
+  // If we made replacements and there might be nested variables, recursively process
+  if (hasReplacements && /\{\{\$[^.]+\.[^$]+\$\}\}/.test(result)) {
+    result = replaceEditorVariable({ text: result, nodes, variables, depth: depth + 1 });
+  }
+
+  return result || '';
 }
 
 export const textAdaptGptResponse = ({

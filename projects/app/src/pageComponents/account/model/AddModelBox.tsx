@@ -18,15 +18,10 @@ import {
 } from '@chakra-ui/react';
 import { useTranslation } from 'next-i18next';
 import React, { useMemo, useRef, useState } from 'react';
-import {
-  ModelProviderList,
-  type ModelProviderIdType,
-  getModelProvider
-} from '@fastgpt/global/core/ai/provider';
 import MySelect from '@fastgpt/web/components/common/MySelect';
 import { ModelTypeEnum } from '@fastgpt/global/core/ai/model';
 import Avatar from '@fastgpt/web/components/common/Avatar';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import { getSystemModelDefaultConfig, putSystemModel } from '@/web/core/ai/config';
 import { type SystemModelItemType } from '@fastgpt/service/core/ai/type';
 import { useForm } from 'react-hook-form';
@@ -95,8 +90,8 @@ export const ModelEditModal = ({
   onSuccess: () => void;
   onClose: () => void;
 }) => {
-  const { t } = useTranslation();
-  const { feConfigs } = useSystemStore();
+  const { t, i18n } = useTranslation();
+  const { feConfigs, getModelProviders } = useSystemStore();
 
   const { register, getValues, setValue, handleSubmit, watch, reset } =
     useForm<SystemModelItemType>({
@@ -111,14 +106,13 @@ export const ModelEditModal = ({
   const isRerankModel = modelData?.type === ModelTypeEnum.rerank;
 
   const provider = watch('provider');
-  const providerData = useMemo(() => getModelProvider(provider), [provider]);
 
-  const providerList = useRef<{ label: any; value: ModelProviderIdType }[]>(
-    ModelProviderList.map((item) => ({
+  const providerList = useRef<{ label: React.ReactNode; value: string }[]>(
+    getModelProviders(i18n.language).map((item) => ({
       label: (
         <HStack>
           <Avatar src={item.avatar} w={'1rem'} />
-          <Box>{t(item.name as any)}</Box>
+          <Box>{item.name}</Box>
         </HStack>
       ),
       value: item.id
@@ -132,7 +126,7 @@ export const ModelEditModal = ({
     return '';
   }, [isLLMModel, isEmbeddingModel, isTTSModel, t, isSTTModel, isRerankModel]);
 
-  const { runAsync: updateModel, loading: updatingModel } = useRequest2(
+  const { runAsync: updateModel, loading: updatingModel } = useRequest(
     async (data: SystemModelItemType) => {
       for (const key in data) {
         // @ts-ignore
@@ -157,7 +151,7 @@ export const ModelEditModal = ({
   );
 
   const [key, setKey] = useState(0);
-  const { runAsync: loadDefaultConfig, loading: loadingDefaultConfig } = useRequest2(
+  const { runAsync: loadDefaultConfig, loading: loadingDefaultConfig } = useRequest(
     getSystemModelDefaultConfig,
     {
       onSuccess(res) {
@@ -479,6 +473,26 @@ export const ModelEditModal = ({
                     <Tr>
                       <Td>
                         <HStack spacing={1}>
+                          <Box>{t('account_model:batch_size')}</Box>
+                        </HStack>
+                      </Td>
+                      <Td textAlign={'right'}>
+                        <Flex justifyContent={'flex-end'}>
+                          <MyNumberInput
+                            defaultValue={1}
+                            register={register}
+                            name="batchSize"
+                            min={1}
+                            step={1}
+                            isRequired
+                            {...InputStyles}
+                          />
+                        </Flex>
+                      </Td>
+                    </Tr>
+                    <Tr>
+                      <Td>
+                        <HStack spacing={1}>
                           <Box>{t('account:model.default_token')}</Box>
                           <QuestionTip label={t('account:model.default_token_tip')} />
                         </HStack>
@@ -663,6 +677,16 @@ export const ModelEditModal = ({
                       </Flex>
                     </Td>
                   </Tr>
+                  {feConfigs?.isPlus && (
+                    <Tr>
+                      <Td>{t('account_model:use_in_eval')}</Td>
+                      <Td textAlign={'right'}>
+                        <Flex justifyContent={'flex-end'}>
+                          <Switch {...register('useInEvaluation')} />
+                        </Flex>
+                      </Td>
+                    </Tr>
+                  )}
                   <Tr>
                     <Td>
                       <HStack spacing={1}>

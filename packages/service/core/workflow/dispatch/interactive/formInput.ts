@@ -6,19 +6,18 @@ import type {
   DispatchNodeResultType,
   ModuleDispatchProps
 } from '@fastgpt/global/core/workflow/runtime/type';
-import type {
-  UserInputFormItemType,
-  UserInputInteractive
-} from '@fastgpt/global/core/workflow/template/system/interactive/type';
+import type { UserInputFormItemType } from '@fastgpt/global/core/workflow/template/system/interactive/type';
 import { addLog } from '../../../../common/system/log';
+import { FlowNodeInputTypeEnum } from '@fastgpt/global/core/workflow/node/constant';
+import { anyValueDecrypt } from '../../../../common/secret/utils';
 
 type Props = ModuleDispatchProps<{
   [NodeInputKeyEnum.description]: string;
   [NodeInputKeyEnum.userInputForms]: UserInputFormItemType[];
 }>;
 type FormInputResponse = DispatchNodeResultType<{
-  [DispatchNodeResponseKeyEnum.interactive]?: UserInputInteractive;
   [NodeOutputKeyEnum.formInputResult]?: Record<string, any>;
+  [key: string]: any;
 }>;
 
 /* 
@@ -50,7 +49,7 @@ export const dispatchFormInput = async (props: Props): Promise<FormInputResponse
   node.isEntry = false;
 
   const { text } = chatValue2RuntimePrompt(query);
-  const userInputVal = (() => {
+  const rawUserInputVal: Record<string, any> = (() => {
     try {
       return JSON.parse(text);
     } catch (error) {
@@ -59,10 +58,38 @@ export const dispatchFormInput = async (props: Props): Promise<FormInputResponse
     }
   })();
 
+  const userInputVal = Object.entries(rawUserInputVal).reduce(
+    (acc, [key, value]) => {
+      const inputConfig = userInputForms.find((form) => form.key === key);
+
+      if (inputConfig?.type === FlowNodeInputTypeEnum.password) {
+        acc[key] = anyValueDecrypt(value);
+      } else if (inputConfig?.type === FlowNodeInputTypeEnum.fileSelect) {
+        if (Array.isArray(value)) {
+          acc[key] = value.map((file: any) => {
+            if (typeof file === 'object' && file.url) {
+              return file.url;
+            }
+            return file;
+          });
+        } else {
+          acc[key] = value;
+        }
+      } else {
+        acc[key] = value;
+      }
+
+      return acc;
+    },
+    {} as Record<string, any>
+  );
+
   return {
+    data: {
+      ...userInputVal,
+      [NodeOutputKeyEnum.formInputResult]: userInputVal
+    },
     [DispatchNodeResponseKeyEnum.rewriteHistories]: histories.slice(0, -2), // Removes the current session record as the history of subsequent nodes
-    ...userInputVal,
-    [NodeOutputKeyEnum.formInputResult]: userInputVal,
     [DispatchNodeResponseKeyEnum.toolResponses]: userInputVal,
     [DispatchNodeResponseKeyEnum.nodeResponse]: {
       formInputResult: userInputVal

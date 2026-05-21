@@ -15,11 +15,12 @@ import {
   Button
 } from '@chakra-ui/react';
 import { useTranslation } from 'next-i18next';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import {
   deleteMemberPermission,
   getTeamClbs,
-  updateMemberPermission
+  updateMemberPermission,
+  updateOneMemberPermission
 } from '@/web/support/user/team/api';
 import { useUserStore } from '@/web/support/user/useUserStore';
 import QuestionTip from '@fastgpt/web/components/common/MyTooltip/QuestionTip';
@@ -28,11 +29,14 @@ import MemberTag from '../../../../components/support/user/team/Info/MemberTag';
 import { DefaultGroupName } from '@fastgpt/global/support/user/team/group/constant';
 import {
   TeamApikeyCreatePermissionVal,
+  TeamApikeyCreateRoleVal,
   TeamAppCreatePermissionVal,
+  TeamAppCreateRoleVal,
   TeamDatasetCreatePermissionVal,
+  TeamDatasetCreateRoleVal,
   TeamManagePermissionVal,
-  TeamPermissionList,
-  TeamWritePermissionVal
+  TeamManageRoleVal,
+  TeamRoleList
 } from '@fastgpt/global/support/permission/user/constant';
 import { TeamPermission } from '@fastgpt/global/support/permission/user/controller';
 import { useToggle } from 'ahooks';
@@ -48,6 +52,7 @@ import { GetSearchUserGroupOrg } from '@/web/support/user/api';
 import { type PermissionValueType } from '@fastgpt/global/support/permission/type';
 import { type CollaboratorItemType } from '@fastgpt/global/support/permission/collaborator';
 import type { Permission } from '@fastgpt/global/support/permission/controller';
+import { ReadRoleVal } from '@fastgpt/global/support/permission/constant';
 
 function PermissionManage({
   Tabs,
@@ -63,13 +68,13 @@ function PermissionManage({
     CollaboratorContext,
     (state) => state.collaboratorList
   );
-  const onUpdateCollaborators = useContextSelector(
-    CollaboratorContext,
-    (state) => state.onUpdateCollaborators
-  );
   const onDelOneCollaborator = useContextSelector(
     CollaboratorContext,
     (state) => state.onDelOneCollaborator
+  );
+  const refetchCollaborators = useContextSelector(
+    CollaboratorContext,
+    (state) => state.refetchCollaboratorList
   );
 
   const [isExpandMember, setExpandMember] = useToggle(true);
@@ -78,7 +83,7 @@ function PermissionManage({
 
   const [searchKey, setSearchKey] = useState('');
 
-  const { data: searchResult } = useRequest2(() => GetSearchUserGroupOrg(searchKey), {
+  const { data: searchResult } = useRequest(() => GetSearchUserGroupOrg(searchKey), {
     manual: false,
     throttleWait: 500,
     debounceWait: 200,
@@ -109,7 +114,7 @@ function PermissionManage({
     };
   }, [collaboratorList, searchResult, searchKey]);
 
-  const { runAsync: onUpdatePermission, loading: addLoading } = useRequest2(
+  const { runAsync: onUpdatePermission, loading: addLoading } = useRequest(
     async ({ id, type, per }: { id: string; type: 'add' | 'remove'; per: PermissionValueType }) => {
       const clb = collaboratorList.find(
         (clb) => clb.tmbId === id || clb.groupId === id || clb.orgId === id
@@ -117,24 +122,33 @@ function PermissionManage({
 
       if (!clb) return;
 
-      const permission = new TeamPermission({ per: clb.permission.value });
+      const permission = new TeamPermission({ role: clb.permission.role });
       if (type === 'add') {
-        permission.addPer(per);
+        permission.addRole(per);
       } else {
-        permission.removePer(per);
+        permission.removeRole(per);
       }
 
-      return onUpdateCollaborators({
-        ...(clb.tmbId && { members: [clb.tmbId] }),
-        ...(clb.groupId && { groups: [clb.groupId] }),
-        ...(clb.orgId && { orgs: [clb.orgId] }),
-        permission: permission.value
+      return updateOneMemberPermission({
+        tmbId: clb.tmbId,
+        groupId: clb.groupId,
+        orgId: clb.orgId,
+        permission: permission.role
       });
+    },
+    {
+      onSuccess: refetchCollaborators
     }
   );
 
-  const { runAsync: onDeleteMemberPermission, loading: deleteLoading } =
-    useRequest2(onDelOneCollaborator);
+  const { runAsync: onDeleteMemberPermission, loading: deleteLoading } = useRequest(
+    async (props) => {
+      if (onDelOneCollaborator) {
+        return await onDelOneCollaborator(props);
+      }
+      return Promise.resolve();
+    }
+  );
 
   const userManage = userInfo?.permission.hasManagePer;
   const hasDeletePer = (per: Permission) => {
@@ -145,12 +159,12 @@ function PermissionManage({
 
   function PermissionCheckBox({
     isDisabled,
-    per,
+    role,
     clbPer,
     id
   }: {
     isDisabled: boolean;
-    per: PermissionValueType;
+    role: PermissionValueType;
     clbPer: Permission;
     id: string;
   }) {
@@ -159,18 +173,18 @@ function PermissionManage({
         <Box mx="auto" w="fit-content">
           <Checkbox
             isDisabled={isDisabled}
-            isChecked={clbPer.checkPer(per)}
+            isChecked={clbPer.checkRole(role)}
             onChange={(e) =>
               e.target.checked
                 ? onUpdatePermission({
                     id,
                     type: 'add',
-                    per
+                    per: role
                   })
                 : onUpdatePermission({
                     id,
                     type: 'remove',
-                    per
+                    per: role
                   })
             }
           />
@@ -197,10 +211,9 @@ function PermissionManage({
             size="md"
             borderRadius={'md'}
             ml={3}
-            leftIcon={<MyIcon name="common/add2" w={'14px'} />}
             onClick={onOpenAddMember}
           >
-            {t('user:permission.Add')}
+            {t('account_team:manage_per')}
           </Button>
         )}
       </Flex>
@@ -265,26 +278,26 @@ function PermissionManage({
                         </HStack>
                       </Td>
                       <PermissionCheckBox
-                        isDisabled={member.permission.isOwner || !userManage}
-                        per={TeamAppCreatePermissionVal}
+                        isDisabled={member.permission.hasManagePer && !userInfo?.permission.isOwner}
+                        role={TeamAppCreateRoleVal}
                         clbPer={member.permission}
                         id={member.tmbId!}
                       />
                       <PermissionCheckBox
-                        isDisabled={member.permission.isOwner || !userManage}
-                        per={TeamDatasetCreatePermissionVal}
+                        isDisabled={member.permission.hasManagePer && !userInfo?.permission.isOwner}
+                        role={TeamDatasetCreateRoleVal}
                         clbPer={member.permission}
                         id={member.tmbId!}
                       />
                       <PermissionCheckBox
-                        isDisabled={member.permission.isOwner || !userManage}
-                        per={TeamApikeyCreatePermissionVal}
+                        isDisabled={member.permission.hasManagePer && !userInfo?.permission.isOwner}
+                        role={TeamApikeyCreateRoleVal}
                         clbPer={member.permission}
                         id={member.tmbId!}
                       />
                       <PermissionCheckBox
-                        isDisabled={member.permission.isOwner || !userInfo?.permission.isOwner}
-                        per={TeamManagePermissionVal}
+                        isDisabled={!userInfo?.permission.isOwner}
+                        role={TeamManageRoleVal}
                         clbPer={member.permission}
                         id={member.tmbId!}
                       />
@@ -323,25 +336,25 @@ function PermissionManage({
                       </Td>
                       <PermissionCheckBox
                         isDisabled={org.permission.isOwner || !userManage}
-                        per={TeamAppCreatePermissionVal}
+                        role={TeamAppCreatePermissionVal}
                         clbPer={org.permission}
                         id={org.orgId!}
                       />
                       <PermissionCheckBox
                         isDisabled={org.permission.isOwner || !userManage}
-                        per={TeamDatasetCreatePermissionVal}
+                        role={TeamDatasetCreatePermissionVal}
                         clbPer={org.permission}
                         id={org.orgId!}
                       />
                       <PermissionCheckBox
                         isDisabled={org.permission.isOwner || !userManage}
-                        per={TeamApikeyCreatePermissionVal}
+                        role={TeamApikeyCreatePermissionVal}
                         clbPer={org.permission}
                         id={org.orgId!}
                       />
                       <PermissionCheckBox
                         isDisabled={org.permission.isOwner || !userInfo?.permission.isOwner}
-                        per={TeamManagePermissionVal}
+                        role={TeamManagePermissionVal}
                         clbPer={org.permission}
                         id={org.orgId!}
                       />
@@ -385,25 +398,25 @@ function PermissionManage({
                       </Td>
                       <PermissionCheckBox
                         isDisabled={group.permission.isOwner || !userManage}
-                        per={TeamAppCreatePermissionVal}
+                        role={TeamAppCreatePermissionVal}
                         clbPer={group.permission}
                         id={group.groupId!}
                       />
                       <PermissionCheckBox
                         isDisabled={group.permission.isOwner || !userManage}
-                        per={TeamDatasetCreatePermissionVal}
+                        role={TeamDatasetCreatePermissionVal}
                         clbPer={group.permission}
                         id={group.groupId!}
                       />
                       <PermissionCheckBox
                         isDisabled={group.permission.isOwner || !userManage}
-                        per={TeamApikeyCreatePermissionVal}
+                        role={TeamApikeyCreatePermissionVal}
                         clbPer={group.permission}
                         id={group.groupId!}
                       />
                       <PermissionCheckBox
                         isDisabled={group.permission.isOwner || !userInfo?.permission.isOwner}
-                        per={TeamManagePermissionVal}
+                        role={TeamManagePermissionVal}
                         clbPer={group.permission}
                         id={group.groupId!}
                       />
@@ -433,15 +446,18 @@ export const Render = ({ Tabs }: { Tabs: React.ReactNode }) => {
 
   return userInfo?.team ? (
     <CollaboratorContextProvider
+      defaultRole={ReadRoleVal}
       permission={userInfo?.team.permission}
-      permissionList={TeamPermissionList}
+      roleList={TeamRoleList}
       onGetCollaboratorList={getTeamClbs}
       onUpdateCollaborators={updateMemberPermission}
       onDelOneCollaborator={deleteMemberPermission}
       refreshDeps={[userInfo?.team.teamId]}
       addPermissionOnly={true}
     >
-      {({ onOpenAddMember }) => <PermissionManage Tabs={Tabs} onOpenAddMember={onOpenAddMember} />}
+      {({ onOpenManageModal }) => (
+        <PermissionManage Tabs={Tabs} onOpenAddMember={onOpenManageModal} />
+      )}
     </CollaboratorContextProvider>
   ) : null;
 };

@@ -8,16 +8,16 @@ import {
 import { MongoTeamMember } from './teamMemberSchema';
 import { MongoTeam } from './teamSchema';
 import { type UpdateTeamProps } from '@fastgpt/global/support/user/team/controller';
-import { getResourcePermission } from '../../permission/controller';
+import { getTmbPermission } from '../../permission/controller';
 import { PerResourceTypeEnum } from '@fastgpt/global/support/permission/constant';
 import { TeamPermission } from '@fastgpt/global/support/permission/user/controller';
-import { TeamDefaultPermissionVal } from '@fastgpt/global/support/permission/user/constant';
+import { TeamDefaultRoleVal } from '@fastgpt/global/support/permission/user/constant';
 import { MongoMemberGroupModel } from '../../permission/memberGroup/memberGroupSchema';
 import { mongoSessionRun } from '../../../common/mongo/sessionRun';
 import { DefaultGroupName } from '@fastgpt/global/support/user/team/group/constant';
 import { getAIApi } from '../../../core/ai/config';
 import { createRootOrg } from '../../permission/org/controllers';
-import { refreshSourceAvatar } from '../../../common/file/image/controller';
+import { getS3AvatarSource } from '../../../common/s3/sources/avatar';
 
 async function getTeamMember(match: Record<string, any>): Promise<TeamTmbItemType> {
   const tmb = await MongoTeamMember.findOne(match).populate<{ team: TeamSchema }>('team').lean();
@@ -25,11 +25,12 @@ async function getTeamMember(match: Record<string, any>): Promise<TeamTmbItemTyp
     return Promise.reject('member not exist');
   }
 
-  const Per = await getResourcePermission({
-    resourceType: PerResourceTypeEnum.team,
-    teamId: tmb.teamId,
-    tmbId: tmb._id
-  });
+  const role =
+    (await getTmbPermission({
+      resourceType: PerResourceTypeEnum.team,
+      teamId: tmb.teamId,
+      tmbId: tmb._id
+    })) ?? TeamDefaultRoleVal;
 
   return {
     userId: String(tmb.userId),
@@ -44,14 +45,15 @@ async function getTeamMember(match: Record<string, any>): Promise<TeamTmbItemTyp
     role: tmb.role,
     status: tmb.status,
     permission: new TeamPermission({
-      per: Per ?? TeamDefaultPermissionVal,
+      role,
       isOwner: tmb.role === TeamMemberRoleEnum.owner
     }),
     notificationAccount: tmb.team.notificationAccount,
 
     lafAccount: tmb.team.lafAccount,
     openaiAccount: tmb.team.openaiAccount,
-    externalWorkflowVariables: tmb.team.externalWorkflowVariables
+    externalWorkflowVariables: tmb.team.externalWorkflowVariables,
+    isWecomTeam: !!tmb.team.meta?.wecom
   };
 }
 
@@ -243,7 +245,7 @@ export async function updateTeam({
         { session }
       );
 
-      await refreshSourceAvatar(avatar, team?.avatar, session);
+      await getS3AvatarSource().refreshAvatar(avatar, team?.avatar, session);
     }
   });
 }

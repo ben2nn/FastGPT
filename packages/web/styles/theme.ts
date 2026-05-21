@@ -80,6 +80,24 @@ const Button = defineStyleConfig({
       w: '30px',
       borderRadius: 'sm'
     },
+    base: {
+      fontSize: 'sm',
+      px: '4',
+      py: 0,
+      h: '34px',
+      minH: '34px',
+      fontWeight: 'medium',
+      borderRadius: 'sm'
+    },
+    baseSquare: {
+      fontSize: 'sm',
+      px: '0',
+      py: 0,
+      h: '34px',
+      w: '34px',
+      fontWeight: 'medium',
+      borderRadius: 'sm'
+    },
     md: {
       fontSize: 'sm',
       px: '4',
@@ -306,12 +324,17 @@ const Button = defineStyleConfig({
     }
   },
   defaultProps: {
-    size: 'md',
+    size: 'base',
     variant: 'primary'
   }
 });
 
 const Input: ComponentStyleConfig = {
+  baseStyle: {
+    field: {
+      color: 'myGray.700'
+    }
+  },
   sizes: {
     sm: defineStyle({
       field: {
@@ -382,14 +405,31 @@ const NumberInput = numInputMultiStyle({
         bg: 'myGray.50',
         border: '1px solid',
         borderColor: 'myGray.200',
+        borderRadius: 'sm',
+        transition: 'border-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out',
+        _hover: {
+          borderColor: 'primary.300'
+        },
         _focus: {
-          borderColor: 'primary.500 !important',
+          borderColor: 'primary.600 !important',
           boxShadow: `${shadowLight} !important`,
           bg: 'white'
         },
         _disabled: {
           color: 'myGray.400 !important',
           bg: 'myWhite.300 !important'
+        },
+        _invalid: {
+          borderColor: 'red.500 !important',
+          borderWidth: '1px !important',
+          boxShadow: 'none !important',
+          _hover: {
+            borderColor: 'red.400 !important'
+          },
+          _focus: {
+            borderColor: 'red.600 !important',
+            boxShadow: '0px 0px 0px 2.4px rgba(244, 69, 46, 0.15) !important'
+          }
         }
       },
       stepper: {
@@ -516,14 +556,58 @@ const Checkbox = checkBoxMultiStyle({
           bg: 'myGray.100',
           borderColor: 'transparent',
           color: 'myGray.400',
-          outline: 'none'
+          outline: 'none',
+          _hover: {
+            bg: 'myGray.100',
+            borderColor: 'transparent'
+          }
         }
       },
       _hover: {
         borderColor: 'primary.400'
+      },
+      _disabled: {
+        _hover: {
+          borderColor: 'inherit'
+        }
       }
     }
-  })
+  }),
+  sizes: {
+    sm: checkBoxPart({
+      control: {
+        width: '16px',
+        height: '16px',
+        borderWidth: '2px'
+      },
+      icon: {
+        fontSize: '10px'
+      }
+    }),
+    md: checkBoxPart({
+      control: {
+        width: '18px',
+        height: '18px',
+        borderWidth: '2px'
+      },
+      icon: {
+        fontSize: '12px'
+      }
+    }),
+    lg: checkBoxPart({
+      control: {
+        width: '20px',
+        height: '20px',
+        borderWidth: '2px'
+      },
+      icon: {
+        fontSize: '14px'
+      }
+    })
+  },
+  defaultProps: {
+    size: 'sm'
+  }
 });
 
 const Modal = modalMultiStyle({
@@ -819,7 +903,7 @@ export const theme = extendTheme({
     xxl: '1.25rem'
   },
   shadows: {
-    1: '0px 1px 2px 0px rgba(19, 51, 107, 0.05), 0px 0px 1px 0px rgba(19, 51, 107, 0.08)',
+    1: '0 1px 2px 0 rgba(19, 51, 107, 0.05), 0 0 1px 0 rgba(19, 51, 107, 0.08)',
     1.5: '0px 1px 2px 0px rgba(19, 51, 107, 0.10), 0px 0px 1px 0px rgba(19, 51, 107, 0.15)',
     2: '0px 4px 4px 0px rgba(19, 51, 107, 0.05), 0px 0px 1px 0px rgba(19, 51, 107, 0.08)',
     3: '0px 4px 10px 0px rgba(19, 51, 107, 0.08), 0px 0px 1px 0px rgba(19, 51, 107, 0.08)',

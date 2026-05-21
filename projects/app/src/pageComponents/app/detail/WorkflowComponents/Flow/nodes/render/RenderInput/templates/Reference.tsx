@@ -2,10 +2,7 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import type { RenderInputProps } from '../type';
 import { Flex, Box, type ButtonProps, Grid } from '@chakra-ui/react';
 import MyIcon from '@fastgpt/web/components/common/Icon';
-import {
-  computedNodeInputReference,
-  filterWorkflowNodeOutputsByType
-} from '@/web/core/workflow/utils';
+import { getNodeAllSource, filterWorkflowNodeOutputsByType } from '@/web/core/workflow/utils';
 import { useTranslation } from 'next-i18next';
 import {
   NodeOutputKeyEnum,
@@ -18,10 +15,17 @@ import type {
 } from '@fastgpt/global/core/workflow/type/io';
 import dynamic from 'next/dynamic';
 import { useContextSelector } from 'use-context-selector';
-import { WorkflowContext } from '@/pageComponents/app/detail/WorkflowComponents/context';
-import { FlowNodeTypeEnum } from '@fastgpt/global/core/workflow/node/constant';
+import {
+  FlowNodeOutputTypeEnum,
+  FlowNodeTypeEnum
+} from '@fastgpt/global/core/workflow/node/constant';
 import { AppContext } from '@/pageComponents/app/detail/context';
-import { WorkflowNodeEdgeContext } from '../../../../../context/workflowInitContext';
+import {
+  WorkflowBufferDataContext,
+  WorkflowNodeDataContext
+} from '../../../../../context/workflowInitContext';
+import { WorkflowActionsContext } from '@/pageComponents/app/detail/WorkflowComponents/context/workflowActionsContext';
+import { useMemoEnhance } from '@fastgpt/web/hooks/useMemoEnhance';
 
 const MultipleRowSelect = dynamic(() =>
   import('@fastgpt/web/components/common/MySelect/MultipleRowSelect').then(
@@ -64,20 +68,19 @@ export const useReference = ({
 }) => {
   const { t } = useTranslation();
   const appDetail = useContextSelector(AppContext, (v) => v.appDetail);
-  const edges = useContextSelector(WorkflowNodeEdgeContext, (v) => v.edges);
-  const nodeList = useContextSelector(WorkflowContext, (v) => v.nodeList);
+  const edges = useContextSelector(WorkflowBufferDataContext, (v) => v.edges);
+  const { getNodeById, systemConfigNode } = useContextSelector(WorkflowBufferDataContext, (v) => v);
 
   // 获取可选的变量列表
-  const referenceList = useMemo(() => {
-    const sourceNodes = computedNodeInputReference({
+  const referenceList = useMemoEnhance(() => {
+    const sourceNodes = getNodeAllSource({
       nodeId,
-      nodes: nodeList,
+      systemConfigNode,
+      getNodeById,
       edges: edges,
       chatConfig: appDetail.chatConfig,
       t
     });
-
-    if (!sourceNodes) return [];
 
     const isArray = valueType?.includes('array');
 
@@ -93,9 +96,12 @@ export const useReference = ({
           ),
           value: node.nodeId,
           children: filterWorkflowNodeOutputsByType(node.outputs, valueType)
-            .filter(
-              (output) => output.id !== NodeOutputKeyEnum.addOutputParam && output.invalid !== true
-            )
+            .filter((output) => {
+              if (output.type === FlowNodeOutputTypeEnum.error) {
+                return node.catchError === true;
+              }
+              return output.id !== NodeOutputKeyEnum.addOutputParam && output.invalid !== true;
+            })
             .map((output) => {
               return {
                 label: t(output.label as any),
@@ -108,7 +114,7 @@ export const useReference = ({
       .filter((item) => item.children.length > 0);
 
     return list;
-  }, [appDetail.chatConfig, edges, nodeId, nodeList, t, valueType]);
+  }, [nodeId, systemConfigNode, getNodeById, edges, appDetail.chatConfig, t, valueType]);
 
   return {
     referenceList
@@ -118,8 +124,8 @@ export const useReference = ({
 const Reference = ({ item, nodeId }: RenderInputProps) => {
   const { t } = useTranslation();
 
-  const nodeList = useContextSelector(WorkflowContext, (v) => v.nodeList);
-  const onChangeNode = useContextSelector(WorkflowContext, (v) => v.onChangeNode);
+  const getNodeById = useContextSelector(WorkflowBufferDataContext, (v) => v.getNodeById);
+  const onChangeNode = useContextSelector(WorkflowActionsContext, (v) => v.onChangeNode);
 
   const isArray = item.valueType?.includes('array') ?? false;
 
@@ -144,10 +150,10 @@ const Reference = ({ item, nodeId }: RenderInputProps) => {
   });
 
   const popDirection = useMemo(() => {
-    const node = nodeList.find((node) => node.nodeId === nodeId);
+    const node = getNodeById(nodeId);
     if (!node) return 'bottom';
     return node.flowNodeType === FlowNodeTypeEnum.loop ? 'top' : 'bottom';
-  }, [nodeId, nodeList]);
+  }, [nodeId, getNodeById]);
 
   return (
     <ReferSelector
@@ -187,6 +193,20 @@ const SingleReferenceSelector = ({
     },
     [list]
   );
+
+  // Adapt array type from old version
+  useEffect(() => {
+    if (
+      Array.isArray(value) &&
+      // @ts-ignore
+      value.length === 1 &&
+      Array.isArray(value[0]) &&
+      value[0].length === 2
+    ) {
+      // @ts-ignore
+      onSelect(value[0]);
+    }
+  }, [value, onSelect]);
 
   const ItemSelector = useMemo(() => {
     const selectorVal = value as ReferenceItemValueType;
@@ -257,6 +277,10 @@ const MultipleReferenceSelector = ({
     });
   }, [getSelectValue, value]);
 
+  const invalidList = useMemo(() => {
+    return formatList.filter((item) => item.nodeName && item.outputName);
+  }, [formatList]);
+
   useEffect(() => {
     // Adapt array type from old version
     if (Array.isArray(value) && typeof value[0] === 'string') {
@@ -265,33 +289,35 @@ const MultipleReferenceSelector = ({
     }
   }, [formatList, onSelect, value]);
 
-  const invalidList = useMemo(() => {
-    return formatList.filter((item) => item.nodeName && item.outputName);
-  }, [formatList]);
-
   const ArraySelector = useMemo(() => {
     return (
       <MultipleRowArraySelect
         label={
           invalidList.length > 0 ? (
-            <Grid py={3} gridTemplateColumns={'1fr 1fr'} gap={2} fontSize={'sm'}>
+            <Grid
+              py={3}
+              gridTemplateColumns={'1fr 1fr'}
+              gap={2}
+              fontSize={'sm'}
+              _hover={{
+                '.delete': {
+                  visibility: 'visible'
+                }
+              }}
+            >
               {invalidList.map(({ nodeName, outputName }, index) => {
                 return (
                   <Flex
-                    alignItems={'center'}
                     key={index}
+                    w={'100%'}
+                    alignItems={'center'}
                     bg={'primary.50'}
                     color={'myGray.900'}
                     py={1}
                     px={1.5}
                     rounded={'sm'}
                   >
-                    <Flex
-                      alignItems={'center'}
-                      flex={'1 0 0'}
-                      maxW={'200px'}
-                      className="textEllipsis"
-                    >
+                    <Flex alignItems={'center'} flex={'1 0 0'} className="textEllipsis">
                       {nodeName}
                       <MyIcon
                         name={'common/rightArrowLight'}
@@ -302,6 +328,8 @@ const MultipleReferenceSelector = ({
                       {outputName}
                     </Flex>
                     <MyIcon
+                      className="delete"
+                      visibility={'hidden'}
                       name={'common/closeLight'}
                       w={'1rem'}
                       ml={1}
@@ -327,7 +355,9 @@ const MultipleReferenceSelector = ({
         }
         value={value as any}
         list={list}
-        onSelect={onSelect as any}
+        onSelect={(e) => {
+          onSelect(e as any);
+        }}
         popDirection={popDirection}
       />
     );

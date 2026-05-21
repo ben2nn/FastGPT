@@ -18,6 +18,9 @@ export enum SseResponseEventEnum {
 }
 
 export enum DispatchNodeResponseKeyEnum {
+  answerText = 'answerText', // answer text
+  reasoningText = 'reasoningText', // reasoning text
+
   skipHandleId = 'skipHandleId', // skip handle id
   nodeResponse = 'responseData', // run node response
   nodeDispatchUsages = 'nodeDispatchUsages', // the node bill.
@@ -28,7 +31,8 @@ export enum DispatchNodeResponseKeyEnum {
   interactive = 'INTERACTIVE', // is interactive
   runTimes = 'runTimes', // run times
   newVariables = 'newVariables', // new variables
-  memories = 'system_memories' // memories
+  memories = 'system_memories', // memories
+  customFeedbacks = 'customFeedbacks' // custom feedbacks
 }
 
 export const needReplaceReferenceInputTypeList = [

@@ -7,6 +7,7 @@
   "avg_ttfb": "平均首字时长 (秒)",
   "azure": "微软 Azure",
   "base_url": "代理地址",
+  "batch_size": "并发请求数",
   "channel_name": "渠道名",
   "channel_priority": "优先级",
   "channel_priority_tip": "优先级越高的渠道，越容易被请求到",
@@ -62,6 +63,7 @@
   "model_request_times": "请求次数",
   "model_test": "模型测试",
   "model_tokens": "输入/输出 Tokens",
+  "model_ttfb_time": "首字响应时长",
   "monitoring": "监控",
   "output": "输出",
   "request_at": "请求时间",
@@ -81,10 +83,12 @@
   "timespan_label": "时间颗粒度",
   "timespan_minute": "分钟",
   "total_call_volume": "调用总量",
+  "use_in_eval": "用于应用评测",
   "view_chart": "图表",
   "view_table": "表格",
   "vlm_model": "图片理解模型",
   "vlm_model_tip": "用于知识库中对文档中的图片进行额外的索引生成",
   "volunme_of_failed_calls": "调用失败量",
-  "waiting_test": "等待测试"
+  "waiting_test": "等待测试",
+  "model_permission_config_hint": "若无协作者，默认全部成员可用"
 }

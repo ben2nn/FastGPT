@@ -18,10 +18,20 @@ type Props = Omit<NumberInputProps, 'onChange' | 'onBlur'> & {
   register?: UseFormRegister<any>;
   name?: string;
   inputFieldProps?: NumberInputFieldProps;
+  hideStepper?: boolean;
 };
 
 const MyNumberInput = (props: Props) => {
-  const { register, name, onChange, onBlur, placeholder, inputFieldProps, ...restProps } = props;
+  const {
+    register,
+    name,
+    onChange,
+    onBlur,
+    placeholder,
+    inputFieldProps,
+    hideStepper = false,
+    ...restProps
+  } = props;
 
   return (
     <NumberInput
@@ -55,7 +65,7 @@ const MyNumberInput = (props: Props) => {
         }
       }}
       onChange={(e) => {
-        const numE = e === '' ? '' : e.endsWith('.') ? e : Number(e);
+        const numE = e === '' ? '' : e.endsWith('.') || /^\d+\.0+$/.test(e) ? e : Number(e);
         if (onChange) {
           if (numE === '') {
             // @ts-ignore
@@ -91,14 +101,16 @@ const MyNumberInput = (props: Props) => {
           : {})}
         {...inputFieldProps}
       />
-      <NumberInputStepper>
-        <NumberIncrementStepper>
-          <MyIcon name={'core/chat/chevronUp'} width={'12px'} />
-        </NumberIncrementStepper>
-        <NumberDecrementStepper>
-          <MyIcon name={'core/chat/chevronDown'} width={'12px'} />
-        </NumberDecrementStepper>
-      </NumberInputStepper>
+      {!hideStepper && (
+        <NumberInputStepper>
+          <NumberIncrementStepper>
+            <MyIcon name={'core/chat/chevronUp'} width={'12px'} />
+          </NumberIncrementStepper>
+          <NumberDecrementStepper>
+            <MyIcon name={'core/chat/chevronDown'} width={'12px'} />
+          </NumberDecrementStepper>
+        </NumberInputStepper>
+      )}
     </NumberInput>
   );
 };

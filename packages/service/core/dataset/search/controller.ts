@@ -7,6 +7,10 @@ import { recallFromVectorStore } from '../../../common/vectorDB/controller';
 import { getVectorsByText } from '../../ai/embedding';
 import { getEmbeddingModel, getDefaultRerankModel, getLLMModel } from '../../ai/model';
 import { MongoDatasetData } from '../data/schema';
+import type {
+  DatasetCollectionSchemaType,
+  DatasetDataSchemaType
+} from '@fastgpt/global/core/dataset/type';
 import {
   type DatasetDataTextSchemaType,
   type SearchDataResponseItemType
@@ -27,12 +31,16 @@ import { type ChatItemType } from '@fastgpt/global/core/chat/type';
 import type { NodeInputKeyEnum } from '@fastgpt/global/core/workflow/constants';
 import { datasetSearchQueryExtension } from './utils';
 import type { RerankModelItemType } from '@fastgpt/global/core/ai/model.d';
-import { addLog } from '../../../common/system/log';
 import { formatDatasetDataValue } from '../data/controller';
+import { pushTrack } from '../../../common/middle/tracks/utils';
+import { replaceS3KeyToPreviewUrl } from '../../../core/dataset/utils';
+import { addDays, addHours } from 'date-fns';
 
 export type SearchDatasetDataProps = {
   histories: ChatItemType[];
   teamId: string;
+  uid?: string;
+  tmbId?: string;
   model: string;
   datasetIds: string[];
   reRankQuery: string;
@@ -47,7 +55,7 @@ export type SearchDatasetDataProps = {
   [NodeInputKeyEnum.datasetSearchRerankModel]?: RerankModelItemType;
   [NodeInputKeyEnum.datasetSearchRerankWeight]?: number;
 
-  /* 
+  /*
     {
       tags: {
         $and: ["str1","str2"],
@@ -73,9 +81,11 @@ export type SearchDatasetDataResponse = {
   usingSimilarityFilter: boolean;
 
   queryExtensionResult?: {
-    model: string;
+    llmModel: string;
+    embeddingModel: string;
     inputTokens: number;
     outputTokens: number;
+    embeddingTokens: number;
     query: string;
   };
   deepSearchResult?: { model: string; inputTokens: number; outputTokens: number };
@@ -224,7 +234,7 @@ export async function searchDatasetData(
     };
   };
 
-  /* 
+  /*
     Collection metadata filter
     标签过滤：
     1. and 先生效
@@ -435,255 +445,318 @@ export async function searchDatasetData(
     } catch (error) {}
   };
   const embeddingRecall = async ({
-    query,
+    queries,
     limit,
     forbidCollectionIdList,
     filterCollectionIdList
   }: {
-    query: string;
+    queries: string[];
     limit: number;
     forbidCollectionIdList: string[];
     filterCollectionIdList?: string[];
-  }) => {
+  }): Promise<{
+    embeddingRecallResults: SearchDataResponseItemType[][];
+    tokens: number;
+  }> => {
+    if (limit === 0) {
+      return {
+        embeddingRecallResults: [],
+        tokens: 0
+      };
+    }
+
     const { vectors, tokens } = await getVectorsByText({
       model: getEmbeddingModel(model),
-      input: query,
+      input: queries,
       type: 'query'
     });
 
-    const { results } = await recallFromVectorStore({
-      teamId,
-      datasetIds,
-      vector: vectors[0],
-      limit,
-      forbidCollectionIdList,
-      filterCollectionIdList
-    });
+    const recallResults = await Promise.all(
+      vectors.map(async (vector) => {
+        return await recallFromVectorStore({
+          teamId,
+          datasetIds,
+          vector,
+          limit,
+          forbidCollectionIdList,
+          filterCollectionIdList
+        });
+      })
+    );
 
     // Get data and collections
-    const collectionIdList = Array.from(new Set(results.map((item) => item.collectionId)));
-    const [dataList, collections] = await Promise.all([
+    const collectionIdList = Array.from(
+      new Set(recallResults.map((item) => item.results.map((item) => item.collectionId)).flat())
+    );
+    const indexDataIds = Array.from(
+      new Set(recallResults.map((item) => item.results.map((item) => item.id?.trim())).flat())
+    );
+
+    const [dataMaps, collectionMaps] = await Promise.all([
       MongoDatasetData.find(
         {
           teamId,
           datasetId: { $in: datasetIds },
           collectionId: { $in: collectionIdList },
-          'indexes.dataId': { $in: results.map((item) => item.id?.trim()) }
+          'indexes.dataId': { $in: indexDataIds }
         },
         datasetDataSelectField,
         { ...readFromSecondary }
-      ).lean(),
+      )
+        .lean()
+        .then((res) => {
+          const map = new Map<string, DatasetDataSchemaType>();
+
+          res.forEach((item) => {
+            item.indexes.forEach((index) => {
+              map.set(String(index.dataId), item);
+            });
+          });
+
+          return map;
+        }),
       MongoDatasetCollection.find(
         {
           _id: { $in: collectionIdList }
         },
         datsaetCollectionSelectField,
         { ...readFromSecondary }
-      ).lean()
+      )
+        .lean()
+        .then((res) => {
+          const map = new Map<string, DatasetCollectionSchemaType>();
+
+          res.forEach((item) => {
+            map.set(String(item._id), item);
+          });
+
+          return map;
+        })
     ]);
 
-    const set = new Set<string>();
-    const formatResult = results
-      .map((item, index) => {
-        const collection = collections.find((col) => String(col._id) === String(item.collectionId));
-        if (!collection) {
-          console.log('Collection is not found', item);
-          return;
-        }
-        const data = dataList.find((data) =>
-          data.indexes.some((index) => index.dataId === item.id)
-        );
-        if (!data) {
-          console.log('Data is not found', item);
-          return;
-        }
-
-        const result: SearchDataResponseItemType = {
-          id: String(data._id),
-          updateTime: data.updateTime,
-          ...formatDatasetDataValue({
-            teamId,
-            datasetId: data.datasetId,
-            q: data.q,
-            a: data.a,
-            imageId: data.imageId,
-            imageDescMap: data.imageDescMap
-          }),
-          chunkIndex: data.chunkIndex,
-          datasetId: String(data.datasetId),
-          collectionId: String(data.collectionId),
-          ...getCollectionSourceData(collection),
-          score: [{ type: SearchScoreTypeEnum.embedding, value: item?.score || 0, index }]
-        };
-
-        return result;
-      })
-      .filter((item) => {
-        if (!item) return false;
-        if (set.has(item.id)) return false;
-        set.add(item.id);
-        return true;
-      })
-      .map((item, index) => {
-        if (!item) return;
-        return {
-          ...item,
-          score: item.score.map((item) => ({ ...item, index }))
-        };
-      }) as SearchDataResponseItemType[];
-
-    return {
-      embeddingRecallResults: formatResult,
-      tokens
-    };
-  };
-  const fullTextRecall = async ({
-    query,
-    limit,
-    filterCollectionIdList,
-    forbidCollectionIdList
-  }: {
-    query: string;
-    limit: number;
-    filterCollectionIdList?: string[];
-    forbidCollectionIdList: string[];
-  }): Promise<{
-    fullTextRecallResults: SearchDataResponseItemType[];
-    tokenLen: number;
-  }> => {
-    if (limit === 0) {
-      return {
-        fullTextRecallResults: [],
-        tokenLen: 0
-      };
-    }
-
-    try {
-      const searchResults = (await MongoDatasetDataText.aggregate(
-        [
-          {
-            $match: {
-              teamId: new Types.ObjectId(teamId),
-              $text: { $search: await jiebaSplit({ text: query }) },
-              datasetId: { $in: datasetIds.map((id) => new Types.ObjectId(id)) },
-              ...(filterCollectionIdList
-                ? {
-                    collectionId: {
-                      $in: filterCollectionIdList
-                        .filter((id) => !forbidCollectionIdList.includes(id))
-                        .map((id) => new Types.ObjectId(id))
-                    }
-                  }
-                : forbidCollectionIdList?.length
-                  ? {
-                      collectionId: {
-                        $nin: forbidCollectionIdList.map((id) => new Types.ObjectId(id))
-                      }
-                    }
-                  : {})
-            }
-          },
-          {
-            $sort: {
-              score: { $meta: 'textScore' }
-            }
-          },
-          {
-            $limit: limit
-          },
-          {
-            $project: {
-              _id: 1,
-              collectionId: 1,
-              dataId: 1,
-              score: { $meta: 'textScore' }
-            }
-          }
-        ],
-        {
-          ...readFromSecondary
-        }
-      )) as (DatasetDataTextSchemaType & { score: number })[];
-
-      // Get data and collections
-      const [dataList, collections] = await Promise.all([
-        MongoDatasetData.find(
-          {
-            _id: { $in: searchResults.map((item) => item.dataId) }
-          },
-          datasetDataSelectField,
-          { ...readFromSecondary }
-        ).lean(),
-        MongoDatasetCollection.find(
-          {
-            _id: { $in: searchResults.map((item) => item.collectionId) }
-          },
-          datsaetCollectionSelectField,
-          { ...readFromSecondary }
-        ).lean()
-      ]);
-
-      return {
-        fullTextRecallResults: searchResults
+    const embeddingRecallResults = recallResults.map((item) => {
+      const set = new Set<string>();
+      return (
+        item.results
           .map((item, index) => {
-            const collection = collections.find(
-              (col) => String(col._id) === String(item.collectionId)
-            );
+            const collection = collectionMaps.get(String(item.collectionId));
             if (!collection) {
               console.log('Collection is not found', item);
               return;
             }
-            const data = dataList.find((data) => String(data._id) === String(item.dataId));
+
+            const data = dataMaps.get(String(item.id));
             if (!data) {
               console.log('Data is not found', item);
               return;
             }
 
-            return {
+            const result: SearchDataResponseItemType = {
               id: String(data._id),
-              datasetId: String(data.datasetId),
-              collectionId: String(data.collectionId),
               updateTime: data.updateTime,
               ...formatDatasetDataValue({
-                teamId,
-                datasetId: data.datasetId,
                 q: data.q,
                 a: data.a,
                 imageId: data.imageId,
                 imageDescMap: data.imageDescMap
               }),
               chunkIndex: data.chunkIndex,
-              indexes: data.indexes,
+              datasetId: String(data.datasetId),
+              collectionId: String(data.collectionId),
               ...getCollectionSourceData(collection),
-              score: [
-                {
-                  type: SearchScoreTypeEnum.fullText,
-                  value: item.score || 0,
-                  index
-                }
-              ]
+              score: [{ type: SearchScoreTypeEnum.embedding, value: item?.score || 0, index }]
             };
+
+            return result;
           })
+          // 多个向量对应一个数据，每一路召回，保障数据只有一份，并且取最高排名
           .filter((item) => {
             if (!item) return false;
+            if (set.has(item.id)) return false;
+            set.add(item.id);
             return true;
           })
           .map((item, index) => {
-            if (!item) return;
             return {
-              ...item,
-              score: item.score.map((item) => ({ ...item, index }))
+              ...item!,
+              score: item!.score.map((item) => ({ ...item, index }))
             };
-          }) as SearchDataResponseItemType[],
-        tokenLen: 0
-      };
-    } catch (error) {
-      addLog.error('Full text search error', error);
+          }) as SearchDataResponseItemType[]
+      );
+    });
+
+    return {
+      embeddingRecallResults,
+      tokens
+    };
+  };
+  const fullTextRecall = async ({
+    queries,
+    limit,
+    filterCollectionIdList,
+    forbidCollectionIdList
+  }: {
+    queries: string[];
+    limit: number;
+    filterCollectionIdList?: string[];
+    forbidCollectionIdList: string[];
+  }): Promise<{
+    fullTextRecallResults: SearchDataResponseItemType[][];
+  }> => {
+    if (limit === 0) {
       return {
-        fullTextRecallResults: [],
-        tokenLen: 0
+        fullTextRecallResults: []
       };
     }
+
+    const recallResults = await Promise.all(
+      queries.map(async (query) => {
+        return (await MongoDatasetDataText.aggregate(
+          [
+            {
+              $match: {
+                teamId: new Types.ObjectId(teamId),
+                $text: { $search: await jiebaSplit({ text: query }) },
+                datasetId: { $in: datasetIds.map((id) => new Types.ObjectId(id)) },
+                ...(filterCollectionIdList
+                  ? {
+                      collectionId: {
+                        $in: filterCollectionIdList
+                          .filter((id) => !forbidCollectionIdList.includes(id))
+                          .map((id) => new Types.ObjectId(id))
+                      }
+                    }
+                  : forbidCollectionIdList?.length
+                    ? {
+                        collectionId: {
+                          $nin: forbidCollectionIdList.map((id) => new Types.ObjectId(id))
+                        }
+                      }
+                    : {})
+              }
+            },
+            {
+              $sort: {
+                score: { $meta: 'textScore' }
+              }
+            },
+            {
+              $limit: limit
+            },
+            {
+              $project: {
+                _id: 1,
+                collectionId: 1,
+                dataId: 1,
+                score: { $meta: 'textScore' }
+              }
+            }
+          ],
+          {
+            ...readFromSecondary
+          }
+        )) as (DatasetDataTextSchemaType & { score: number })[];
+      })
+    );
+
+    const dataIds = Array.from(
+      new Set(recallResults.map((item) => item.map((item) => item.dataId)).flat())
+    );
+    const collectionIds = Array.from(
+      new Set(recallResults.map((item) => item.map((item) => item.collectionId)).flat())
+    );
+
+    // Get data and collections
+    const [dataMaps, collectionMaps] = await Promise.all([
+      MongoDatasetData.find(
+        {
+          _id: { $in: dataIds }
+        },
+        datasetDataSelectField,
+        { ...readFromSecondary }
+      )
+        .lean()
+        .then((res) => {
+          const map = new Map<string, DatasetDataSchemaType>();
+
+          res.forEach((item) => {
+            map.set(String(item._id), item);
+          });
+
+          return map;
+        }),
+      MongoDatasetCollection.find(
+        {
+          _id: { $in: collectionIds }
+        },
+        datsaetCollectionSelectField,
+        { ...readFromSecondary }
+      )
+        .lean()
+        .then((res) => {
+          const map = new Map<string, DatasetCollectionSchemaType>();
+
+          res.forEach((item) => {
+            map.set(String(item._id), item);
+          });
+
+          return map;
+        })
+    ]);
+
+    const fullTextRecallResults = recallResults.map((item) => {
+      return item
+        .map((item, index) => {
+          const collection = collectionMaps.get(String(item.collectionId));
+          if (!collection) {
+            console.log('Collection is not found', item);
+            return;
+          }
+
+          const data = dataMaps.get(String(item.dataId));
+          if (!data) {
+            console.log('Data is not found', item);
+            return;
+          }
+
+          return {
+            id: String(data._id),
+            datasetId: String(data.datasetId),
+            collectionId: String(data.collectionId),
+            updateTime: data.updateTime,
+            ...formatDatasetDataValue({
+              q: data.q,
+              a: data.a,
+              imageId: data.imageId,
+              imageDescMap: data.imageDescMap
+            }),
+            chunkIndex: data.chunkIndex,
+            indexes: data.indexes,
+            ...getCollectionSourceData(collection),
+            score: [
+              {
+                type: SearchScoreTypeEnum.fullText,
+                value: item.score || 0,
+                index
+              }
+            ]
+          };
+        })
+        .filter((item) => {
+          if (!item) return false;
+          return true;
+        })
+        .map((item, index) => {
+          return {
+            ...item,
+            score: item!.score.map((item) => ({ ...item, index }))
+          };
+        }) as SearchDataResponseItemType[];
+    });
+
+    return {
+      fullTextRecallResults
+    };
   };
   const multiQueryRecall = async ({
     embeddingLimit,
@@ -692,50 +765,36 @@ export async function searchDatasetData(
     embeddingLimit: number;
     fullTextLimit: number;
   }) => {
-    // multi query recall
-    const embeddingRecallResList: SearchDataResponseItemType[][] = [];
-    const fullTextRecallResList: SearchDataResponseItemType[][] = [];
-    let totalTokens = 0;
-
     const [{ forbidCollectionIdList }, filterCollectionIdList] = await Promise.all([
       getForbidData(),
       filterCollectionByMetadata()
     ]);
 
-    await Promise.all(
-      queries.map(async (query) => {
-        const [{ tokens, embeddingRecallResults }, { fullTextRecallResults }] = await Promise.all([
-          embeddingRecall({
-            query,
-            limit: embeddingLimit,
-            forbidCollectionIdList,
-            filterCollectionIdList
-          }),
-          // FullText tmp
-          fullTextRecall({
-            query,
-            limit: fullTextLimit,
-            filterCollectionIdList,
-            forbidCollectionIdList
-          })
-        ]);
-        totalTokens += tokens;
-
-        embeddingRecallResList.push(embeddingRecallResults);
-        fullTextRecallResList.push(fullTextRecallResults);
+    const [{ tokens, embeddingRecallResults }, { fullTextRecallResults }] = await Promise.all([
+      embeddingRecall({
+        queries,
+        limit: embeddingLimit,
+        forbidCollectionIdList,
+        filterCollectionIdList
+      }),
+      fullTextRecall({
+        queries,
+        limit: fullTextLimit,
+        filterCollectionIdList,
+        forbidCollectionIdList
       })
-    );
+    ]);
 
     // rrf concat
     const rrfEmbRecall = datasetSearchResultConcat(
-      embeddingRecallResList.map((list) => ({ k: 60, list }))
+      embeddingRecallResults.map((list) => ({ weight: 1, list }))
     ).slice(0, embeddingLimit);
     const rrfFTRecall = datasetSearchResultConcat(
-      fullTextRecallResList.map((list) => ({ k: 60, list }))
+      fullTextRecallResults.map((list) => ({ weight: 1, list }))
     ).slice(0, fullTextLimit);
 
     return {
-      tokens: totalTokens,
+      tokens,
       embeddingRecallResults: rrfEmbRecall,
       fullTextRecallResults: rrfFTRecall
     };
@@ -793,25 +852,17 @@ export async function searchDatasetData(
     }
   })();
 
-  // embedding recall and fullText recall rrf concat
-  const baseK = 120;
-  const embK = Math.round(baseK * (1 - embeddingWeight)); // 搜索结果的 k 值
-  const fullTextK = Math.round(baseK * embeddingWeight); // rerank 结果的 k 值
-
   const rrfSearchResult = datasetSearchResultConcat([
-    { k: embK, list: embeddingRecallResults },
-    { k: fullTextK, list: fullTextRecallResults }
+    { weight: embeddingWeight, list: embeddingRecallResults },
+    { weight: 1 - embeddingWeight, list: fullTextRecallResults }
   ]);
   const rrfConcatResults = (() => {
     if (reRankResults.length === 0) return rrfSearchResult;
     if (rerankWeight === 1) return reRankResults;
 
-    const searchK = Math.round(baseK * rerankWeight); // 搜索结果的 k 值
-    const rerankK = Math.round(baseK * (1 - rerankWeight)); // rerank 结果的 k 值
-
     return datasetSearchResultConcat([
-      { k: searchK, list: rrfSearchResult },
-      { k: rerankK, list: reRankResults }
+      { weight: 1 - rerankWeight, list: rrfSearchResult },
+      { weight: rerankWeight, list: reRankResults }
     ]);
   })();
 
@@ -852,8 +903,15 @@ export async function searchDatasetData(
   // token filter
   const filterMaxTokensResult = await filterDatasetDataByMaxTokens(scoreFilter, maxTokens);
 
+  const finalResult = filterMaxTokensResult.map((item) => {
+    item.q = replaceS3KeyToPreviewUrl(item.q, addDays(new Date(), 90));
+    return item;
+  });
+
+  pushTrack.datasetSearch({ datasetIds, teamId });
+
   return {
-    searchRes: filterMaxTokensResult,
+    searchRes: finalResult,
     embeddingTokens,
     reRankInputTokens,
     searchMode,
@@ -878,32 +936,32 @@ export const defaultSearchDatasetData = async ({
   const query = props.queries[0];
   const histories = props.histories;
 
-  const extensionModel = datasetSearchUsingExtensionQuery
-    ? getLLMModel(datasetSearchExtensionModel)
-    : undefined;
-
-  const { concatQueries, extensionQueries, rewriteQuery, aiExtensionResult } =
-    await datasetSearchQueryExtension({
-      query,
-      extensionModel,
-      extensionBg: datasetSearchExtensionBg,
-      histories
-    });
+  const { searchQueries, reRankQuery, aiExtensionResult } = await datasetSearchQueryExtension({
+    query,
+    llmModel: datasetSearchUsingExtensionQuery
+      ? getLLMModel(datasetSearchExtensionModel).model
+      : undefined,
+    embeddingModel: props.model,
+    extensionBg: datasetSearchExtensionBg,
+    histories
+  });
 
   const result = await searchDatasetData({
     ...props,
-    reRankQuery: rewriteQuery,
-    queries: concatQueries
+    reRankQuery: reRankQuery,
+    queries: searchQueries
   });
 
   return {
     ...result,
     queryExtensionResult: aiExtensionResult
       ? {
-          model: aiExtensionResult.model,
+          llmModel: aiExtensionResult.llmModel,
           inputTokens: aiExtensionResult.inputTokens,
           outputTokens: aiExtensionResult.outputTokens,
-          query: extensionQueries.join('\n')
+          embeddingModel: aiExtensionResult.embeddingModel,
+          embeddingTokens: aiExtensionResult.embeddingTokens,
+          query: searchQueries.join('\n')
         }
       : undefined
   };

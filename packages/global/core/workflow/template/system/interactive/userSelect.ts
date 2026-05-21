@@ -19,11 +19,13 @@ export const UserSelectNode: FlowNodeTemplateType = {
   showSourceHandle: false,
   showTargetHandle: true,
   avatar: 'core/workflow/template/userSelect',
+  avatarLinear: 'core/workflow/template/userSelectLinear',
+  colorSchema: 'green',
   diagram: '/imgs/app/userSelect.svg',
   name: i18nT('app:workflow.user_select'),
   intro: i18nT(`app:workflow.user_select_tip`),
   isTool: true,
-  courseUrl: '/docs/guide/dashboard/workflow/user-selection/',
+  courseUrl: '/docs/introduction/guide/dashboard/workflow/user-selection/',
   inputs: [
     {
       key: NodeInputKeyEnum.description,

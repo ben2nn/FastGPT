@@ -1,20 +1,21 @@
-import React, { useCallback } from 'react';
-import { Box, Button, Flex, Textarea } from '@chakra-ui/react';
+import React, { useEffect } from 'react';
+import { Box, Flex, FormControl, FormErrorMessage } from '@chakra-ui/react';
 import { Controller, useForm, type UseFormHandleSubmit } from 'react-hook-form';
 import Markdown from '@/components/Markdown';
-import FormLabel from '@fastgpt/web/components/common/MyBox/FormLabel';
 import QuestionTip from '@fastgpt/web/components/common/MyTooltip/QuestionTip';
-import MySelect from '@fastgpt/web/components/common/MySelect';
-import MyTextarea from '@/components/common/Textarea/MyTextarea';
-import MyNumberInput from '@fastgpt/web/components/common/Input/NumberInput';
-import { FlowNodeInputTypeEnum } from '@fastgpt/global/core/workflow/node/constant';
 import {
-  type UserInputFormItemType,
   type UserInputInteractive,
   type UserSelectInteractive,
   type UserSelectOptionItemType
 } from '@fastgpt/global/core/workflow/template/system/interactive/type';
-import MultipleSelect from '@fastgpt/web/components/common/MySelect/MultipleSelect';
+import InputRender from '@/components/core/app/formRender';
+import { nodeInputTypeToInputType } from '@/components/core/app/formRender/utils';
+import FormLabel from '@fastgpt/web/components/common/MyBox/FormLabel';
+import LeftRadio from '@fastgpt/web/components/common/Radio/LeftRadio';
+import { getPresignedChatFileGetUrl } from '@/web/common/file/api';
+import { useContextSelector } from 'use-context-selector';
+import { WorkflowRuntimeContext } from '@/components/core/chat/ChatContainer/context/workflowRuntimeContext';
+import { useTranslation } from 'next-i18next';
 
 const DescriptionBox = React.memo(function DescriptionBox({
   description
@@ -41,189 +42,163 @@ export const SelectOptionsComponent = React.memo(function SelectOptionsComponent
   return (
     <Box maxW={'100%'}>
       <DescriptionBox description={description} />
-      <Flex flexDirection={'column'} gap={3} w={'250px'}>
-        {userSelectOptions.map((option: UserSelectOptionItemType) => {
-          const selected = option.value === userSelectedVal;
-
-          return (
-            <Button
-              key={option.key}
-              variant={'whitePrimary'}
-              whiteSpace={'pre-wrap'}
-              isDisabled={!!userSelectedVal}
-              {...(selected
-                ? {
-                    _disabled: {
-                      cursor: 'default',
-                      borderColor: 'primary.300',
-                      bg: 'primary.50 !important',
-                      color: 'primary.600'
-                    }
-                  }
-                : {})}
-              onClick={() => onSelect(option.value)}
-            >
-              {option.value}
-            </Button>
-          );
-        })}
-      </Flex>
+      <Box w={'250px'}>
+        <LeftRadio<string>
+          py={3.5}
+          gridGap={3}
+          align={'center'}
+          list={userSelectOptions.map((option: UserSelectOptionItemType) => ({
+            title: (
+              <Box fontSize={'sm'} whiteSpace={'pre-wrap'} wordBreak={'break-word'}>
+                {option.value}
+              </Box>
+            ),
+            value: option.value
+          }))}
+          value={userSelectedVal || ''}
+          defaultBg={'white'}
+          activeBg={'white'}
+          onChange={(val) => onSelect(val)}
+          isDisabled={!!userSelectedVal}
+        />
+      </Box>
     </Box>
   );
 });
 
 export const FormInputComponent = React.memo(function FormInputComponent({
-  interactiveParams,
+  interactiveParams: { description, inputForm, submitted },
   defaultValues = {},
   SubmitButton
 }: {
   interactiveParams: UserInputInteractive['params'];
   defaultValues?: Record<string, any>;
-  SubmitButton: (e: { onSubmit: UseFormHandleSubmit<Record<string, any>> }) => React.JSX.Element;
+  SubmitButton: (e: {
+    onSubmit: UseFormHandleSubmit<Record<string, any>>;
+    isFileUploading: boolean;
+  }) => React.JSX.Element;
 }) {
-  const { description, inputForm, submitted } = interactiveParams;
+  const { t } = useTranslation();
 
-  const { register, setValue, handleSubmit, control } = useForm({
+  const { handleSubmit, control, watch, setValue } = useForm({
     defaultValues
   });
 
-  const FormItemLabel = useCallback(
-    ({
-      label,
-      required,
-      description
-    }: {
-      label: string;
-      required?: boolean;
-      description?: string;
-    }) => {
-      return (
-        <Flex mb={1} alignItems={'center'}>
-          <FormLabel required={required} mb={0} fontWeight="medium" color="gray.700">
-            {label}
-          </FormLabel>
-          {description && <QuestionTip ml={1} label={description} />}
-        </Flex>
-      );
-    },
-    []
-  );
+  const appId = useContextSelector(WorkflowRuntimeContext, (v) => v.appId);
+  const outLinkAuthData = useContextSelector(WorkflowRuntimeContext, (v) => v.outLinkAuthData);
+  const formValues = watch();
 
-  const RenderFormInput = useCallback(
-    ({ input }: { input: UserInputFormItemType }) => {
-      const { type, label, required, maxLength, min, max, defaultValue, list } = input;
+  // 刷新文件 URL（处理 TTL 过期）
+  useEffect(() => {
+    if (!submitted || !inputForm) return;
 
-      switch (type) {
-        case FlowNodeInputTypeEnum.input:
-          return (
-            <MyTextarea
-              isDisabled={submitted}
-              {...register(label, {
-                required: required
-              })}
-              bg={'white'}
-              autoHeight
-              minH={40}
-              maxH={100}
-            />
-          );
-        case FlowNodeInputTypeEnum.textarea:
-          return (
-            <Textarea
-              isDisabled={submitted}
-              bg={'white'}
-              {...register(label, {
-                required: required
-              })}
-              rows={5}
-              maxLength={maxLength || 4000}
-            />
-          );
-        case FlowNodeInputTypeEnum.numberInput:
-          return (
-            <MyNumberInput
-              min={min}
-              max={max}
-              defaultValue={defaultValue}
-              isDisabled={submitted}
-              register={register}
-              name={label}
-              isRequired={required}
-              inputFieldProps={{ bg: 'white' }}
-            />
-          );
-        case FlowNodeInputTypeEnum.select:
-          return (
-            <Controller
-              key={label}
-              control={control}
-              name={label}
-              rules={{ required: required }}
-              render={({ field: { ref, value } }) => {
-                if (!list) return <></>;
-                return (
-                  <MySelect
-                    ref={ref}
-                    width={'100%'}
-                    list={list}
-                    value={value}
-                    isDisabled={submitted}
-                    onChange={(e) => setValue(label, e)}
-                  />
-                );
-              }}
-            />
-          );
-        case FlowNodeInputTypeEnum.multipleSelect:
-          return (
-            <Controller
-              key={label}
-              control={control}
-              name={label}
-              rules={{ required: required }}
-              render={({ field: { ref, value } }) => {
-                if (!list) return <></>;
-                return (
-                  <MultipleSelect<string>
-                    width={'100%'}
-                    bg={'white'}
-                    py={2}
-                    list={list}
-                    value={value}
-                    isDisabled={submitted}
-                    onSelect={(e) => setValue(label, e)}
-                    isSelectAll={value.length === list.length}
-                  />
-                );
-              }}
-            />
-          );
-        default:
-          return null;
+    const refreshFileUrls = async () => {
+      for (const item of inputForm) {
+        if (item.type === 'fileSelect' && defaultValues[item.key]) {
+          const files = defaultValues[item.key];
+          if (Array.isArray(files) && files.length > 0 && files[0]?.key) {
+            try {
+              const refreshedFiles = await Promise.all(
+                files.map(async (file: any) => {
+                  if (file.key) {
+                    try {
+                      const newUrl = await getPresignedChatFileGetUrl({
+                        key: file.key,
+                        appId,
+                        outLinkAuthData
+                      });
+                      return {
+                        ...file,
+                        url: newUrl,
+                        icon: file.type === 'image' ? newUrl : file.icon
+                      };
+                    } catch (e) {}
+                  }
+                  return file;
+                })
+              );
+              setValue(item.key, refreshedFiles);
+            } catch (e) {}
+          }
+        }
       }
-    },
-    [control, register, setValue, submitted]
-  );
+    };
+
+    refreshFileUrls();
+  }, [submitted, inputForm, defaultValues, appId, outLinkAuthData, setValue]);
+
+  const isFileUploading = React.useMemo(() => {
+    return inputForm.some((input) => {
+      if (input.type === 'fileSelect') {
+        const files = formValues[input.key];
+        if (Array.isArray(files)) {
+          return files.some((file: any) => !file.url && !file.error);
+        }
+      }
+      return false;
+    });
+  }, [inputForm, formValues]);
 
   return (
     <Box>
       <DescriptionBox description={description} />
       <Flex flexDirection={'column'} gap={3}>
-        {inputForm.map((input) => (
-          <Box key={input.label}>
-            <FormItemLabel
-              label={input.label}
-              required={input.required}
-              description={input.description}
+        {inputForm.map((input) => {
+          const inputType = nodeInputTypeToInputType([input.type]);
+
+          return (
+            <Controller
+              key={input.key}
+              control={control}
+              name={input.key}
+              rules={{
+                required: input.required,
+                validate: (value) => {
+                  if (input.type === 'password' && input.minLength) {
+                    if (!value || typeof value !== 'object' || !value.value) {
+                      return false;
+                    }
+                    if (value.value.length < input.minLength) {
+                      return t('common:min_length', { minLenth: input.minLength });
+                    }
+                  }
+                  if (input.type === 'fileSelect' && input.required) {
+                    if (!value || !Array.isArray(value) || value.length === 0) {
+                      return t('common:required');
+                    }
+                  }
+                  return true;
+                }
+              }}
+              render={({ field: { onChange, value }, fieldState: { error } }) => {
+                return (
+                  <FormControl isInvalid={!!error}>
+                    <Flex alignItems={'center'} mb={1}>
+                      {input.required && <Box color={'red.500'}>*</Box>}
+                      <FormLabel>{input.label}</FormLabel>
+                      {input.description && <QuestionTip ml={1} label={input.description} />}
+                    </Flex>
+                    <InputRender
+                      {...input}
+                      inputType={inputType}
+                      value={value}
+                      onChange={onChange}
+                      isDisabled={submitted}
+                      isInvalid={!!error}
+                      isRichText={false}
+                    />
+                    {error && <FormErrorMessage>{error.message}</FormErrorMessage>}
+                  </FormControl>
+                );
+              }}
             />
-            <RenderFormInput input={input} />
-          </Box>
-        ))}
+          );
+        })}
       </Flex>
 
       {!submitted && (
         <Flex justifyContent={'flex-end'} mt={4}>
-          <SubmitButton onSubmit={handleSubmit} />
+          <SubmitButton onSubmit={handleSubmit} isFileUploading={isFileUploading} />
         </Flex>
       )}
     </Box>

@@ -45,12 +45,15 @@ export type FastGPTFeConfigsType = {
   show_workorder?: boolean;
   show_emptyChat?: boolean;
   isPlus?: boolean;
+  hideChatCopyrightSetting?: boolean;
   register_method?: ['email' | 'phone' | 'sync'];
-  login_method?: ['email' | 'phone']; // Attention: login method is diffrent with oauth
+  login_method?: ['email' | 'phone']; // Attention: login method is different with oauth
   find_password_method?: ['email' | 'phone'];
   bind_notification_method?: ['email' | 'phone'];
   googleClientVerKey?: string;
   mcpServerProxyEndpoint?: string;
+  chineseRedirectUrl?: string;
+  botIframeUrl?: string;
 
   show_emptyChat?: boolean;
   show_appStore?: boolean;
@@ -62,12 +65,15 @@ export type FastGPTFeConfigsType = {
   show_compliance_copywriting?: boolean;
   show_aiproxy?: boolean;
   show_coupon?: boolean;
+  show_discount_coupon?: boolean;
+  showWecomConfig?: boolean;
   concatMd?: string;
 
   show_dataset_feishu?: boolean;
   show_dataset_yuque?: boolean;
   show_publish_feishu?: boolean;
   show_publish_dingtalk?: boolean;
+  show_publish_wecom?: boolean;
   show_publish_offiaccount?: boolean;
 
   show_dataset_enhance?: boolean;
@@ -76,13 +82,12 @@ export type FastGPTFeConfigsType = {
   concatMd?: string;
   docUrl?: string;
   openAPIDocUrl?: string;
-  systemPluginCourseUrl?: string;
+  submitPluginRequestUrl?: string;
   appTemplateCourse?: string;
   customApiDomain?: string;
   customSharePageDomain?: string;
 
   systemTitle?: string;
-  systemDescription?: string;
   scripts?: { [key: string]: string }[];
   favicon?: string;
 
@@ -101,14 +106,16 @@ export type FastGPTFeConfigsType = {
       tenantId?: string;
       customButton?: string;
     };
+    wecom?: boolean;
   };
   limit?: {
     exportDatasetLimitMinutes?: number;
     websiteSyncLimitMinuted?: number;
   };
 
-  uploadFileMaxAmount?: number;
-  uploadFileMaxSize?: number;
+  uploadFileMaxAmount: number;
+  uploadFileMaxSize: number; // MB
+  evalFileMaxLines?: number;
 
   // Compute by systemEnv.customPdfParse
   showCustomPdfParse?: boolean;
@@ -123,14 +130,28 @@ export type FastGPTFeConfigsType = {
     alipay?: boolean;
     bank?: boolean;
   };
+  payFormUrl?: string;
+  fileUrlWhitelist?: string[];
+  customDomain?: {
+    enable?: boolean;
+    domain?: {
+      aliyun?: string;
+      tencent?: string;
+      volcengine?: string;
+    };
+  };
+
+  ip_whitelist?: string;
 };
 
 export type SystemEnvType = {
   openapiPrefix?: string;
+  tokenWorkers: number; // token count max worker
+
+  datasetParseMaxProcess: number;
   vectorMaxProcess: number;
   qaMaxProcess: number;
   vlmMaxProcess: number;
-  tokenWorkers: number; // token count max worker
 
   hnswEfSearch: number;
   hnswMaxScanTuples: number;
@@ -139,12 +160,39 @@ export type SystemEnvType = {
   chatApiKey?: string;
 
   customPdfParse?: customPdfParseType;
+  fileUrlWhitelist?: string[];
+  customDomain?: customDomainType;
+};
+
+export type customDomainType = {
+  kc?: {
+    aliyun?: string;
+    tencent?: string;
+    volcengine?: string;
+  };
+  domain?: {
+    aliyun?: string;
+    tencent?: string;
+    volcengine?: string;
+  };
+  issuerServiceName?: {
+    aliyun?: string;
+    tencent?: string;
+    volcengine?: string;
+  };
+  nginxServiceName?: {
+    aliyun?: string;
+    tencent?: string;
+    volcengine?: string;
+  };
 };
 
 export type customPdfParseType = {
   url?: string;
   key?: string;
   doc2xKey?: string;
+  textinAppId?: string;
+  textinSecretCode?: string;
   price?: number;
 };
 

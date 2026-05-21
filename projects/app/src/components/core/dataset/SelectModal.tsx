@@ -4,9 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import React, { type Dispatch, useMemo, useState } from 'react';
 import { useTranslation } from 'next-i18next';
 import { Box } from '@chakra-ui/react';
-import ParentPaths from '@/components/common/ParentPaths';
+import FolderPath from '@/components/common/folder/Path';
 import MyBox from '@fastgpt/web/components/common/MyBox';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 
 type PathItemType = {
   parentId: string;
@@ -37,7 +37,7 @@ const DatasetSelectContainer = ({
       iconSrc="/imgs/workflow/db.png"
       title={
         <Box fontWeight={'normal'}>
-          <ParentPaths
+          <FolderPath
             paths={paths.map((path, i) => ({
               parentId: path.parentId,
               parentName: path.parentName
@@ -69,28 +69,45 @@ const DatasetSelectContainer = ({
 };
 
 export function useDatasetSelect() {
-  const [parentId, setParentId] = useState<string>('');
+  const [parentId, setParentId] = useState('');
+  const [searchKey, setSearchKey] = useState('');
 
-  const { data, loading: isFetching } = useRequest2(
-    () =>
-      Promise.all([
-        getDatasets({ parentId }),
-        getDatasetPaths({ sourceId: parentId, type: 'current' })
-      ]),
+  const {
+    data = {
+      datasets: [],
+      paths: []
+    },
+    loading: isFetching,
+    runAsync: loadDatasets
+  } = useRequest(
+    async () => {
+      const result = await Promise.all([
+        getDatasets({ parentId, searchKey }),
+        // Only get paths when not searching
+        searchKey.trim()
+          ? Promise.resolve([])
+          : getDatasetPaths({ sourceId: parentId, type: 'current' })
+      ]);
+      return {
+        datasets: result[0],
+        paths: result[1]
+      };
+    },
     {
       manual: false,
-      refreshDeps: [parentId]
+      refreshDeps: [parentId, searchKey]
     }
   );
-
-  const paths = useMemo(() => [...(data?.[1] || [])], [data]);
 
   return {
     parentId,
     setParentId,
-    datasets: data?.[0] || [],
-    paths,
-    isFetching
+    searchKey,
+    setSearchKey,
+    datasets: data.datasets,
+    paths: data.paths,
+    isFetching,
+    loadDatasets
   };
 }
 

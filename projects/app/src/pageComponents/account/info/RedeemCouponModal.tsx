@@ -1,9 +1,9 @@
 import { redeemCoupon } from '@/web/support/user/team/api';
 import { Button, Input, VStack, Text, ModalBody, Box, ModalFooter } from '@chakra-ui/react';
 import MyModal from '@fastgpt/web/components/common/MyModal';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import React from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'next-i18next';
 
 const RedeemCouponModal = ({
   onClose,
@@ -16,7 +16,7 @@ const RedeemCouponModal = ({
 
   const [couponCode, setCouponCode] = React.useState('');
 
-  const { runAsync: redeemCouponAsync, loading } = useRequest2(redeemCoupon, {
+  const { runAsync: redeemCouponAsync, loading } = useRequest(redeemCoupon, {
     manual: true,
     onSuccess: () => {
       onSuccess();

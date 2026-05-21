@@ -25,48 +25,64 @@ const RouteTab = () => {
 
   const tabList = useMemo(
     () => [
-      {
-        label:
-          appDetail.type === AppTypeEnum.plugin ? t('app:setting_plugin') : t('app:setting_app'),
-        id: TabEnum.appEdit
-      },
+      ...(appDetail.permission.hasWritePer
+        ? [
+            {
+              label:
+                appDetail.type === AppTypeEnum.workflowTool
+                  ? t('app:setting_plugin')
+                  : t('app:setting_app'),
+              value: TabEnum.appEdit
+            }
+          ]
+        : []),
       ...(appDetail.permission.hasManagePer
         ? [
             {
               label: t('app:publish_channel'),
-              id: TabEnum.publish
-            },
-            { label: t('app:chat_logs'), id: TabEnum.logs }
+              value: TabEnum.publish
+            }
           ]
+        : []),
+      ...(appDetail.permission.hasReadChatLogPer
+        ? [{ label: t('app:chat_logs'), value: TabEnum.logs }]
         : [])
     ],
-    [appDetail.permission.hasManagePer, appDetail.type]
+    [
+      appDetail.permission.hasManagePer,
+      appDetail.permission.hasReadChatLogPer,
+      appDetail.permission.hasWritePer,
+      appDetail.type,
+      t
+    ]
   );
 
   return (
-    <HStack spacing={4} whiteSpace={'nowrap'}>
+    <HStack borderRadius={'md'} bg={'rgba(244, 244, 245, 0.63)'} backdropBlur={'blur(5px)'} p={1}>
       {tabList.map((tab) => (
-        <Box
-          key={tab.id}
-          px={2}
-          py={0.5}
+        <HStack
+          key={tab.value}
+          justifyContent={'center'}
+          cursor={'pointer'}
+          w={'196px'}
+          h={8}
+          fontSize={'12px'}
           fontWeight={'medium'}
-          borderRadius={'sm'}
-          {...(currentTab === tab.id
+          userSelect={'none'}
+          {...(currentTab === tab.value
             ? {
-                color: 'primary.700'
+                bg: 'white',
+                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                color: 'black',
+                borderRadius: '2px'
               }
             : {
-                color: 'myGray.600',
-                cursor: 'pointer',
-                _hover: {
-                  bg: 'myGray.200'
-                },
-                onClick: () => setCurrentTab(tab.id)
+                color: 'myGray.500',
+                onClick: () => setCurrentTab(tab.value)
               })}
         >
-          {tab.label}
-        </Box>
+          <Box>{tab.label}</Box>
+        </HStack>
       ))}
     </HStack>
   );

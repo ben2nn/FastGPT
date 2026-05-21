@@ -34,9 +34,10 @@ export type WorkflowTemplateType = {
   parentId?: ParentIdType;
   isFolder?: boolean;
 
-  avatar: string;
+  avatar?: string;
   name: I18nStringType | string;
   intro?: I18nStringType | string;
+  toolDescription?: string;
 
   author?: string;
   courseUrl?: string;
@@ -49,7 +50,7 @@ export type WorkflowTemplateType = {
 // template market
 export type TemplateMarketItemType = WorkflowTemplateType & {
   tags: string[];
-  type: AppTypeEnum.simple | AppTypeEnum.workflow | AppTypeEnum.plugin;
+  type: AppTypeEnum.simple | AppTypeEnum.workflow | AppTypeEnum.workflowTool;
 };
 // template market list
 export type TemplateMarketListItemType = {
@@ -58,6 +59,6 @@ export type TemplateMarketListItemType = {
   intro?: string;
   author?: string;
   tags: string[];
-  type: AppTypeEnum.simple | AppTypeEnum.workflow | AppTypeEnum.plugin;
+  type: AppTypeEnum.simple | AppTypeEnum.workflow | AppTypeEnum.workflowTool;
   avatar: string;
 };

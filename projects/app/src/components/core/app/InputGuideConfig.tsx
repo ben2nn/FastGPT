@@ -32,7 +32,7 @@ import EmptyTip from '@fastgpt/web/components/common/EmptyTip';
 import { useToast } from '@fastgpt/web/hooks/useToast';
 import { useSelectFile } from '@/web/common/file/hooks/useSelectFile';
 import { readCsvRawText } from '@fastgpt/web/common/file/utils';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import HighlightText from '@fastgpt/web/components/common/String/HighlightText';
 import { defaultChatInputGuideConfig } from '@fastgpt/global/core/app/constants';
 import ChatFunctionTip from './Tip';
@@ -144,7 +144,9 @@ const InputGuideConfig = ({
                 <Flex mt={8} alignItems={'center'}>
                   <FormLabel>{t('chat:custom_input_guide_url')}</FormLabel>
                   <Flex
-                    onClick={() => window.open(getDocPath('/docs/guide/course/chat_input_guide/'))}
+                    onClick={() =>
+                      window.open(getDocPath('/docs/introduction/guide/course/chat_input_guide/'))
+                    }
                     color={'primary.700'}
                     alignItems={'center'}
                     cursor={'pointer'}
@@ -212,7 +214,7 @@ const LexiconConfigModal = ({ appId, onClose }: { appId: string; onClose: () => 
     }
   });
 
-  const { run: createNewData, loading: isCreating } = useRequest2(
+  const { run: createNewData, loading: isCreating } = useRequest(
     async (textList: string[]) => {
       if (textList.filter(Boolean).length === 0) {
         return Promise.resolve();
@@ -233,7 +235,7 @@ const LexiconConfigModal = ({ appId, onClose }: { appId: string; onClose: () => 
             title: t('common:add_success')
           });
         }
-        fetchData(1);
+        fetchData({ init: true });
       });
     },
     {

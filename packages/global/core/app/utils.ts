@@ -1,6 +1,6 @@
 import type { AppChatConfigType, AppSimpleEditFormType } from '../app/type';
 import { FlowNodeTypeEnum } from '../workflow/node/constant';
-import { NodeInputKeyEnum, FlowNodeTemplateTypeEnum } from '../workflow/constants';
+import { FlowNodeTemplateTypeEnum, NodeInputKeyEnum } from '../workflow/constants';
 import type { FlowNodeInputItemType } from '../workflow/type/io.d';
 import { getAppChatConfig } from '../workflow/utils';
 import { type StoreNodeItemType } from '../workflow/type/node';
@@ -13,7 +13,7 @@ import pluginErrList from '../../common/error/code/plugin';
 export const getDefaultAppForm = (): AppSimpleEditFormType => {
   return {
     aiSettings: {
-      model: 'gpt-4o-mini',
+      model: '',
       systemPrompt: '',
       temperature: 0,
       isResponseAnswerText: true,
@@ -158,7 +158,8 @@ export const appWorkflow2Form = ({
         inputs: node.inputs,
         outputs: node.outputs,
         templateType: FlowNodeTemplateTypeEnum.other,
-        pluginData: node.pluginData
+        pluginData: node.pluginData,
+        toolConfig: node.toolConfig
       });
     } else if (node.flowNodeType === FlowNodeTypeEnum.systemConfig) {
       defaultAppForm.chatConfig = getAppChatConfig({
@@ -184,7 +185,7 @@ export const getAppType = (config?: WorkflowTemplateBasicType | AppSimpleEditFor
     return AppTypeEnum.workflow;
   }
   if (config.nodes.some((node) => node.flowNodeType === 'pluginInput')) {
-    return AppTypeEnum.plugin;
+    return AppTypeEnum.workflowTool;
   }
   return '';
 };

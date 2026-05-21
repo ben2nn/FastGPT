@@ -1,7 +1,6 @@
 import {
-  DatasetCollectionTypeEnum,
   DatasetCollectionDataProcessModeEnum,
-  DatasetTypeEnum
+  DatasetCollectionTypeEnum
 } from '@fastgpt/global/core/dataset/constants';
 import type { CreateDatasetCollectionParams } from '@fastgpt/global/core/dataset/api.d';
 import { MongoDatasetCollection } from './schema';
@@ -13,8 +12,6 @@ import { MongoDatasetTraining } from '../training/schema';
 import { MongoDatasetData } from '../data/schema';
 import { delImgByRelatedId } from '../../../common/file/image/controller';
 import { deleteDatasetDataVector } from '../../../common/vectorDB/controller';
-import { delFileByFileIdList } from '../../../common/file/gridfs/controller';
-import { BucketNameEnum } from '@fastgpt/global/common/file/constants';
 import type { ClientSession } from '../../../common/mongo';
 import { createOrGetCollectionTags } from './utils';
 import { rawText2Chunks } from '../read';
@@ -25,9 +22,7 @@ import { createTrainingUsage } from '../../../support/wallet/usage/controller';
 import { UsageSourceEnum } from '@fastgpt/global/support/wallet/usage/constants';
 import { getLLMModel, getEmbeddingModel, getVlmModel } from '../../ai/model';
 import { pushDataListToTrainingQueue, pushDatasetToParseQueue } from '../training/controller';
-import { MongoImage } from '../../../common/file/image/schema';
 import { hashStr } from '@fastgpt/global/common/string/tools';
-import { addDays } from 'date-fns';
 import { MongoDatasetDataText } from '../data/dataTextSchema';
 import { retryFn } from '@fastgpt/global/common/system/utils';
 import { getTrainingModeByCollection } from './utils';
@@ -36,7 +31,8 @@ import {
   getLLMMaxChunkSize
 } from '@fastgpt/global/core/dataset/training/utils';
 import { DatasetDataIndexTypeEnum } from '@fastgpt/global/core/dataset/data/constants';
-import { clearCollectionImages, removeDatasetImageExpiredTime } from '../image/utils';
+import { getS3DatasetSource } from '../../../common/s3/sources/dataset';
+import { removeS3TTL, isS3ObjectKey } from '../../../common/s3/utils';
 
 export const createCollectionAndInsertData = async ({
   dataset,
@@ -180,25 +176,13 @@ export const createCollectionAndInsertData = async ({
 
       hashRawText: rawText ? hashStr(rawText) : undefined,
       rawTextLength: rawText?.length,
-      nextSyncTime: (() => {
-        // ignore auto collections sync for website datasets
-        if (!dataset.autoSync && dataset.type === DatasetTypeEnum.websiteDataset) return undefined;
-        if (
-          [DatasetCollectionTypeEnum.link, DatasetCollectionTypeEnum.apiFile].includes(
-            formatCreateCollectionParams.type
-          )
-        ) {
-          return addDays(new Date(), 1);
-        }
-        return undefined;
-      })(),
       session
     });
 
     // 4. create training bill
-    const traingBillId = await (async () => {
+    const traingUsageId = await (async () => {
       if (billId) return billId;
-      const { billId: newBillId } = await createTrainingUsage({
+      const { usageId: newUsageId } = await createTrainingUsage({
         teamId,
         tmbId,
         appName: formatCreateCollectionParams.name,
@@ -208,7 +192,7 @@ export const createCollectionAndInsertData = async ({
         vllmModel: getVlmModel(dataset.vlmModel)?.name,
         session
       });
-      return newBillId;
+      return newUsageId;
     })();
 
     // 5. insert to training queue
@@ -224,7 +208,7 @@ export const createCollectionAndInsertData = async ({
           vlmModel: dataset.vlmModel,
           indexSize,
           mode: trainingMode,
-          billId: traingBillId,
+          billId: traingUsageId,
           data: chunks.map((item, index) => ({
             ...item,
             indexes: item.indexes?.map((text) => ({
@@ -241,7 +225,7 @@ export const createCollectionAndInsertData = async ({
           tmbId,
           datasetId: dataset._id,
           collectionId,
-          billId: traingBillId,
+          billId: traingUsageId,
           session
         });
         return {
@@ -249,13 +233,6 @@ export const createCollectionAndInsertData = async ({
         };
       }
     })();
-
-    // 6. Remove images ttl index
-    await removeDatasetImageExpiredTime({
-      ids: imageIds,
-      collectionId,
-      session
-    });
 
     return {
       collectionId: String(collectionId),
@@ -285,7 +262,8 @@ export async function createOneCollection({ session, ...props }: CreateOneCollec
     rawLink,
     externalFileId,
     externalFileUrl,
-    apiFileId
+    apiFileId,
+    apiFileParentId
   } = props;
 
   const collectionTags = await createOrGetCollectionTags({
@@ -310,11 +288,16 @@ export async function createOneCollection({ session, ...props }: CreateOneCollec
         ...(rawLink ? { rawLink } : {}),
         ...(externalFileId ? { externalFileId } : {}),
         ...(externalFileUrl ? { externalFileUrl } : {}),
-        ...(apiFileId ? { apiFileId } : {})
+        ...(apiFileId ? { apiFileId } : {}),
+        ...(apiFileParentId ? { apiFileParentId } : {})
       }
     ],
     { session, ordered: true }
   );
+
+  if (isS3ObjectKey(fileId, 'dataset')) {
+    await removeS3TTL({ key: fileId, bucketName: 'private', session });
+  }
 
   return collection;
 }
@@ -339,18 +322,13 @@ export const delCollectionRelatedSource = async ({
 
   if (!teamId) return Promise.reject('teamId is not exist');
 
-  const fileIdList = collections.map((item) => item?.fileId || '').filter(Boolean);
+  // FIXME: 兼容旧解析图像删除
   const relatedImageIds = collections
     .map((item) => item?.metadata?.relatedImgId || '')
     .filter(Boolean);
 
   // Delete files and images in parallel
   await Promise.all([
-    // Delete files
-    delFileByFileIdList({
-      bucketName: BucketNameEnum.dataset,
-      fileIdList
-    }),
     // Delete images
     delImgByRelatedId({
       teamId,
@@ -379,8 +357,24 @@ export async function delCollection({
 
   if (!teamId) return Promise.reject('teamId is not exist');
 
+  const s3DatasetSource = getS3DatasetSource();
   const datasetIds = Array.from(new Set(collections.map((item) => String(item.datasetId))));
   const collectionIds = collections.map((item) => String(item._id));
+
+  const imageCollectionIds = collections
+    .filter((item) => item.type === DatasetCollectionTypeEnum.images)
+    .map((item) => String(item._id));
+  const imageDatas = await MongoDatasetData.find(
+    {
+      teamId,
+      datasetId: { $in: datasetIds },
+      collectionId: { $in: imageCollectionIds }
+    },
+    { imageId: 1 }
+  ).lean();
+  const imageIds = imageDatas
+    .map((item) => item.imageId)
+    .filter((key) => isS3ObjectKey(key, 'dataset'));
 
   await retryFn(async () => {
     await Promise.all([
@@ -402,10 +396,8 @@ export async function delCollection({
         datasetId: { $in: datasetIds },
         collectionId: { $in: collectionIds }
       }),
-      // Delete dataset_images
-      clearCollectionImages(collectionIds),
       // Delete images if needed
-      ...(delImg
+      ...(delImg // 兼容旧图像删除
         ? [
             delImgByRelatedId({
               teamId,
@@ -418,10 +410,9 @@ export async function delCollection({
       // Delete files if needed
       ...(delFile
         ? [
-            delFileByFileIdList({
-              bucketName: BucketNameEnum.dataset,
-              fileIdList: collections.map((item) => item?.fileId || '').filter(Boolean)
-            })
+            getS3DatasetSource().deleteDatasetFilesByKeys(
+              collections.map((item) => item?.fileId || '').filter(Boolean)
+            )
           ]
         : []),
       // Delete vector data
@@ -435,6 +426,9 @@ export async function delCollection({
         _id: { $in: collectionIds }
       },
       { session }
-    );
+    ).lean();
+
+    // delete s3 images which are uploaded by users
+    await s3DatasetSource.deleteDatasetFilesByKeys(imageIds);
   });
 }

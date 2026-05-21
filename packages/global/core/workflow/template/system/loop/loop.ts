@@ -25,10 +25,12 @@ export const LoopNode: FlowNodeTemplateType = {
   showSourceHandle: true,
   showTargetHandle: true,
   avatar: 'core/workflow/template/loop',
+  avatarLinear: 'core/workflow/template/loopLinear',
+  colorSchema: 'violetDeep',
   name: i18nT('workflow:loop'),
   intro: i18nT('workflow:intro_loop'),
   showStatus: true,
-  courseUrl: '/docs/guide/dashboard/workflow/loop/',
+  courseUrl: '/docs/introduction/guide/dashboard/workflow/loop/',
   inputs: [
     {
       key: NodeInputKeyEnum.loopInputArray,

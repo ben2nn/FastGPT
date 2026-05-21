@@ -2,6 +2,11 @@ import { isProduction } from '@fastgpt/global/common/system/constants';
 import fs from 'fs';
 import path from 'path';
 
+export const getFileMaxSize = () => {
+  const mb = global.feConfigs.uploadFileMaxSize || 1000;
+  return mb * 1024 * 1024;
+};
+
 export const removeFilesByPaths = (paths: string[]) => {
   paths.forEach((path) => {
     fs.unlink(path, (err) => {
@@ -12,37 +17,8 @@ export const removeFilesByPaths = (paths: string[]) => {
   });
 };
 
-export const guessBase64ImageType = (str: string) => {
-  const imageTypeMap: Record<string, string> = {
-    '/': 'image/jpeg',
-    i: 'image/png',
-    R: 'image/gif',
-    U: 'image/webp',
-    Q: 'image/bmp',
-    P: 'image/svg+xml',
-    T: 'image/tiff',
-    J: 'image/jp2',
-    S: 'image/x-tga',
-    I: 'image/ief',
-    V: 'image/vnd.microsoft.icon',
-    W: 'image/vnd.wap.wbmp',
-    X: 'image/x-xbitmap',
-    Z: 'image/x-xpixmap',
-    Y: 'image/x-xwindowdump'
-  };
-
-  const defaultType = 'image/jpeg';
-  if (typeof str !== 'string' || str.length === 0) {
-    return defaultType;
-  }
-
-  const firstChar = str.charAt(0);
-  return imageTypeMap[firstChar] || defaultType;
-};
-
-export const getFileContentTypeFromHeader = (header: string): string | undefined => {
-  const contentType = header.split(';')[0];
-  return contentType;
+export const getContentTypeFromHeader = (header: string): string | undefined => {
+  return header?.toLowerCase()?.split(';')?.[0]?.trim();
 };
 
 export const clearDirFiles = (dirPath: string) => {

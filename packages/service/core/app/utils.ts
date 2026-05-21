@@ -3,11 +3,13 @@ import { getEmbeddingModel } from '../ai/model';
 import { FlowNodeTypeEnum } from '@fastgpt/global/core/workflow/node/constant';
 import { NodeInputKeyEnum } from '@fastgpt/global/core/workflow/constants';
 import type { StoreNodeItemType } from '@fastgpt/global/core/workflow/type/node';
-import { getChildAppPreviewNode, splitCombinePluginId } from './plugin/controller';
-import { PluginSourceEnum } from '@fastgpt/global/core/app/plugin/constants';
+import { getChildAppPreviewNode } from './tool/controller';
+import { AppToolSourceEnum } from '@fastgpt/global/core/app/tool/constants';
 import { authAppByTmbId } from '../../support/permission/app/auth';
 import { ReadPermissionVal } from '@fastgpt/global/support/permission/constant';
 import { getErrText } from '@fastgpt/global/common/error/utils';
+import { splitCombineToolId } from '@fastgpt/global/core/app/tool/utils';
+import type { localeType } from '@fastgpt/global/common/i18n/type';
 
 export async function listAppDatasetDataByTeamIdAndDatasetIds({
   teamId,
@@ -33,12 +35,14 @@ export async function rewriteAppWorkflowToDetail({
   nodes,
   teamId,
   isRoot,
-  ownerTmbId
+  ownerTmbId,
+  lang
 }: {
   nodes: StoreNodeItemType[];
   teamId: string;
   isRoot: boolean;
   ownerTmbId: string;
+  lang?: localeType;
 }) {
   const datasetIdSet = new Set<string>();
 
@@ -46,15 +50,16 @@ export async function rewriteAppWorkflowToDetail({
   await Promise.all(
     nodes.map(async (node) => {
       if (!node.pluginId) return;
-      const { source, pluginId } = splitCombinePluginId(node.pluginId);
+      const { source, pluginId } = splitCombineToolId(node.pluginId);
 
       try {
         const [preview] = await Promise.all([
           getChildAppPreviewNode({
-            appId: pluginId,
-            versionId: node.version
+            appId: node.pluginId,
+            versionId: node.version,
+            lang
           }),
-          ...(source === PluginSourceEnum.personal
+          ...(source === AppToolSourceEnum.personal
             ? [
                 authAppByTmbId({
                   tmbId: ownerTmbId,
@@ -66,19 +71,47 @@ export async function rewriteAppWorkflowToDetail({
         ]);
 
         node.pluginData = {
+          name: preview.name,
+          avatar: preview.avatar,
+          status: preview.status,
           diagram: preview.diagram,
           userGuide: preview.userGuide,
-          courseUrl: preview.courseUrl,
-          name: preview.name,
-          avatar: preview.avatar
+          courseUrl: preview.courseUrl
         };
         node.versionLabel = preview.versionLabel;
         node.isLatestVersion = preview.isLatestVersion;
         node.version = preview.version;
 
         node.currentCost = preview.currentCost;
+        node.systemKeyCost = preview.systemKeyCost;
         node.hasTokenFee = preview.hasTokenFee;
         node.hasSystemSecret = preview.hasSystemSecret;
+        node.isFolder = preview.isFolder;
+
+        node.toolConfig = preview.toolConfig;
+        node.toolDescription = preview.toolDescription;
+
+        // Latest version
+        if (!node.version) {
+          const inputsMap = new Map(node.inputs.map((item) => [item.key, item]));
+          const outputsMap = new Map(node.outputs.map((item) => [item.key, item]));
+
+          node.inputs = preview.inputs.map((item) => {
+            const input = inputsMap.get(item.key);
+            return {
+              ...item,
+              value: input?.value,
+              selectedTypeIndex: input?.selectedTypeIndex
+            };
+          });
+          node.outputs = preview.outputs.map((item) => {
+            const output = outputsMap.get(item.key);
+            return {
+              ...item,
+              value: output?.value
+            };
+          });
+        }
       } catch (error) {
         node.pluginData = {
           error: getErrText(error)

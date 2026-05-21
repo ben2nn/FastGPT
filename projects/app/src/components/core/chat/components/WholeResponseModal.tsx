@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Flex, type BoxProps, useDisclosure, HStack } from '@chakra-ui/react';
 import type { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type.d';
-import { useTranslation } from 'next-i18next';
 import { moduleTemplatesFlat } from '@fastgpt/global/core/workflow/template/constants';
 import MyModal from '@fastgpt/web/components/common/MyModal';
 import Markdown from '@/components/Markdown';
@@ -14,10 +13,11 @@ import { useSystem } from '@fastgpt/web/hooks/useSystem';
 import MyIcon from '@fastgpt/web/components/common/Icon';
 import { useContextSelector } from 'use-context-selector';
 import { ChatBoxContext } from '../ChatContainer/ChatBox/Provider';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import { getFileIcon } from '@fastgpt/global/common/file/icon';
 import EmptyTip from '@fastgpt/web/components/common/EmptyTip';
 import { completionFinishReasonMap } from '@fastgpt/global/core/ai/constants';
+import { useSafeTranslation } from '@fastgpt/web/hooks/useSafeTranslation';
 
 type sideTabItemType = {
   moduleLogo?: string;
@@ -41,7 +41,7 @@ export const WholeResponseContent = ({
   dataId?: string;
   chatTime?: Date;
 }) => {
-  const { t } = useTranslation();
+  const { t } = useSafeTranslation();
 
   // Auto scroll to top
   const ContentRef = useRef<HTMLDivElement>(null);
@@ -88,6 +88,9 @@ export const WholeResponseContent = ({
         if (isObject) {
           return `~~~json\n${JSON.stringify(value, null, 2)}`;
         }
+        if (typeof value === 'string') {
+          return t(value);
+        }
         return `${value}`;
       }, [isObject, value]);
 
@@ -115,7 +118,7 @@ export const WholeResponseContent = ({
         </RowRender>
       );
     },
-    [RowRender]
+    [RowRender, t]
   );
 
   return activeModule ? (
@@ -133,10 +136,7 @@ export const WholeResponseContent = ({
     >
       {/* common info */}
       <>
-        <Row
-          label={t('common:core.chat.response.module name')}
-          value={t(activeModule.moduleName as any)}
-        />
+        <Row label={t('chat:response.node_name')} value={t(activeModule.moduleName as any)} />
         {activeModule?.totalPoints !== undefined && (
           <Row
             label={t('common:support.wallet.usage.Total points')}
@@ -149,10 +149,18 @@ export const WholeResponseContent = ({
             value={formatNumber(activeModule.childTotalPoints)}
           />
         )}
-        <Row
-          label={t('common:core.chat.response.module time')}
-          value={`${activeModule?.runningTime || 0}s`}
-        />
+        <Row label={t('workflow:response.Error')} value={activeModule?.error} />
+        <Row label={t('workflow:response.Error')} value={activeModule?.errorText} />
+        <Row label={t('chat:response.node_inputs')} value={activeModule?.nodeInputs} />
+      </>
+      {/* ai chat */}
+      <>
+        {activeModule?.finishReason && (
+          <Row
+            label={t('chat:completion_finish_reason')}
+            value={t(completionFinishReasonMap[activeModule?.finishReason])}
+          />
+        )}
         <Row label={t('common:core.chat.response.module model')} value={activeModule?.model} />
         {activeModule?.tokens && (
           <Row label={t('chat:llm_tokens')} value={`${activeModule?.tokens}`} />
@@ -175,11 +183,6 @@ export const WholeResponseContent = ({
           label={t('common:core.chat.response.context total length')}
           value={activeModule?.contextTotalLen}
         />
-        <Row label={t('workflow:response.Error')} value={activeModule?.error} />
-        <Row label={t('chat:response.node_inputs')} value={activeModule?.nodeInputs} />
-      </>
-      {/* ai chat */}
-      <>
         <Row
           label={t('common:core.chat.response.module temperature')}
           value={activeModule?.temperature}
@@ -188,12 +191,6 @@ export const WholeResponseContent = ({
           label={t('common:core.chat.response.module maxToken')}
           value={activeModule?.maxToken}
         />
-        {activeModule?.finishReason && (
-          <Row
-            label={t('chat:completion_finish_reason')}
-            value={t(completionFinishReasonMap[activeModule?.finishReason])}
-          />
-        )}
 
         <Row label={t('chat:reasoning_text')} value={activeModule?.reasoningText} />
         <Row
@@ -300,7 +297,7 @@ export const WholeResponseContent = ({
         <Row label={t('chat:query_extension_result')} value={`${activeModule?.extensionResult}`} />
         {activeModule.quoteList && activeModule.quoteList.length > 0 && (
           <Row
-            label={t('chat:search_results')}
+            label={t('chat:response_search_results', { len: activeModule.quoteList.length })}
             rawDom={<QuoteList chatItemDataId={dataId} rawSearch={activeModule.quoteList} />}
           />
         )}
@@ -353,10 +350,8 @@ export const WholeResponseContent = ({
       </>
       {/* plugin */}
       <>
-        <Row
-          label={t('common:core.chat.response.plugin output')}
-          value={activeModule?.pluginOutput}
-        />
+        <Row label={t('chat:tool_input')} value={activeModule?.toolInput} />
+        <Row label={t('chat:tool_output')} value={activeModule?.pluginOutput} />
       </>
       {/* text output */}
       <Row label={t('common:core.chat.response.text output')} value={activeModule?.textOutput} />
@@ -458,7 +453,7 @@ const SideTabItem = ({
   value: string;
   index: number;
 }) => {
-  const { t } = useTranslation();
+  const { t } = useSafeTranslation();
 
   if (!sideBarItem) return null;
 
@@ -613,7 +608,7 @@ export const ResponseBox = React.memo(function ResponseBox({
   hideTabs?: boolean;
   useMobile?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t } = useSafeTranslation();
   const { isPc } = useSystem();
 
   const flattedResponse = useMemo(() => {
@@ -821,10 +816,10 @@ const WholeResponseModal = ({
   dataId: string;
   chatTime: Date;
 }) => {
-  const { t } = useTranslation();
+  const { t } = useSafeTranslation();
 
   const { getHistoryResponseData } = useContextSelector(ChatBoxContext, (v) => v);
-  const { loading: isLoading, data: response } = useRequest2(
+  const { loading: isLoading, data: response } = useRequest(
     () => getHistoryResponseData({ dataId }),
     {
       manual: false

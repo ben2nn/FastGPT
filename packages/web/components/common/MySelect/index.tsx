@@ -20,7 +20,7 @@ import {
 } from '@chakra-ui/react';
 import type { ButtonProps, MenuItemProps } from '@chakra-ui/react';
 import MyIcon from '../Icon';
-import { useRequest2 } from '../../../hooks/useRequest';
+import { useRequest } from '../../../hooks/useRequest';
 import MyDivider from '../MyDivider';
 import type { useScrollPagination } from '../../../hooks/useScrollPagination';
 import Avatar from '../Avatar';
@@ -54,6 +54,9 @@ export type SelectProps<T = any> = Omit<ButtonProps, 'onChange'> & {
   ScrollData?: ReturnType<typeof useScrollPagination>['ScrollData'];
   customOnOpen?: () => void;
   customOnClose?: () => void;
+
+  isInvalid?: boolean;
+  isDisabled?: boolean;
 };
 
 export const menuItemStyles: MenuItemProps = {
@@ -71,6 +74,7 @@ export const menuItemStyles: MenuItemProps = {
 
 const MySelect = <T = any,>(
   {
+    bg = '#fff',
     placeholder,
     value,
     valueLabel,
@@ -82,6 +86,8 @@ const MySelect = <T = any,>(
     ScrollData,
     customOnOpen,
     customOnClose,
+    isInvalid,
+    isDisabled,
     ...props
   }: SelectProps<T>,
   ref: ForwardedRef<{
@@ -137,7 +143,7 @@ const MySelect = <T = any,>(
     }
   }, [isSearch, isOpen]);
 
-  const { runAsync: onClickChange, loading } = useRequest2((val: T) => onChange?.(val));
+  const { runAsync: onClickChange, loading } = useRequest((val: T) => onChange?.(val));
 
   const ListRender = useMemo(() => {
     return (
@@ -156,7 +162,8 @@ const MySelect = <T = any,>(
                   : {
                       color: 'myGray.900'
                     })}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   if (value !== item.value) {
                     onClickChange(item.value);
                   }
@@ -166,7 +173,7 @@ const MySelect = <T = any,>(
                 display={'block'}
                 mb={0.5}
               >
-                <Flex alignItems={'center'} fontWeight={value === item.value ? '600' : 'normal'}>
+                <Flex alignItems={'center'}>
                   {item.icon && (
                     <Avatar mr={2} src={item.icon as any} w={item.iconSize ?? '1rem'} />
                   )}
@@ -213,16 +220,22 @@ const MySelect = <T = any,>(
           h={'auto'}
           whiteSpace={'pre-wrap'}
           wordBreak={'break-word'}
+          transition={'border-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out'}
+          isDisabled={isDisabled}
           _active={{
             transform: 'none'
           }}
-          {...(isOpen
-            ? {
-                boxShadow: '0px 0px 0px 2.4px rgba(51, 112, 255, 0.15)',
-                borderColor: 'primary.600',
-                color: 'primary.700'
-              }
-            : {})}
+          bg={bg ? (isOpen ? '#fff' : bg) : '#fff'}
+          color={isOpen ? 'primary.700' : 'myGray.700'}
+          borderColor={isInvalid ? 'red.500' : isOpen ? 'primary.300' : 'myGray.200'}
+          boxShadow={
+            isOpen
+              ? isInvalid
+                ? '0px 0px 0px 2.4px rgba(255, 0, 0, 0.15)'
+                : '0px 0px 0px 2.4px rgba(51, 112, 255, 0.15)'
+              : 'none'
+          }
+          _hover={isInvalid ? { borderColor: 'red.400' } : { borderColor: 'primary.300' }}
           {...props}
         >
           <Flex alignItems={'center'} justifyContent="space-between" w="100%">
@@ -261,7 +274,11 @@ const MySelect = <T = any,>(
                           w={selectItem.iconSize ?? '1rem'}
                         />
                       )}
-                      {selectItem?.alias || selectItem?.label || placeholder}
+                      {
+                        <Box noOfLines={1}>
+                          {selectItem?.alias || selectItem?.label || placeholder}
+                        </Box>
+                      }
                     </>
                   )}
                 </>
@@ -291,6 +308,9 @@ const MySelect = <T = any,>(
           zIndex={99}
           maxH={'45vh'}
           overflowY={'auto'}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
         >
           {ScrollData ? <ScrollData>{ListRender}</ScrollData> : ListRender}
         </MenuList>

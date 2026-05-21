@@ -5,17 +5,12 @@ import {
   MILVUS_ADDRESS,
   MILVUS_TOKEN
 } from '../constants';
-import type {
-  DelDatasetVectorCtrlProps,
-  EmbeddingRecallCtrlProps,
-  EmbeddingRecallResponse,
-  InsertVectorControllerProps
-} from '../controller.d';
-import { delay } from '@fastgpt/global/common/system/utils';
+import type { VectorControllerType } from '../type';
+import { retryFn } from '@fastgpt/global/common/system/utils';
 import { addLog } from '../../system/log';
 import { customNanoid } from '@fastgpt/global/common/string/tools';
 
-export class MilvusCtrl {
+export class MilvusCtrl implements VectorControllerType {
   constructor() {}
   getClient = async () => {
     if (!MILVUS_ADDRESS) {
@@ -27,12 +22,13 @@ export class MilvusCtrl {
       address: MILVUS_ADDRESS,
       token: MILVUS_TOKEN
     });
+    await global.milvusClient.connectPromise;
 
     addLog.info(`Milvus connected`);
 
     return global.milvusClient;
   };
-  init = async () => {
+  init: VectorControllerType['init'] = async () => {
     const client = await this.getClient();
 
     // init db(zilliz cloud will error)
@@ -124,9 +120,9 @@ export class MilvusCtrl {
     }
   };
 
-  insert = async (props: InsertVectorControllerProps): Promise<{ insertId: string }> => {
+  insert: VectorControllerType['insert'] = async (props) => {
     const client = await this.getClient();
-    const { teamId, datasetId, collectionId, vector, retry = 3 } = props;
+    const { teamId, datasetId, collectionId, vectors } = props;
 
     const generateId = () => {
       // in js, the max safe integer is 2^53 - 1: 9007199254740991
@@ -136,45 +132,32 @@ export class MilvusCtrl {
       const restDigits = customNanoid('1234567890', 15);
       return Number(`${firstDigit}${restDigits}`);
     };
-    const id = generateId();
-    try {
-      const result = await client.insert({
-        collection_name: DatasetVectorTableName,
-        data: [
-          {
-            id,
-            vector,
-            teamId: String(teamId),
-            datasetId: String(datasetId),
-            collectionId: String(collectionId),
-            createTime: Date.now()
-          }
-        ]
-      });
 
-      const insertId = (() => {
-        if ('int_id' in result.IDs) {
-          return `${result.IDs.int_id.data?.[0]}`;
-        }
-        return `${result.IDs.str_id.data?.[0]}`;
-      })();
+    const result = await client.insert({
+      collection_name: DatasetVectorTableName,
+      data: vectors.map((vector) => ({
+        id: generateId(),
+        vector,
+        teamId: String(teamId),
+        datasetId: String(datasetId),
+        collectionId: String(collectionId),
+        createTime: Date.now()
+      }))
+    });
 
-      return {
-        insertId: insertId
-      };
-    } catch (error) {
-      if (retry <= 0) {
-        return Promise.reject(error);
+    const insertIds = (() => {
+      if ('int_id' in result.IDs) {
+        return result.IDs.int_id.data.map((id) => String(id));
       }
-      await delay(500);
-      return this.insert({
-        ...props,
-        retry: retry - 1
-      });
-    }
+      return result.IDs.str_id.data.map((id) => String(id));
+    })();
+
+    return {
+      insertIds
+    };
   };
-  delete = async (props: DelDatasetVectorCtrlProps): Promise<any> => {
-    const { teamId, retry = 2 } = props;
+  delete: VectorControllerType['delete'] = async (props) => {
+    const { teamId } = props;
     const client = await this.getClient();
 
     const teamIdWhere = `(teamId=="${String(teamId)}")`;
@@ -206,33 +189,15 @@ export class MilvusCtrl {
 
     const concatWhere = `${teamIdWhere} and ${where}`;
 
-    try {
-      await client.delete({
-        collection_name: DatasetVectorTableName,
-        filter: concatWhere
-      });
-    } catch (error) {
-      if (retry <= 0) {
-        return Promise.reject(error);
-      }
-      await delay(500);
-      return this.delete({
-        ...props,
-        retry: retry - 1
-      });
-    }
+    await client.delete({
+      collection_name: DatasetVectorTableName,
+      filter: concatWhere
+    });
   };
-  embRecall = async (props: EmbeddingRecallCtrlProps): Promise<EmbeddingRecallResponse> => {
+  embRecall: VectorControllerType['embRecall'] = async (props) => {
     const client = await this.getClient();
-    const {
-      teamId,
-      datasetIds,
-      vector,
-      limit,
-      forbidCollectionIdList,
-      filterCollectionIdList,
-      retry = 2
-    } = props;
+    const { teamId, datasetIds, vector, limit, forbidCollectionIdList, filterCollectionIdList } =
+      props;
 
     // Forbid collection
     const formatForbidCollectionIdList = (() => {
@@ -255,91 +220,75 @@ export class MilvusCtrl {
         .filter((id) => !forbidCollectionIdList.includes(id));
     })();
     const collectionIdQuery = formatFilterCollectionId
-      ? `and (collectionId in [${formatFilterCollectionId.map((id) => `"${id}"`)}])`
+      ? `and (collectionId in [${formatFilterCollectionId.map((id) => `"${id}"`).join(',')}])`
       : ``;
     // Empty data
     if (formatFilterCollectionId && formatFilterCollectionId.length === 0) {
       return { results: [] };
     }
 
-    try {
-      const { results } = await client.search({
+    const filterStr =
+      `(teamId == "${teamId}") and (datasetId in [${datasetIds.map((id) => `"${id}"`).join(',')}]) ${collectionIdQuery} ${forbidColQuery}`.trim();
+
+    const searchResult = await retryFn(() =>
+      client.search({
         collection_name: DatasetVectorTableName,
-        data: vector,
+        vector: vector,
         limit,
-        filter: `(teamId == "${teamId}") and (datasetId in [${datasetIds.map((id) => `"${id}"`).join(',')}]) ${collectionIdQuery} ${forbidColQuery}`,
+        expr: filterStr,
         output_fields: ['collectionId']
-      });
+      })
+    );
 
-      const rows = results as {
-        score: number;
-        id: string;
-        collectionId: string;
-      }[];
+    const rows = (searchResult.results || []) as {
+      score: number;
+      id: string;
+      collectionId: string;
+    }[];
 
-      return {
-        results: rows.map((item) => ({
-          id: String(item.id),
-          collectionId: item.collectionId,
-          score: item.score
-        }))
-      };
-    } catch (error) {
-      if (retry <= 0) {
-        return Promise.reject(error);
-      }
-      return this.embRecall({
-        ...props,
-        retry: retry - 1
-      });
+    return {
+      results: rows.map((item) => ({
+        id: String(item.id),
+        collectionId: item.collectionId,
+        score: item.score
+      }))
+    };
+  };
+
+  getVectorCount: VectorControllerType['getVectorCount'] = async (props) => {
+    const { teamId, datasetId, collectionId } = props;
+    const client = await this.getClient();
+
+    // Build filter conditions dynamically (each condition wrapped in parentheses)
+    const filterConditions: string[] = [];
+
+    if (teamId) {
+      filterConditions.push(`(teamId == "${String(teamId)}")`);
     }
-  };
 
-  getVectorCountByTeamId = async (teamId: string) => {
-    const client = await this.getClient();
+    if (datasetId) {
+      filterConditions.push(`(datasetId == "${String(datasetId)}")`);
+    }
 
-    const result = await client.query({
-      collection_name: DatasetVectorTableName,
-      output_fields: ['count(*)'],
-      filter: `teamId == "${String(teamId)}"`
-    });
+    if (collectionId) {
+      filterConditions.push(`(collectionId == "${String(collectionId)}")`);
+    }
 
-    const total = result.data?.[0]?.['count(*)'] as number;
-
-    return total;
-  };
-  getVectorCountByDatasetId = async (teamId: string, datasetId: string) => {
-    const client = await this.getClient();
+    // If no conditions provided, count all (empty filter)
+    const filter = filterConditions.length > 0 ? filterConditions.join(' and ') : '';
 
     const result = await client.query({
       collection_name: DatasetVectorTableName,
       output_fields: ['count(*)'],
-      filter: `(teamId == "${String(teamId)}") and (dataset == "${String(datasetId)}")`
+      filter: filter || undefined
     });
 
-    const total = result.data?.[0]?.['count(*)'] as number;
+    const total = result.data?.[0]?.['count(*)'];
 
-    return total;
-  };
-  getVectorCountByCollectionId = async (
-    teamId: string,
-    datasetId: string,
-    collectionId: string
-  ) => {
-    const client = await this.getClient();
-
-    const result = await client.query({
-      collection_name: DatasetVectorTableName,
-      output_fields: ['count(*)'],
-      filter: `(teamId == "${String(teamId)}") and (datasetId == "${String(datasetId)}") and (collectionId == "${String(collectionId)}")`
-    });
-
-    const total = result.data?.[0]?.['count(*)'] as number;
-
-    return total;
+    return Number(total);
   };
 
-  getVectorDataByTime = async (start: Date, end: Date) => {
+  getVectorDataByTime: VectorControllerType['getVectorDataByTime'] = async (start, end) => {
     const client = await this.getClient();
     const startTimestamp = new Date(start).getTime();
     const endTimestamp = new Date(end).getTime();

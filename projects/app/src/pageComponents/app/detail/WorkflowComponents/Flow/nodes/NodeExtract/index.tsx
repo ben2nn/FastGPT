@@ -33,18 +33,29 @@ import {
 import { getNanoid } from '@fastgpt/global/common/string/tools';
 import IOTitle from '../../components/IOTitle';
 import { useContextSelector } from 'use-context-selector';
-import { WorkflowContext } from '../../../context';
 import MyIconButton from '@fastgpt/web/components/common/Icon/button';
-import MyTooltip from '@fastgpt/web/components/common/MyTooltip';
+import CatchError from '../render/RenderOutput/CatchError';
+import { useMemoEnhance } from '@fastgpt/web/hooks/useMemoEnhance';
+import { WorkflowUtilsContext } from '../../../context/workflowUtilsContext';
+import { WorkflowActionsContext } from '../../../context/workflowActionsContext';
 
 const NodeExtract = ({ data, selected }: NodeProps<FlowNodeItemType>) => {
-  const { inputs, outputs, nodeId } = data;
+  const { inputs, outputs, nodeId, catchError } = data;
 
   const { t } = useTranslation();
-  const onChangeNode = useContextSelector(WorkflowContext, (v) => v.onChangeNode);
+  const onChangeNode = useContextSelector(WorkflowActionsContext, (v) => v.onChangeNode);
 
-  const splitToolInputs = useContextSelector(WorkflowContext, (ctx) => ctx.splitToolInputs);
-  const { isTool, commonInputs } = splitToolInputs(inputs, nodeId);
+  const { splitToolInputs, splitOutput } = useContextSelector(WorkflowUtilsContext, (ctx) => ctx);
+  const { isTool, commonInputs } = useMemoEnhance(
+    () => splitToolInputs(inputs, nodeId),
+    [inputs, nodeId, splitToolInputs]
+  );
+
+  const { successOutputs, errorOutputs } = useMemoEnhance(
+    () => splitOutput(outputs),
+    [splitOutput, outputs]
+  );
+
   const [editExtractFiled, setEditExtractField] = useState<ContextExtractAgentItemType>();
 
   const CustomComponent = useMemo(
@@ -156,22 +167,19 @@ const NodeExtract = ({ data, selected }: NodeProps<FlowNodeItemType>) => {
           </Container>
         </>
       )}
-      <>
-        <Container>
-          <IOTitle text={t('common:Input')} />
-          <RenderInput
-            nodeId={nodeId}
-            flowInputList={commonInputs}
-            CustomComponent={CustomComponent}
-          />
-        </Container>
-      </>
-      <>
-        <Container>
-          <IOTitle text={t('common:Output')} />
-          <RenderOutput nodeId={nodeId} flowOutputList={outputs} />
-        </Container>
-      </>
+      <Container>
+        <IOTitle text={t('common:Input')} />
+        <RenderInput
+          nodeId={nodeId}
+          flowInputList={commonInputs}
+          CustomComponent={CustomComponent}
+        />
+      </Container>
+      <Container>
+        <IOTitle text={t('common:Output')} nodeId={nodeId} catchError={catchError} />
+        <RenderOutput nodeId={nodeId} flowOutputList={successOutputs} />
+      </Container>
+      {catchError && <CatchError nodeId={nodeId} errorOutputs={errorOutputs} />}
 
       {!!editExtractFiled && (
         <ExtractFieldModal

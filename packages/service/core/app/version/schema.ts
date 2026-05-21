@@ -1,7 +1,7 @@
-import { connectionMongo, getMongoModel, type Model } from '../../../common/mongo';
-const { Schema, model, models } = connectionMongo;
+import { connectionMongo, getMongoModel } from '../../../common/mongo';
+const { Schema } = connectionMongo;
 import { type AppVersionSchemaType } from '@fastgpt/global/core/app/version';
-import { chatConfigType } from '../schema';
+import { AppCollectionName, chatConfigType } from '../schema';
 import { TeamMemberCollectionName } from '@fastgpt/global/support/user/team/constant';
 
 export const AppVersionCollectionName = 'app_versions';
@@ -15,7 +15,7 @@ const AppVersionSchema = new Schema(
     },
     appId: {
       type: Schema.Types.ObjectId,
-      ref: AppVersionCollectionName,
+      ref: AppCollectionName,
       required: true
     },
     time: {
@@ -34,6 +34,7 @@ const AppVersionSchema = new Schema(
       type: chatConfigType
     },
     isPublish: Boolean,
+    isAutoSave: Boolean,
     versionName: String
   },
   {
@@ -41,11 +42,7 @@ const AppVersionSchema = new Schema(
   }
 );
 
-try {
-  AppVersionSchema.index({ appId: 1, time: -1 });
-} catch (error) {
-  console.log(error);
-}
+AppVersionSchema.index({ appId: 1, time: -1 });
 
 export const MongoAppVersion = getMongoModel<AppVersionSchemaType>(
   AppVersionCollectionName,

@@ -12,17 +12,7 @@ import { uiWorkflow2StoreWorkflow } from '../../utils';
 import { type RuntimeNodeItemType } from '@fastgpt/global/core/workflow/runtime/type';
 
 import dynamic from 'next/dynamic';
-import {
-  Box,
-  Button,
-  Flex,
-  NumberDecrementStepper,
-  NumberIncrementStepper,
-  NumberInput,
-  NumberInputField,
-  NumberInputStepper,
-  Switch
-} from '@chakra-ui/react';
+import { Box, Button, Flex } from '@chakra-ui/react';
 import { type FieldErrors, useForm } from 'react-hook-form';
 import {
   VariableInputEnum,
@@ -30,22 +20,23 @@ import {
 } from '@fastgpt/global/core/workflow/constants';
 import { checkInputIsReference } from '@fastgpt/global/core/workflow/utils';
 import { useContextSelector } from 'use-context-selector';
-import { WorkflowContext } from '../../context';
-import QuestionTip from '@fastgpt/web/components/common/MyTooltip/QuestionTip';
 import { FlowNodeTypeEnum } from '@fastgpt/global/core/workflow/node/constant';
 import { AppContext } from '../../../context';
-import {
-  ExternalVariableInputItem,
-  VariableInputItem
-} from '@/components/core/chat/ChatContainer/ChatBox/components/VariableInput';
 import LightRowTabs from '@fastgpt/web/components/common/Tabs/LightRowTabs';
-import MyTextarea from '@/components/common/Textarea/MyTextarea';
-import { WorkflowNodeEdgeContext } from '../../context/workflowInitContext';
+import { WorkflowBufferDataContext } from '../../context/workflowInitContext';
+import LabelAndFormRender from '@/components/core/app/formRender/LabelAndForm';
+import {
+  nodeInputTypeToInputType,
+  variableInputTypeToInputType
+} from '@/components/core/app/formRender/utils';
+import { useSafeTranslation } from '@fastgpt/web/hooks/useSafeTranslation';
+import { WorkflowUtilsContext } from '../../context/workflowUtilsContext';
+import { WorkflowActionsContext } from '../../context/workflowActionsContext';
+import { WorkflowDebugContext } from '../../context/workflowDebugContext';
 
 const MyRightDrawer = dynamic(
   () => import('@fastgpt/web/components/common/MyDrawer/MyRightDrawer')
 );
-const JsonEditor = dynamic(() => import('@fastgpt/web/components/common/Textarea/JsonEditor'));
 
 enum TabEnum {
   global = 'global',
@@ -53,22 +44,27 @@ enum TabEnum {
 }
 
 export const useDebug = () => {
-  const { t } = useTranslation();
+  const { t } = useSafeTranslation();
   const { toast } = useToast();
 
-  const setNodes = useContextSelector(WorkflowNodeEdgeContext, (v) => v.setNodes);
-  const getNodes = useContextSelector(WorkflowNodeEdgeContext, (v) => v.getNodes);
-  const edges = useContextSelector(WorkflowNodeEdgeContext, (v) => v.edges);
-  const onUpdateNodeError = useContextSelector(WorkflowContext, (v) => v.onUpdateNodeError);
-  const onStartNodeDebug = useContextSelector(WorkflowContext, (v) => v.onStartNodeDebug);
+  const setNodes = useContextSelector(WorkflowBufferDataContext, (v) => v.setNodes);
+  const getNodes = useContextSelector(WorkflowBufferDataContext, (v) => v.getNodes);
+  const edges = useContextSelector(WorkflowBufferDataContext, (v) => v.edges);
+  const { onUpdateNodeError, onRemoveError } = useContextSelector(WorkflowActionsContext, (v) => v);
+  const onStartNodeDebug = useContextSelector(WorkflowDebugContext, (v) => v.onStartNodeDebug);
 
   const appDetail = useContextSelector(AppContext, (v) => v.appDetail);
 
-  const { filteredVar, customVar, variables } = useMemo(() => {
+  const { filteredVar, customVar, internalVar, variables } = useMemo(() => {
     const variables = appDetail.chatConfig?.variables || [];
     return {
-      filteredVar: variables.filter((item) => item.type !== VariableInputEnum.custom) || [],
+      filteredVar:
+        variables.filter(
+          (item) =>
+            item.type !== VariableInputEnum.custom && item.type !== VariableInputEnum.internal
+        ) || [],
       customVar: variables.filter((item) => item.type === VariableInputEnum.custom) || [],
+      internalVar: variables.filter((item) => item.type === VariableInputEnum.internal) || [],
       variables
     };
   }, [appDetail.chatConfig?.variables]);
@@ -92,6 +88,7 @@ export const useDebug = () => {
 
     const checkResults = checkWorkflowNodeAndConnection({ nodes, edges });
     if (!checkResults) {
+      onRemoveError();
       const storeNodes = uiWorkflow2StoreWorkflow({ nodes, edges });
 
       return JSON.stringify(storeNodes);
@@ -104,7 +101,7 @@ export const useDebug = () => {
       });
       return Promise.reject();
     }
-  }, [edges, getNodes, onUpdateNodeError, t, toast]);
+  }, [edges, getNodes, onRemoveError, onUpdateNodeError, t, toast]);
 
   const openDebugNode = useCallback(
     async ({ entryNodeId }: { entryNodeId: string }) => {
@@ -176,7 +173,7 @@ export const useDebug = () => {
         variables: defaultGlobalVariables
       }
     });
-    const { register, getValues, setValue, handleSubmit } = variablesForm;
+    const { handleSubmit } = variablesForm;
 
     const onClose = () => {
       setRuntimeNodeId(undefined);
@@ -228,14 +225,14 @@ export const useDebug = () => {
 
     const onCheckRunError = useCallback((e: FieldErrors<Record<string, any>>) => {
       const hasRequiredNodeVar =
-        e.nodeVariables && Object.values(e.nodeVariables).some((item) => item.type === 'required');
+        e.nodeVariables && Object.values(e.nodeVariables).some((item) => item.type === 'validate');
 
       if (hasRequiredNodeVar) {
         return setCurrentTab(TabEnum.node);
       }
 
       const hasRequiredGlobalVar =
-        e.variables && Object.values(e.variables).some((item) => item.type === 'required');
+        e.variables && Object.values(e.variables).some((item) => item.type === 'validate');
 
       if (hasRequiredGlobalVar) {
         setCurrentTab(TabEnum.global);
@@ -246,8 +243,8 @@ export const useDebug = () => {
       <MyRightDrawer
         onClose={onClose}
         iconSrc="core/workflow/debugBlue"
-        title={t('common:core.workflow.Debug Node')}
-        maxW={['90vw', '35vw']}
+        title={t('workflow:debug_test')}
+        maxW={['90vw', '40vw']}
         px={0}
       >
         <Box flex={'1 0 0'} overflow={'auto'} px={6}>
@@ -265,103 +262,61 @@ export const useDebug = () => {
               onChange={setCurrentTab}
             />
           )}
-          <Box display={currentTab === TabEnum.global ? 'block' : 'none'}>
-            {customVar.map((item) => (
-              <ExternalVariableInputItem
-                key={item.id}
-                item={{ ...item, key: item.key }}
-                variablesForm={variablesForm}
-                showTag={true}
-              />
-            ))}
-            {filteredVar.map((item) => (
-              <VariableInputItem
-                key={item.id}
-                item={{ ...item, key: item.key }}
-                variablesForm={variablesForm}
+          <Box display={currentTab === TabEnum.node ? 'block' : 'none'}>
+            {renderInputs.map((item) => (
+              <LabelAndFormRender
+                {...item}
+                key={item.key}
+                label={item.label}
+                required={item.required}
+                placeholder={t(item.placeholder || item.description)}
+                inputType={nodeInputTypeToInputType(item.renderTypeList)}
+                form={variablesForm}
+                fieldName={`nodeVariables.${item.key}`}
+                bg={'myGray.50'}
               />
             ))}
           </Box>
-          <Box display={currentTab === TabEnum.node ? 'block' : 'none'}>
-            {renderInputs.map((input) => {
-              const required = input.required || false;
-
-              const RenderInput = (() => {
-                if (input.valueType === WorkflowIOValueTypeEnum.string) {
-                  return (
-                    <MyTextarea
-                      autoHeight
-                      minH={60}
-                      maxH={160}
-                      bg={'myGray.50'}
-                      placeholder={t(input.placeholder || ('' as any))}
-                      {...register(`nodeVariables.${input.key}`, {
-                        required: input.required
-                      })}
-                    />
-                  );
-                }
-                if (input.valueType === WorkflowIOValueTypeEnum.number) {
-                  return (
-                    <NumberInput step={input.step} min={input.min} max={input.max} bg={'myGray.50'}>
-                      <NumberInputField
-                        {...register(`nodeVariables.${input.key}`, {
-                          required: input.required,
-                          min: input.min,
-                          max: input.max,
-                          valueAsNumber: true
-                        })}
-                      />
-                      <NumberInputStepper>
-                        <NumberIncrementStepper />
-                        <NumberDecrementStepper />
-                      </NumberInputStepper>
-                    </NumberInput>
-                  );
-                }
-                if (input.valueType === WorkflowIOValueTypeEnum.boolean) {
-                  return (
-                    <Box>
-                      <Switch {...register(`nodeVariables.${input.key}`)} />
-                    </Box>
-                  );
-                }
-
-                let value = getValues(input.key) || '';
-                if (typeof value !== 'string') {
-                  value = JSON.stringify(value, null, 2);
-                }
-
-                return (
-                  <JsonEditor
-                    bg={'myGray.50'}
-                    placeholder={t(input.placeholder || ('' as any))}
-                    resize
-                    value={value}
-                    onChange={(e) => {
-                      setValue(`nodeVariables.${input.key}`, e);
-                    }}
-                  />
-                );
-              })();
-
-              return !!RenderInput ? (
-                <Box key={input.key} _notLast={{ mb: 4 }} px={1}>
-                  <Flex alignItems={'center'} mb={1}>
-                    <Box position={'relative'}>
-                      {required && (
-                        <Box position={'absolute'} left={'-8px'} top={'-2px'} color={'red.600'}>
-                          *
-                        </Box>
-                      )}
-                      {t(input.debugLabel || (input.label as any))}
-                    </Box>
-                    {input.description && <QuestionTip ml={2} label={input.description} />}
-                  </Flex>
-                  {RenderInput}
-                </Box>
-              ) : null;
-            })}
+          <Box display={currentTab === TabEnum.global ? 'block' : 'none'}>
+            {customVar.map((item) => (
+              <LabelAndFormRender
+                {...item}
+                key={item.key}
+                label={item.label}
+                required={item.required}
+                placeholder={t(item.description)}
+                inputType={variableInputTypeToInputType(item.type)}
+                form={variablesForm}
+                fieldName={`variables.${item.key}`}
+                bg={'myGray.50'}
+              />
+            ))}
+            {internalVar.map((item) => (
+              <LabelAndFormRender
+                {...item}
+                key={item.key}
+                label={item.label}
+                required={item.required}
+                placeholder={t(item.description)}
+                inputType={variableInputTypeToInputType(item.type)}
+                form={variablesForm}
+                fieldName={`variables.${item.key}`}
+                bg={'myGray.50'}
+              />
+            ))}
+            {filteredVar.map((item) => (
+              <LabelAndFormRender
+                {...item}
+                key={item.key}
+                label={item.label}
+                required={item.required}
+                placeholder={item.description}
+                inputType={variableInputTypeToInputType(item.type)}
+                form={variablesForm}
+                fieldName={`variables.${item.key}`}
+                bg={'myGray.50'}
+              />
+            ))}
           </Box>
         </Box>
         <Flex py={2} justifyContent={'flex-end'} px={6}>
@@ -376,6 +331,7 @@ export const useDebug = () => {
     t,
     variables.length,
     customVar,
+    internalVar,
     filteredVar,
     runtimeNodeId,
     onStartNodeDebug
