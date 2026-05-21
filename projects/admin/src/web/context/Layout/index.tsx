@@ -11,7 +11,7 @@ import {
 } from '@chakra-ui/react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/web/context/AuthContext';
-import { ViewIcon, SettingsIcon, InfoIcon, MoonIcon, TimeIcon } from '@chakra-ui/icons';
+import { ViewIcon, SettingsIcon, InfoIcon, MoonIcon, TimeIcon, DownloadIcon } from '@chakra-ui/icons';
 
 interface LayoutProps {
   children: ReactNode;
@@ -29,7 +29,8 @@ const menuItems: MenuItem[] = [
   { label: '数据统计', icon: InfoIcon, path: '/statistics' },
   { label: '任务管理', icon: TimeIcon, path: '/tasks' },
   { label: '用户管理', icon: SettingsIcon, path: '/user/list' },
-  { label: '团队管理', icon: MoonIcon, path: '/team/list' }
+  { label: '团队管理', icon: MoonIcon, path: '/team/list' },
+  { label: '导入导出', icon: DownloadIcon, path: '/import-export' }
 ];
 
 export default function Layout({ children, title }: LayoutProps) {

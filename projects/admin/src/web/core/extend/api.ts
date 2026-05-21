@@ -91,3 +91,108 @@ export const removeTeamMember = async (teamId: string, userId: string) => {
   if (!response.ok) throw new Error('移除成员失败');
   return response.json();
 };
+
+// ==================== 导入导出 API ====================
+
+// 知识库导出
+export const exportDataset = async (parentId: string) => {
+  const response = await fetch(getWebReqUrl('/api/extend/dataset/exportByParentId'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentId })
+  });
+  if (!response.ok) throw new Error('知识库导出失败');
+  return response.json();
+};
+
+// 知识库导入
+export const importDataset = async (
+  file: string | object,
+  keepOriginalId: boolean,
+  targetParentId?: string
+) => {
+  const response = await fetch(getWebReqUrl('/api/extend/dataset/importFromJson'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file, keepOriginalId, targetParentId })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '知识库导入失败');
+  }
+  return response.json();
+};
+
+// 工作流导出
+export const exportApp = async (parentId: string) => {
+  const response = await fetch(getWebReqUrl('/api/extend/app/exportByParentId'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentId })
+  });
+  if (!response.ok) throw new Error('工作流导出失败');
+  return response.json();
+};
+
+// 工作流导入
+export const importApp = async (file: string | object, targetParentId?: string) => {
+  const response = await fetch(getWebReqUrl('/api/extend/app/importFromJson'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file, targetParentId })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '工作流导入失败');
+  }
+  return response.json();
+};
+
+// 模型配置导出
+export const exportModels = async (provider?: string, modelType?: string) => {
+  const response = await fetch(getWebReqUrl('/api/extend/model/exportModels'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, modelType })
+  });
+  if (!response.ok) throw new Error('模型配置导出失败');
+  return response.json();
+};
+
+// 模型配置导入
+export const importModels = async (file: string | object) => {
+  const response = await fetch(getWebReqUrl('/api/extend/model/importModels'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '模型配置导入失败');
+  }
+  return response.json();
+};
+
+// 渠道导出
+export const exportChannels = async () => {
+  const response = await fetch(getWebReqUrl('/api/extend/channel/exportChannels'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!response.ok) throw new Error('渠道导出失败');
+  return response.json();
+};
+
+// 渠道导入
+export const importChannels = async (file: string | object) => {
+  const response = await fetch(getWebReqUrl('/api/extend/channel/importChannels'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '渠道导入失败');
+  }
+  return response.json();
+};
