@@ -92,8 +92,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         versionsCount: versionsResult.length
       }
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Import app error:', error);
+    // 处理 MongoDB BulkWriteError（重复 _id 冲突）
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code: number }).code === 11000
+    ) {
+      return res.status(409).json({
+        success: false,
+        error: '导入失败：存在重复的 ID，请检查是否已导入过相同数据'
+      });
+    }
     res.status(500).json({ success: false, error: 'Import failed' });
   }
 }
