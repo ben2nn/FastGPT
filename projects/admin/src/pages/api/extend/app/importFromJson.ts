@@ -74,13 +74,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const updatedVersions = versions.map((doc: Record<string, unknown>) => {
       const updated = { ...doc };
       updated.teamId = teamId;
+      updated.tmbId = tmbId;
       return updated;
     });
 
     // 8. 批量写入数据库
     const [appsResult, versionsResult] = await Promise.all([
-      MongoApp.insertMany(updatedApps, { ordered: false }).catch(() => []),
-      MongoAppVersion.insertMany(updatedVersions, { ordered: false }).catch(() => [])
+      MongoApp.insertMany(updatedApps, { ordered: false }),
+      MongoAppVersion.insertMany(updatedVersions, { ordered: false })
     ]);
 
     // 9. 返回导入结果
