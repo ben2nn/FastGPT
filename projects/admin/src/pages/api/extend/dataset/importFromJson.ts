@@ -58,6 +58,21 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
+    // 6.5. 检查导入数据量限制
+    const IMPORT_LIMIT = 50000;
+    const totalDocs =
+      datasets.length +
+      collections.length +
+      datas.length +
+      dataTexts.length +
+      collectionTags.length;
+    if (totalDocs > IMPORT_LIMIT) {
+      return res.status(400).json({
+        success: false,
+        error: `导入数据量超过限制：${totalDocs} 条，最大允许 ${IMPORT_LIMIT} 条`
+      });
+    }
+
     // 7. 处理 ID 映射
     const idMap = new Map<string, string>();
 
@@ -88,6 +103,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
       if (updated.collectionId) {
         updated.collectionId = updateId(updated.collectionId as string);
+      }
+      if (updated.dataId) {
+        updated.dataId = updateId(updated.dataId as string);
       }
       updated.teamId = teamId;
       updated.tmbId = tmbId;
