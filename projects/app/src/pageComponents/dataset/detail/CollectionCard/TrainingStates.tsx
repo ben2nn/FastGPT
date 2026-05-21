@@ -16,7 +16,7 @@ import { useTranslation } from 'next-i18next';
 import MyTag from '@fastgpt/web/components/common/Tag/index';
 import FillRowTabs from '@fastgpt/web/components/common/Tabs/FillRowTabs';
 import { useMemo, useState } from 'react';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import {
   deleteTrainingData,
   getDatasetCollectionTrainingDetail,
@@ -37,6 +37,7 @@ import { useScrollPagination } from '@fastgpt/web/hooks/useScrollPagination';
 import EmptyTip from '@fastgpt/web/components/common/EmptyTip';
 import MyImage from '@/components/MyImage';
 import FormLabel from '@fastgpt/web/components/common/MyBox/FormLabel';
+import React from 'react';
 
 enum TrainingStatus {
   NotStart = 'NotStart',
@@ -101,11 +102,10 @@ const ProgressView = ({ trainingDetail }: { trainingDetail: getTrainingDetailRes
     }[] = [
       {
         label: t(TrainingProcess.parsing.label),
-        status: (() => {
-          if (trainingDetail.errorCounts.parse > 0) return TrainingStatus.Error;
-          if (isContentParsing) return TrainingStatus.Running;
-          return TrainingStatus.Ready;
-        })(),
+        statusText: getStatusText(TrainingModeEnum.parse),
+        status: getTrainingStatus({
+          errorCount: trainingDetail.errorCounts.parse
+        }),
         errorCount: trainingDetail.errorCounts.parse
       },
       ...(isImageParse
@@ -316,7 +316,7 @@ const ErrorView = ({
     EmptyTip: <EmptyTip />
   });
 
-  const { runAsync: getData, loading: getDataLoading } = useRequest2(
+  const { runAsync: getData, loading: getDataLoading } = useRequest(
     (data: { datasetId: string; collectionId: string; dataId: string }) => {
       return getTrainingDataDetail(data);
     },
@@ -327,7 +327,7 @@ const ErrorView = ({
       }
     }
   );
-  const { runAsync: deleteData, loading: deleteLoading } = useRequest2(
+  const { runAsync: deleteData, loading: deleteLoading } = useRequest(
     (data: { datasetId: string; collectionId: string; dataId: string }) => {
       return deleteTrainingData(data);
     },
@@ -338,7 +338,7 @@ const ErrorView = ({
       }
     }
   );
-  const { runAsync: updateData, loading: updateLoading } = useRequest2(
+  const { runAsync: updateData, loading: updateLoading } = useRequest(
     (data: { datasetId: string; collectionId: string; dataId: string; q?: string; a?: string }) => {
       return updateTrainingData(data);
     },
@@ -382,7 +382,7 @@ const ErrorView = ({
               <Th pr={0}>{t('dataset:dataset.Chunk_Number')}</Th>
               <Th pr={0}>{t('dataset:dataset.Training_Status')}</Th>
               <Th>{t('dataset:dataset.Error_Message')}</Th>
-              <Th>{t('dataset:dataset.Operation')}</Th>
+              <Th w={'220px'}>{t('dataset:dataset.Operation')}</Th>
             </Tr>
           </Thead>
           <Tbody>
@@ -391,9 +391,11 @@ const ErrorView = ({
                 <Td>{item.chunkIndex + 1}</Td>
                 <Td>{TrainingText[item.mode]}</Td>
                 <Td maxW={50}>
-                  <MyTooltip label={item.errorMsg}>{item.errorMsg}</MyTooltip>
+                  <MyTooltip shouldWrapChildren={false} placement={'auto'} label={t(item.errorMsg)}>
+                    {t(item.errorMsg)}
+                  </MyTooltip>
                 </Td>
-                <Td>
+                <Td w={'220px'} px={3}>
                   <Flex alignItems={'center'}>
                     <Button
                       variant={'ghost'}
@@ -520,13 +522,25 @@ const TrainingStates = ({
     data: trainingDetail,
     loading,
     runAsync: refreshTrainingDetail
-  } = useRequest2(() => getDatasetCollectionTrainingDetail(collectionId), {
+  } = useRequest(() => getDatasetCollectionTrainingDetail(collectionId), {
     pollingInterval: 5000,
     pollingWhenHidden: false,
     manual: false
   });
 
-  const errorCounts = (Object.values(trainingDetail?.errorCounts || {}) as number[]).reduce(
+  // All retry logic
+  const { runAsync: handleRetryAll, loading: retrying } = useRequest(
+    () => updateTrainingData({ datasetId, collectionId }),
+    {
+      manual: true,
+      onSuccess: () => {
+        refreshTrainingDetail();
+      },
+      errorToast: t('dataset:retry_failed')
+    }
+  );
+
+  const errorCounts = Object.values(trainingDetail?.errorCounts || {}).reduce(
     (acc, count) => acc + count,
     0
   );
@@ -541,21 +555,25 @@ const TrainingStates = ({
       isLoading={!trainingDetail && loading && tab === 'states'}
     >
       <ModalBody px={9} minH={['90vh', '500px']}>
-        <FillRowTabs
-          py={1}
-          mb={6}
-          value={tab}
-          onChange={(e) => setTab(e as 'states' | 'errors')}
-          list={[
-            { label: t('dataset:dataset.Training Process'), value: 'states' },
-            {
-              label: t('dataset:dataset.Training_Errors', {
-                count: errorCounts
-              }),
-              value: 'errors'
-            }
-          ]}
-        />
+        <Flex align="center" justify="space-between" mb={4}>
+          <FillRowTabs
+            py={1}
+            value={tab}
+            onChange={(e) => setTab(e as 'states' | 'errors')}
+            list={[
+              { label: t('dataset:dataset.Training Process'), value: 'states' },
+              {
+                label: t('dataset:dataset.Training_Errors', { count: errorCounts }),
+                value: 'errors'
+              }
+            ]}
+          />
+          {tab === 'errors' && errorCounts > 0 && (
+            <Button variant={'whiteBase'} size="sm" isLoading={retrying} onClick={handleRetryAll}>
+              {t('dataset:retry_all')}
+            </Button>
+          )}
+        </Flex>
         {tab === 'states' && trainingDetail && <ProgressView trainingDetail={trainingDetail} />}
         {tab === 'errors' && (
           <ErrorView

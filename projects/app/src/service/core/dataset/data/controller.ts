@@ -17,8 +17,10 @@ import { type ClientSession } from '@fastgpt/service/common/mongo';
 import { MongoDatasetDataText } from '@fastgpt/service/core/dataset/data/dataTextSchema';
 import { DatasetDataIndexTypeEnum } from '@fastgpt/global/core/dataset/data/constants';
 import { countPromptTokens } from '@fastgpt/service/common/string/tiktoken';
-import { deleteDatasetImage } from '@fastgpt/service/core/dataset/image/controller';
+import { isS3ObjectKey } from '@fastgpt/service/common/s3/utils';
 import { text2Chunks } from '@fastgpt/service/worker/function';
+import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
+import { removeS3TTL } from '@fastgpt/service/common/s3/utils';
 
 const formatIndexes = async ({
   indexes = [],
@@ -203,32 +205,18 @@ export async function insertData2Dataset({
   });
 
   // insert to vector store
-  const results: {
-    tokens: number;
-    index: {
-      dataId: string;
-      type: `${DatasetDataIndexTypeEnum}`;
-      text: string;
-    };
-  }[] = [];
-  for await (const item of newIndexes) {
-    const result = await insertDatasetDataVector({
-      query: item.text,
-      model: embModel,
-      teamId,
-      datasetId,
-      collectionId
-    });
-    results.push({
-      tokens: result.tokens,
-      index: {
-        ...item,
-        dataId: result.insertId
-      }
-    });
-  }
+  const { tokens, insertIds } = await insertDatasetDataVector({
+    inputs: newIndexes.map((item) => item.text),
+    model: embModel,
+    teamId,
+    datasetId,
+    collectionId
+  });
+  const results = newIndexes.map((item, index) => ({
+    ...item,
+    dataId: insertIds[index]
+  }));
 
-  // 2. Create mongo data
   const [{ _id }] = await MongoDatasetData.create(
     [
       {
@@ -241,7 +229,7 @@ export async function insertData2Dataset({
         imageId,
         imageDescMap,
         chunkIndex,
-        indexes: results.map((item) => item.index)
+        indexes: results
       }
     ],
     { session, ordered: true }
@@ -261,9 +249,14 @@ export async function insertData2Dataset({
     { session, ordered: true }
   );
 
+  // 只移除图片数据集的图片的 TTL
+  if (isS3ObjectKey(imageId, 'dataset')) {
+    await removeS3TTL({ key: imageId, bucketName: 'private', session });
+  }
+
   return {
     insertId: _id,
-    tokens: results.reduce((acc, cur) => acc + cur.tokens, 0)
+    tokens
   };
 }
 
@@ -357,27 +350,30 @@ export async function updateData2Dataset({
   await mongoData.save();
 
   // 5. insert vector
-  const insertResults: {
-    tokens: number;
-  }[] = [];
-  for await (const item of patchResult) {
-    if (item.type === 'delete' || item.type === 'unChange') continue;
 
-    // insert new vector and update dateId
-    const result = await insertDatasetDataVector({
-      query: item.index.text,
-      model: getEmbeddingModel(model),
-      teamId: mongoData.teamId,
-      datasetId: mongoData.datasetId,
-      collectionId: mongoData.collectionId
-    });
-    item.index.dataId = result.insertId;
-    insertResults.push({
-      tokens: result.tokens
-    });
-  }
+  const insertItems = patchResult.filter(
+    (item) => item.type === 'create' || item.type === 'update'
+  );
+  const tokens = await (async () => {
+    if (insertItems.length > 0) {
+      // Batch insert vectors
+      const result = await insertDatasetDataVector({
+        inputs: insertItems.map((item) => item.index.text),
+        model: getEmbeddingModel(model),
+        teamId: mongoData.teamId,
+        datasetId: mongoData.datasetId,
+        collectionId: mongoData.collectionId
+      });
 
-  const tokens = insertResults.reduce((acc, cur) => acc + cur.tokens, 0);
+      // Update dataIds for the items
+      insertItems.forEach((item, index) => {
+        item.index.dataId = result.insertIds[index];
+      });
+
+      return result.tokens;
+    }
+    return 0;
+  })();
 
   const newIndexes = patchResult
     .filter((item) => item.type !== 'delete')
@@ -425,16 +421,19 @@ export async function updateData2Dataset({
 
 export const deleteDatasetData = async (data: DatasetDataItemType) => {
   await mongoSessionRun(async (session) => {
+    if (data.imageId && !isS3ObjectKey(data.imageId, 'dataset')) {
+      return Promise.reject('Invalid dataset image key');
+    }
+
     // 1. Delete MongoDB data
     await MongoDatasetData.deleteOne({ _id: data.id }, { session });
     await MongoDatasetDataText.deleteMany({ dataId: data.id }, { session });
 
-    // 2. If there are any image files, delete the image records and GridFS file.
     if (data.imageId) {
-      await deleteDatasetImage(data.imageId);
+      await getS3DatasetSource().deleteDatasetFileByKey(data.imageId);
     }
 
-    // 3. Delete vector data
+    // 2. Delete vector data
     await deleteDatasetDataVector({
       teamId: data.teamId,
       idList: data.indexes.map((item) => item.dataId)

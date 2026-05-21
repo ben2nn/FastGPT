@@ -1,4 +1,4 @@
-/* 
+/*
   insert one data to dataset (immediately insert)
   manual input or mark data
 */
@@ -16,7 +16,6 @@ import { checkDatasetIndexLimit } from '@fastgpt/service/support/permission/team
 import { NextAPI } from '@/service/middleware/entry';
 import { WritePermissionVal } from '@fastgpt/global/support/permission/constant';
 import { CommonErrEnum } from '@fastgpt/global/common/error/code/common';
-import { getLLMMaxChunkSize } from '@fastgpt/global/core/dataset/training/utils';
 import { addAuditLog } from '@fastgpt/service/support/user/audit/util';
 import { AuditEventEnum } from '@fastgpt/global/support/user/audit/constants';
 import { getI18nDatasetType } from '@fastgpt/service/support/user/audit/util';
@@ -61,14 +60,7 @@ async function handler(req: NextApiRequest) {
     text: simpleText(item.text)
   }));
 
-  const token = await countPromptTokens(formatQ + formatA, '');
   const vectorModelData = getEmbeddingModel(vectorModel);
-  const llmModelData = getLLMModel(agentModel);
-  const maxChunkSize = getLLMMaxChunkSize(llmModelData);
-
-  if (token > maxChunkSize) {
-    return Promise.reject(`Content over max chunk size: ${maxChunkSize}`);
-  }
 
   await hasSameValue({
     teamId,

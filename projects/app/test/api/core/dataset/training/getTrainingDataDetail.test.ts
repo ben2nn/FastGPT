@@ -19,7 +19,9 @@ describe('get training data detail test', () => {
     const dataset = await MongoDataset.create({
       name: 'test',
       teamId: root.teamId,
-      tmbId: root.tmbId
+      tmbId: root.tmbId,
+      vectorModel: 'test',
+      agentModel: 'test'
     });
     const collection = await MongoDatasetCollection.create({
       name: 'test',
@@ -49,8 +51,8 @@ describe('get training data detail test', () => {
 
     expect(res.code).toBe(200);
     expect(res.data).toBeDefined();
-    expect(res.data?._id).toStrictEqual(trainingData._id);
-    expect(res.data?.datasetId).toStrictEqual(dataset._id);
+    expect(res.data?._id).toStrictEqual(String(trainingData._id));
+    expect(res.data?.datasetId).toStrictEqual(String(dataset._id));
     expect(res.data?.mode).toBe(TrainingModeEnum.chunk);
     expect(res.data?.q).toBe('test');
     expect(res.data?.a).toBe('test');

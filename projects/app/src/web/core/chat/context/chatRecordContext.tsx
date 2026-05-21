@@ -1,16 +1,16 @@
-import { type getPaginationRecordsBody } from '@/pages/api/core/chat/getPaginationRecords';
 import { type ChatSiteItemType } from '@fastgpt/global/core/chat/type';
-import { type PaginationResponse } from '@fastgpt/web/common/fetch/type';
-import { useScrollPagination } from '@fastgpt/web/hooks/useScrollPagination';
-import React, { type ReactNode, useMemo, useState } from 'react';
-import { createContext, useContextSelector } from 'use-context-selector';
-import { ChatItemContext } from './chatItemContext';
+import type { LinkedPaginationProps, LinkedListResponse } from '@fastgpt/web/common/fetch/type';
+import { useLinkedScroll } from '@fastgpt/web/hooks/useLinkedScroll';
+import React, { type ReactNode, useState } from 'react';
+import { createContext } from 'use-context-selector';
 import { getChatRecords } from '../api';
 import { ChatStatusEnum } from '@fastgpt/global/core/chat/constants';
-import { getNanoid } from '@fastgpt/global/common/string/tools';
 import { type BoxProps } from '@chakra-ui/react';
+import { useMemoEnhance } from '@fastgpt/web/hooks/useMemoEnhance';
+import type { GetChatRecordsProps } from '@/global/core/chat/api';
 
 type ChatRecordContextType = {
+  isLoadingRecords: boolean;
   chatRecords: ChatSiteItemType[];
   setChatRecords: React.Dispatch<React.SetStateAction<ChatSiteItemType[]>>;
   isChatRecordsLoaded: boolean;
@@ -22,16 +22,17 @@ type ChatRecordContextType = {
     children: React.ReactNode;
     ScrollContainerRef?: React.RefObject<HTMLDivElement>;
   } & BoxProps) => React.JSX.Element;
+  itemRefs: React.MutableRefObject<Map<string, HTMLElement | null>>;
 };
 
 export const ChatRecordContext = createContext<ChatRecordContextType>({
+  isLoadingRecords: false,
   chatRecords: [],
   setChatRecords: function (value: React.SetStateAction<ChatSiteItemType[]>): void {
     throw new Error('Function not implemented.');
   },
   isChatRecordsLoaded: false,
 
-  totalRecordsCount: 0,
   ScrollData: function ({
     children,
     ...props
@@ -40,72 +41,74 @@ export const ChatRecordContext = createContext<ChatRecordContextType>({
     ScrollContainerRef?: React.RefObject<HTMLDivElement>;
   } & BoxProps): React.JSX.Element {
     throw new Error('Function not implemented.');
-  }
+  },
+  totalRecordsCount: 0,
+  itemRefs: { current: new Map() }
 });
 
 /* 
-    具体对话记录的上下文
+  具体对话记录的上下文
 */
 const ChatRecordContextProvider = ({
   children,
-  params
+  params,
+  feedbackRecordId
 }: {
   children: ReactNode;
-  params: Omit<getPaginationRecordsBody, 'offset' | 'pageSize'>;
+  params: GetChatRecordsProps;
+  feedbackRecordId?: string;
 }) => {
-  const ChatBoxRef = useContextSelector(ChatItemContext, (v) => v.ChatBoxRef);
   const [isChatRecordsLoaded, setIsChatRecordsLoaded] = useState(false);
+  const [totalRecordsCount, setTotalRecordsCount] = useState(0);
 
+  const currentData = useMemoEnhance(() => ({ id: feedbackRecordId || '' }), [feedbackRecordId]);
   const {
-    data: chatRecords,
+    dataList: chatRecords,
+    setDataList: setChatRecords,
     ScrollData,
-    setData: setChatRecords,
-    total: totalRecordsCount
-  } = useScrollPagination(
-    async (data: getPaginationRecordsBody): Promise<PaginationResponse<ChatSiteItemType>> => {
+    isLoading,
+    itemRefs
+  } = useLinkedScroll(
+    async (
+      data: LinkedPaginationProps<GetChatRecordsProps>
+    ): Promise<LinkedListResponse<ChatSiteItemType>> => {
       setIsChatRecordsLoaded(false);
 
-      const res = await getChatRecords(data);
-
-      // First load scroll to bottom
-      if (Number(data.offset) === 0) {
-        function scrollToBottom() {
-          requestAnimationFrame(
-            ChatBoxRef?.current ? () => ChatBoxRef?.current?.scrollToBottom?.() : scrollToBottom
-          );
-        }
-        scrollToBottom();
-      }
-
-      setIsChatRecordsLoaded(true);
+      const res = await getChatRecords(data).finally(() => {
+        setIsChatRecordsLoaded(true);
+      });
+      setTotalRecordsCount(res.total);
 
       return {
-        ...res,
         list: res.list.map((item) => ({
           ...item,
-          dataId: item.dataId || getNanoid(),
+          dataId: item.dataId!,
           status: ChatStatusEnum.finish
-        }))
+        })),
+        hasMorePrev: res.hasMorePrev,
+        hasMoreNext: res.hasMoreNext
       };
     },
     {
       pageSize: 10,
-      refreshDeps: [params],
       params,
-      scrollLoadType: 'top',
+      currentData,
+      defaultScroll: 'bottom',
       showErrorToast: false
     }
   );
 
-  const contextValue = useMemo(() => {
+  const contextValue = useMemoEnhance(() => {
     return {
+      isLoadingRecords: isLoading,
       chatRecords,
       setChatRecords,
-      totalRecordsCount,
       ScrollData,
-      isChatRecordsLoaded
+      isChatRecordsLoaded,
+      totalRecordsCount,
+      itemRefs
     };
-  }, [ScrollData, chatRecords, setChatRecords, totalRecordsCount, isChatRecordsLoaded]);
+  }, [isLoading, chatRecords, setChatRecords, totalRecordsCount, ScrollData, isChatRecordsLoaded]);
   return <ChatRecordContext.Provider value={contextValue}>{children}</ChatRecordContext.Provider>;
 };
 

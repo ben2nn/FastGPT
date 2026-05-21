@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import MyModal from '@fastgpt/web/components/common/MyModal';
 import { useTranslation } from 'next-i18next';
 import { Box, Button, HStack, ModalBody, ModalFooter, VStack, Flex, Link } from '@chakra-ui/react';
-import FileSelector, { type SelectFileItemType } from '../components/FileSelector';
+import FileSelector, { type SelectFileItemType } from '@/components/Select/FileSelectorBox';
 import MyIcon from '@fastgpt/web/components/common/Icon';
 import MyIconButton from '@fastgpt/web/components/common/Icon/button';
 import { postTemplateDatasetCollection } from '@/web/core/dataset/api';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import { DatasetPageContext } from '@/web/core/dataset/context/datasetPageContext';
 import { useContextSelector } from 'use-context-selector';
 import { getDocPath } from '@/web/common/system/doc';
@@ -25,7 +25,7 @@ const TemplateImportModal = ({
   const [selectFiles, setSelectFiles] = useState<SelectFileItemType[]>([]);
   const [percent, setPercent] = useState(0);
 
-  const { runAsync: onImport, loading: isImporting } = useRequest2(
+  const { runAsync: onImport, loading: isImporting } = useRequest(
     async () => {
       await postTemplateDatasetCollection({
         datasetId,
@@ -77,7 +77,7 @@ const TemplateImportModal = ({
               display={'flex'}
               alignItems={'center'}
               gap={0.5}
-              href={getDocPath('/docs/guide/knowledge_base/template/')}
+              href={getDocPath('/docs/introduction/guide/knowledge_base/template/')}
               color="primary.600"
               target="_blank"
             >
@@ -98,14 +98,13 @@ const TemplateImportModal = ({
 
           <FileSelector
             maxCount={1}
-            maxSize="100MB"
             fileType=".csv"
             selectFiles={selectFiles}
             setSelectFiles={setSelectFiles}
             FileTypeNode={
               <Box fontSize={'xs'}>
                 <Trans
-                  i18nKey={'file:template_csv_file_select_tip'}
+                  i18nKey="file:template_csv_file_select_tip"
                   values={{
                     fileType: '.csv'
                   }}

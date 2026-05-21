@@ -1,5 +1,5 @@
 import { NextAPI } from '@/service/middleware/entry';
-import { type McpToolConfigType } from '@fastgpt/global/core/app/type';
+import type { McpToolConfigType } from '@fastgpt/global/core/app/tool/mcpTool/type';
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { MCPClient } from '@fastgpt/service/core/app/mcp';
 import { type StoreSecretValueType } from '@fastgpt/global/common/secret/type';
@@ -24,7 +24,8 @@ async function handler(
     })
   });
 
-  return mcpClient.getTools();
+  const result = await mcpClient.getTools();
+  return result;
 }
 
 export default NextAPI(handler);

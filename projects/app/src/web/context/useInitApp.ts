@@ -5,44 +5,62 @@ import { useSystemStore } from '@/web/common/system/useSystemStore';
 import type { FastGPTFeConfigsType } from '@fastgpt/global/common/system/types/index.d';
 import { useMemoizedFn, useMount } from 'ahooks';
 import { TrackEventName } from '../common/system/constants';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import { useUserStore } from '../support/user/useUserStore';
 import {
   setBdVId,
   setFastGPTSem,
   setInviterId,
+  setMsclkid,
   setSourceDomain,
   setUtmParams,
   setUtmWorkflow
 } from '../support/marketing/utils';
 import { type ShortUrlParams } from '@fastgpt/global/support/marketing/type';
+import { setCouponCode } from '@/web/support/marketing/utils';
 
 type MarketingQueryParams = {
   hiId?: string;
   bd_vid?: string;
+  msclkid?: string;
   k?: string;
+  search?: string;
   sourceDomain?: string;
   utm_source?: string;
   utm_medium?: string;
   utm_content?: string;
   utm_workflow?: string;
+  couponCode?: string;
 };
 
 const MARKETING_PARAMS: (keyof MarketingQueryParams)[] = [
   'hiId',
   'bd_vid',
+  'msclkid',
   'k',
   'sourceDomain',
   'utm_source',
   'utm_medium',
   'utm_content',
-  'utm_workflow'
+  'utm_workflow',
+  'couponCode'
 ];
 
 export const useInitApp = () => {
   const router = useRouter();
-  const { hiId, bd_vid, k, sourceDomain, utm_source, utm_medium, utm_content, utm_workflow } =
-    router.query as MarketingQueryParams;
+  const {
+    hiId,
+    bd_vid,
+    msclkid,
+    k,
+    search,
+    sourceDomain,
+    utm_source,
+    utm_medium,
+    utm_content,
+    utm_workflow,
+    couponCode
+  } = router.query as MarketingQueryParams;
 
   const { loadGitStar, setInitd, feConfigs } = useSystemStore();
   const { userInfo } = useUserStore();
@@ -111,7 +129,7 @@ export const useInitApp = () => {
     };
   });
 
-  useRequest2(initFetch, {
+  useRequest(initFetch, {
     refreshDeps: [userInfo?.username],
     manual: false,
     pollingInterval: 300000 // 5 minutes refresh
@@ -121,6 +139,7 @@ export const useInitApp = () => {
   useMount(() => {
     setInviterId(hiId);
     setBdVId(bd_vid);
+    setMsclkid(msclkid);
     setUtmWorkflow(utm_workflow);
     setSourceDomain(sourceDomain);
 
@@ -132,7 +151,11 @@ export const useInitApp = () => {
     if (utm_workflow) {
       setUtmParams(utmParams);
     }
-    setFastGPTSem({ keyword: k, ...utmParams });
+    setFastGPTSem({ keyword: k, search, ...utmParams });
+
+    if (couponCode) {
+      setCouponCode(couponCode);
+    }
 
     const newPath = getPathWithoutMarketingParams();
     router.replace(newPath);

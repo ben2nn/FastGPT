@@ -6,6 +6,7 @@ import type { FlowNodeTemplateType } from '@fastgpt/global/core/workflow/type/no
 import type { Edge, Node, XYPosition } from 'reactflow';
 import { moduleTemplatesFlat } from '@fastgpt/global/core/workflow/template/constants';
 import {
+  AppNodeFlowNodeTypeMap,
   EDGE_TYPE,
   FlowNodeInputTypeEnum,
   FlowNodeOutputTypeEnum,
@@ -21,7 +22,7 @@ import { type EditorVariablePickerType } from '@fastgpt/web/components/common/Te
 import {
   formatEditorVariablePickerIcon,
   getAppChatConfig,
-  getGuideModule
+  getHandleId
 } from '@fastgpt/global/core/workflow/utils';
 import { type TFunction } from 'next-i18next';
 import {
@@ -34,6 +35,7 @@ import { VariableConditionEnum } from '@fastgpt/global/core/workflow/template/sy
 import { type AppChatConfigType } from '@fastgpt/global/core/app/type';
 import { cloneDeep, isEqual } from 'lodash';
 import { workflowSystemVariables } from '../app/utils';
+import type { WorkflowDataContextType } from '@/pageComponents/app/detail/WorkflowComponents/context/workflowInitContext';
 
 /* ====== node ======= */
 export const nodeTemplate2FlowNode = ({
@@ -86,7 +88,9 @@ export const storeNode2FlowNode = ({
     moduleTemplatesFlat.find((template) => template.flowNodeType === storeNode.flowNodeType) ||
     EmptyNode;
 
-  const templateInputs = template.inputs.filter((input) => !input.canEdit);
+  const templateInputs = template.inputs.filter(
+    (input) => !input.canEdit && input.deprecated !== true
+  );
   const templateOutputs = template.outputs.filter(
     (output) => output.type !== FlowNodeOutputTypeEnum.dynamic
   );
@@ -101,6 +105,7 @@ export const storeNode2FlowNode = ({
     ...storeNode,
     avatar: template.avatar ?? storeNode.avatar,
     version: template.version || storeNode.version,
+    catchError: storeNode.catchError ?? template.catchError,
     // template 中的输入必须都有
     inputs: templateInputs
       .map<FlowNodeInputItemType>((templateInput) => {
@@ -113,9 +118,7 @@ export const storeNode2FlowNode = ({
           debugLabel: t(templateInput.debugLabel ?? (storeInput.debugLabel as any)),
           toolDescription: t(templateInput.toolDescription ?? (storeInput.toolDescription as any)),
           selectedTypeIndex: storeInput.selectedTypeIndex ?? templateInput.selectedTypeIndex,
-          value: storeInput.value,
-          valueType: storeInput.valueType ?? templateInput.valueType,
-          label: storeInput.label ?? templateInput.label
+          value: storeInput.value
         };
       })
       .concat(
@@ -143,9 +146,7 @@ export const storeNode2FlowNode = ({
           ...templateOutput,
           description: t(templateOutput.description ?? (storeOutput.description as any)),
           id: storeOutput.id ?? templateOutput.id,
-          label: storeOutput.label ?? templateOutput.label,
-          value: storeOutput.value ?? templateOutput.value,
-          valueType: storeOutput.valueType ?? templateOutput.valueType
+          value: storeOutput.value ?? templateOutput.value
         };
       })
       .concat(
@@ -170,6 +171,7 @@ export const storeNode2FlowNode = ({
     zIndex
   };
 };
+
 export const filterSensitiveNodesData = (nodes: StoreNodeItemType[]) => {
   const cloneNodes = JSON.parse(JSON.stringify(nodes)) as StoreNodeItemType[];
 
@@ -183,6 +185,11 @@ export const filterSensitiveNodesData = (nodes: StoreNodeItemType[]) => {
       });
     }
 
+    for (const input of node.inputs) {
+      if (input.key === NodeInputKeyEnum.systemInputConfig) {
+        input.value = undefined;
+      }
+    }
     return node;
   });
   return cloneNodes;
@@ -222,11 +229,13 @@ export const getInputComponentProps = (input: FlowNodeInputItemType) => {
 /* ====== Reference ======= */
 export const getRefData = ({
   variable,
-  nodeList,
+  getNodeById,
+  systemConfigNode,
   chatConfig
 }: {
   variable?: ReferenceItemValueType;
-  nodeList: FlowNodeItemType[];
+  getNodeById: WorkflowDataContextType['getNodeById'];
+  systemConfigNode?: StoreNodeItemType;
   chatConfig: AppChatConfigType;
 }) => {
   if (!variable)
@@ -235,8 +244,8 @@ export const getRefData = ({
       required: false
     };
 
-  const node = nodeList.find((node) => node.nodeId === variable[0]);
-  const systemVariables = getWorkflowGlobalVariables({ nodes: nodeList, chatConfig });
+  const node = getNodeById(variable[0]);
+  const systemVariables = getWorkflowGlobalVariables({ systemConfigNode, chatConfig });
 
   if (!node) {
     const globalVariable = systemVariables.find((item) => item.key === variable?.[1]);
@@ -326,55 +335,65 @@ export const filterWorkflowNodeOutputsByType = (
       validTypeMap[valueType]?.includes(output.valueType)
   );
 };
-export const computedNodeInputReference = ({
+
+export const getNodeAllSource = ({
   nodeId,
-  nodes,
+  systemConfigNode,
+  getNodeById,
   edges,
   chatConfig,
   t
 }: {
   nodeId: string;
-  nodes: FlowNodeItemType[];
+  systemConfigNode?: StoreNodeItemType;
+  getNodeById: (nodeId: string | null | undefined) => FlowNodeItemType | undefined;
   edges: Edge[];
   chatConfig: AppChatConfigType;
   t: TFunction;
-}) => {
+}): FlowNodeItemType[] => {
   // get current node
-  const node = nodes.find((item) => item.nodeId === nodeId);
+  const node = getNodeById(nodeId);
   if (!node) {
-    return;
+    return [];
   }
+
   const parentId = node.parentNodeId;
-  let sourceNodes: FlowNodeItemType[] = [];
+  const sourceNodes = new Map<string, FlowNodeItemType>();
   // 根据 edge 获取所有的 source 节点（source节点会继续向前递归获取）
   const findSourceNode = (nodeId: string) => {
     const targetEdges = edges.filter((item) => item.target === nodeId || item.target === parentId);
     targetEdges.forEach((edge) => {
-      const sourceNode = nodes.find((item) => item.nodeId === edge.source);
+      const sourceNode = getNodeById(edge.source);
       if (!sourceNode) return;
 
       // 去重
-      if (sourceNodes.some((item) => item.nodeId === sourceNode.nodeId)) {
+      if (sourceNodes.has(sourceNode.nodeId)) {
         return;
       }
-      sourceNodes.push(sourceNode);
+      sourceNodes.set(sourceNode.nodeId, sourceNode);
       findSourceNode(sourceNode.nodeId);
     });
   };
   findSourceNode(nodeId);
 
-  sourceNodes.push(
+  sourceNodes.set(
+    'system_global_variable',
     getGlobalVariableNode({
-      nodes,
+      systemConfigNode,
       t,
       chatConfig
     })
   );
 
-  return sourceNodes;
+  return Array.from(sourceNodes.values());
 };
 
 /* ====== Connection ======= */
+// Connectivity check result type
+type ConnectivityIssue = {
+  nodeId: string;
+  issue: 'isolated' | 'no_input' | 'unreachable_from_start';
+};
 export const checkWorkflowNodeAndConnection = ({
   nodes,
   edges
@@ -382,7 +401,7 @@ export const checkWorkflowNodeAndConnection = ({
   nodes: Node<FlowNodeItemType, string | undefined>[];
   edges: Edge<any>[];
 }): string[] | undefined => {
-  // 1. reference check. Required value
+  // Node check
   for (const node of nodes) {
     const data = node.data;
     const inputs = data.inputs;
@@ -447,6 +466,15 @@ export const checkWorkflowNodeAndConnection = ({
         return [data.nodeId];
       }
     }
+    if (data.flowNodeType === FlowNodeTypeEnum.agent) {
+      const toolConnections = edges.filter(
+        (edge) =>
+          edge.source === data.nodeId && edge.sourceHandle === NodeOutputKeyEnum.selectedTools
+      );
+      if (toolConnections.length === 0) {
+        return [data.nodeId];
+      }
+    }
 
     // check node input
     if (
@@ -457,10 +485,11 @@ export const checkWorkflowNodeAndConnection = ({
         }
 
         if (input.required) {
-          if (input.value === undefined) return true;
+          if (input.value === undefined && input.valueType !== WorkflowIOValueTypeEnum.boolean) {
+            return true;
+          }
           if (Array.isArray(input.value) && input.value.length === 0) return true;
         }
-
         // check reference invalid
         const renderType = input.renderTypeList[input.selectedTypeIndex || 0];
         if (renderType === FlowNodeInputTypeEnum.reference) {
@@ -499,7 +528,7 @@ export const checkWorkflowNodeAndConnection = ({
       return [data.nodeId];
     }
 
-    // filter tools node edge
+    // Check node has invalid edge
     const edgeFilted = edges.filter(
       (edge) =>
         !(
@@ -507,7 +536,7 @@ export const checkWorkflowNodeAndConnection = ({
           edge.sourceHandle === NodeOutputKeyEnum.selectedTools
         )
     );
-    // check node has edge
+    // Check node has edge
     const hasEdge = edgeFilted.some(
       (edge) => edge.source === data.nodeId || edge.target === data.nodeId
     );
@@ -515,21 +544,121 @@ export const checkWorkflowNodeAndConnection = ({
       return [data.nodeId];
     }
   }
+
+  // Edge check
+
+  /**
+   * Check graph connectivity and identify connectivity issues
+   */
+  const checkConnectivity = (
+    nodes: Node<FlowNodeItemType, string | undefined>[],
+    edges: Edge<any>[]
+  ): string[] => {
+    // Find start node
+    const startNode = nodes.find(
+      (node) =>
+        node.data.flowNodeType === FlowNodeTypeEnum.workflowStart ||
+        node.data.flowNodeType === FlowNodeTypeEnum.pluginInput
+    );
+
+    if (!startNode) {
+      // No start node found - this is a critical issue
+      return nodes.map((node) => node.data.nodeId);
+    }
+
+    const issues: ConnectivityIssue[] = [];
+
+    // Build adjacency lists for both directions
+    const outgoing = new Map<string, string[]>();
+    const incoming = new Map<string, string[]>();
+
+    nodes.forEach((node) => {
+      outgoing.set(node.data.nodeId, []);
+      incoming.set(node.data.nodeId, []);
+    });
+
+    edges.forEach((edge) => {
+      const outList = outgoing.get(edge.source) || [];
+      outList.push(edge.target);
+      outgoing.set(edge.source, outList);
+
+      const inList = incoming.get(edge.target) || [];
+      inList.push(edge.source);
+      incoming.set(edge.target, inList);
+    });
+
+    // Check reachability from start node（Start node/Loop start 可以到达的地方）
+    const reachableFromStart = new Set<string>();
+    const dfsFromStart = (nodeId: string) => {
+      if (reachableFromStart.has(nodeId)) return;
+      reachableFromStart.add(nodeId);
+
+      const neighbors = outgoing.get(nodeId) || [];
+      neighbors.forEach((neighbor) => dfsFromStart(neighbor));
+    };
+    dfsFromStart(startNode.data.nodeId);
+    nodes.forEach((node) => {
+      if (node.data.flowNodeType === FlowNodeTypeEnum.loopStart) {
+        dfsFromStart(node.data.nodeId);
+      }
+    });
+
+    // Check each node for connectivity issues
+    for (const node of nodes) {
+      const nodeId = node.data.nodeId;
+      const nodeType = node.data.flowNodeType;
+
+      // Skip system nodes that don't need connectivity checks
+      if (
+        nodeType === FlowNodeTypeEnum.systemConfig ||
+        nodeType === FlowNodeTypeEnum.pluginConfig ||
+        nodeType === FlowNodeTypeEnum.comment ||
+        nodeType === FlowNodeTypeEnum.globalVariable ||
+        nodeType === FlowNodeTypeEnum.emptyNode
+      ) {
+        continue;
+      }
+
+      const hasIncoming = (incoming.get(nodeId) || []).length > 0;
+      const hasOutgoing = (outgoing.get(nodeId) || []).length > 0;
+      const isStartNode = [
+        FlowNodeTypeEnum.workflowStart,
+        FlowNodeTypeEnum.pluginInput,
+        FlowNodeTypeEnum.loopStart
+      ].includes(nodeType);
+
+      // Check if node is reachable from start
+      if (!isStartNode && !reachableFromStart.has(nodeId)) {
+        issues.push({
+          nodeId,
+          issue: 'unreachable_from_start'
+        });
+        break;
+      }
+    }
+
+    return issues.map((issue) => issue.nodeId);
+  };
+
+  const connectivityIssues = checkConnectivity(nodes, edges);
+  if (connectivityIssues.length > 0) {
+    return connectivityIssues;
+  }
 };
 
 /* ====== Variables ======= */
 /* get workflowStart output to global variables */
 export const getWorkflowGlobalVariables = ({
-  nodes,
+  systemConfigNode,
   chatConfig
 }: {
-  nodes: FlowNodeItemType[];
+  systemConfigNode?: StoreNodeItemType;
   chatConfig: AppChatConfigType;
 }): EditorVariablePickerType[] => {
   const globalVariables = formatEditorVariablePickerIcon(
     getAppChatConfig({
       chatConfig,
-      systemConfigNode: getGuideModule(nodes),
+      systemConfigNode,
       isPublicFetch: true
     })?.variables || []
   );
@@ -651,4 +780,59 @@ export const compareSnapshot = (
   });
 
   return isEqual(node1, node2);
+};
+
+/* ====== Adapt ======= */
+// 给旧版的代码运行和 HTTP 节点，追加一个错误信息的连线
+export const adaptCatchError = (nodes: StoreNodeItemType[], edges: StoreEdgeItemType[]) => {
+  nodes.forEach((node) => {
+    if (
+      (node.flowNodeType === FlowNodeTypeEnum.code ||
+        node.flowNodeType === FlowNodeTypeEnum.httpRequest468) &&
+      node.catchError === undefined
+    ) {
+      // Get edge
+      const sourceEdges = edges.filter((edge) => edge.source === node.nodeId);
+      edges.push(
+        ...sourceEdges.map((edge) => {
+          return {
+            source: edge.source,
+            sourceHandle: getHandleId(edge.source, 'source_catch', 'right'),
+            target: edge.target,
+            targetHandle: edge.targetHandle
+          };
+        })
+      );
+      node.catchError = true;
+    }
+
+    if (node.catchError === undefined && node.pluginId) {
+      if (
+        [
+          'systemTool-dalle3',
+          'systemTool-aliModelStudio/flux',
+          'systemTool-aliModelStudio/wanxTxt2ImgV2',
+          'systemTool-blackForestLab/kontextEditing',
+          'systemTool-blackForestLab/kontextGeneration',
+          'systemTool-bocha',
+          'systemTool-searchXNG'
+        ].includes(node.pluginId)
+      ) {
+        const sourceEdges = edges.filter((edge) => edge.source === node.nodeId);
+        edges.push(
+          ...sourceEdges.map((edge) => {
+            return {
+              source: edge.source,
+              sourceHandle: getHandleId(edge.source, 'source_catch', 'right'),
+              target: edge.target,
+              targetHandle: edge.targetHandle
+            };
+          })
+        );
+        node.catchError = true;
+      } else {
+        node.catchError = false;
+      }
+    }
+  });
 };

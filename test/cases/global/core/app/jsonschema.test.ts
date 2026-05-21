@@ -3,7 +3,7 @@ import type { JSONSchemaInputType } from '@fastgpt/global/core/app/jsonschema';
 import { jsonSchema2NodeInput } from '@fastgpt/global/core/app/jsonschema';
 
 describe('jsonSchema2NodeInput', () => {
-  it('should return correct node input', () => {
+  it('should return correct node input for http schema', () => {
     const jsonSchema: JSONSchemaInputType = {
       type: 'object',
       properties: {
@@ -25,15 +25,15 @@ describe('jsonSchema2NodeInput', () => {
         key: 'name',
         label: 'name',
         valueType: 'string',
-        toolDescription: 'name',
+        toolDescription: undefined,
         required: true,
-        renderTypeList: ['input']
+        renderTypeList: ['input', 'reference']
       },
       {
         key: 'select',
         label: 'select',
         valueType: 'string',
-        toolDescription: 'select',
+        toolDescription: undefined,
         required: false,
         value: '11',
         renderTypeList: ['select'],
@@ -52,9 +52,9 @@ describe('jsonSchema2NodeInput', () => {
         key: 'age',
         label: 'age',
         valueType: 'number',
-        toolDescription: 'age',
+        toolDescription: undefined,
         required: true,
-        renderTypeList: ['numberInput'],
+        renderTypeList: ['numberInput', 'reference'],
         max: 100,
         min: 0
       },
@@ -62,7 +62,7 @@ describe('jsonSchema2NodeInput', () => {
         key: 'boolean',
         label: 'boolean',
         valueType: 'boolean',
-        toolDescription: 'boolean',
+        toolDescription: undefined,
         required: false,
         renderTypeList: ['switch']
       },
@@ -70,52 +70,96 @@ describe('jsonSchema2NodeInput', () => {
         key: 'object',
         label: 'object',
         valueType: 'object',
-        toolDescription: 'object',
+        toolDescription: undefined,
         required: false,
-        renderTypeList: ['JSONEditor']
+        renderTypeList: ['JSONEditor', 'reference']
       },
       {
         key: 'strArr',
         label: 'strArr',
         valueType: 'arrayString',
-        toolDescription: 'strArr',
+        toolDescription: undefined,
         required: false,
-        renderTypeList: ['JSONEditor']
+        renderTypeList: ['JSONEditor', 'reference']
       },
       {
         key: 'numArr',
         label: 'numArr',
         valueType: 'arrayNumber',
-        toolDescription: 'numArr',
+        toolDescription: undefined,
         required: false,
-        renderTypeList: ['JSONEditor']
+        renderTypeList: ['JSONEditor', 'reference']
       },
       {
         key: 'boolArr',
         label: 'boolArr',
         valueType: 'arrayBoolean',
-        toolDescription: 'boolArr',
+        toolDescription: undefined,
         required: false,
-        renderTypeList: ['JSONEditor']
+        renderTypeList: ['JSONEditor', 'reference']
       },
       {
         key: 'objArr',
         label: 'objArr',
         valueType: 'arrayObject',
-        toolDescription: 'objArr',
+        toolDescription: undefined,
         required: false,
-        renderTypeList: ['JSONEditor']
+        renderTypeList: ['JSONEditor', 'reference']
       },
       {
         key: 'anyArr',
         label: 'anyArr',
         valueType: 'arrayAny',
-        toolDescription: 'anyArr',
+        toolDescription: undefined,
         required: false,
-        renderTypeList: ['JSONEditor']
+        renderTypeList: ['JSONEditor', 'reference']
       }
     ];
-    const result = jsonSchema2NodeInput(jsonSchema);
+    const result = jsonSchema2NodeInput({ jsonSchema, schemaType: 'http' });
+
+    expect(result).toEqual(expectResponse);
+  });
+
+  it('should return correct node input for mcp schema', () => {
+    const jsonSchema: JSONSchemaInputType = {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'User name' },
+        age: { type: 'number', minimum: 0, maximum: 100 },
+        withoutDesc: { type: 'string' }
+      },
+      required: ['name']
+    };
+    const expectResponse = [
+      {
+        key: 'name',
+        label: 'name',
+        valueType: 'string',
+        description: 'User name',
+        toolDescription: 'User name',
+        required: true,
+        renderTypeList: ['input', 'reference']
+      },
+      {
+        key: 'age',
+        label: 'age',
+        valueType: 'number',
+        toolDescription: 'age',
+        required: false,
+        renderTypeList: ['numberInput', 'reference'],
+        max: 100,
+        min: 0
+      },
+      {
+        key: 'withoutDesc',
+        label: 'withoutDesc',
+        valueType: 'string',
+        toolDescription: 'withoutDesc',
+        required: false,
+        renderTypeList: ['input', 'reference']
+      }
+    ];
+    const result = jsonSchema2NodeInput({ jsonSchema, schemaType: 'mcp' });
 
     expect(result).toEqual(expectResponse);
   });

@@ -1,19 +1,16 @@
 import type { NextApiRequest } from 'next';
 import { authDataset } from '@fastgpt/service/support/permission/dataset/auth';
-import { delDatasetRelevantData } from '@fastgpt/service/core/dataset/controller';
-import { findDatasetAndAllChildren } from '@fastgpt/service/core/dataset/controller';
 import { MongoDataset } from '@fastgpt/service/core/dataset/schema';
-import { mongoSessionRun } from '@fastgpt/service/common/mongo/sessionRun';
+import { findDatasetAndAllChildren } from '@fastgpt/service/core/dataset/controller';
 import { NextAPI } from '@/service/middleware/entry';
 import { OwnerPermissionVal } from '@fastgpt/global/support/permission/constant';
 import { CommonErrEnum } from '@fastgpt/global/common/error/code/common';
-import { MongoDatasetCollectionTags } from '@fastgpt/service/core/dataset/tag/schema';
-import { removeImageByPath } from '@fastgpt/service/common/file/image/controller';
-import { DatasetTypeEnum } from '@fastgpt/global/core/dataset/constants';
-import { removeWebsiteSyncJobScheduler } from '@fastgpt/service/core/dataset/websiteSync';
 import { addAuditLog } from '@fastgpt/service/support/user/audit/util';
 import { AuditEventEnum } from '@fastgpt/global/support/user/audit/constants';
 import { getI18nDatasetType } from '@fastgpt/service/support/user/audit/util';
+import { addDatasetDeleteJob } from '@fastgpt/service/core/dataset/delete';
+import { mongoSessionRun } from '@fastgpt/service/common/mongo/sessionRun';
+import { deleteDatasetsImmediate } from '@fastgpt/service/core/dataset/delete/processor';
 
 async function handler(req: NextApiRequest) {
   const { id: datasetId } = req.query as {
@@ -33,44 +30,41 @@ async function handler(req: NextApiRequest) {
     per: OwnerPermissionVal
   });
 
-  const datasets = await findDatasetAndAllChildren({
+  const deleteDatasets = await findDatasetAndAllChildren({
     teamId,
-    datasetId
+    datasetId,
+    fields: '_id'
   });
-  const datasetIds = datasets.map((d) => d._id);
+  const datasetIds = deleteDatasets.map((d) => d._id);
 
-  // delete collection.tags
-  await MongoDatasetCollectionTags.deleteMany({
-    teamId,
-    datasetId: { $in: datasetIds }
-  });
-
-  // Remove cron job
-  await Promise.all(
-    datasets.map((dataset) => {
-      if (dataset.type === DatasetTypeEnum.websiteDataset)
-        return removeWebsiteSyncJobScheduler(dataset._id);
-    })
-  );
-
-  // delete all dataset.data and pg data
   await mongoSessionRun(async (session) => {
-    // delete dataset data
-    await delDatasetRelevantData({ datasets, session });
-
-    // delete dataset
-    await MongoDataset.deleteMany(
+    // 1. Mark as deleted
+    await MongoDataset.updateMany(
       {
-        _id: { $in: datasetIds }
+        _id: datasetIds,
+        teamId
       },
-      { session }
+      {
+        deleteTime: new Date()
+      },
+      {
+        session
+      }
     );
 
-    for await (const dataset of datasets) {
-      await removeImageByPath(dataset.avatar, session);
-    }
+    await deleteDatasetsImmediate({
+      teamId,
+      datasetIds
+    });
+
+    // 2. Add to delete queue
+    await addDatasetDeleteJob({
+      teamId,
+      datasetId
+    });
   });
 
+  // 3. Add audit log
   (async () => {
     addAuditLog({
       tmbId,

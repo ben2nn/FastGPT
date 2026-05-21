@@ -6,7 +6,7 @@ import type { DatasetItemType } from '@fastgpt/global/core/dataset/type.d';
 import Avatar from '@fastgpt/web/components/common/Avatar';
 import { useTranslation } from 'next-i18next';
 import { useSystemStore } from '@/web/common/system/useSystemStore';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import AIModelSelector from '@/components/Select/AIModelSelector';
 import { postRebuildEmbedding } from '@/web/core/dataset/api';
 import type { EmbeddingModelItemType } from '@fastgpt/global/core/ai/model.d';
@@ -17,7 +17,7 @@ import { DatasetTypeEnum, DatasetTypeMap } from '@fastgpt/global/core/dataset/co
 import QuestionTip from '@fastgpt/web/components/common/MyTooltip/QuestionTip';
 import FormLabel from '@fastgpt/web/components/common/MyBox/FormLabel';
 import MyIcon from '@fastgpt/web/components/common/Icon';
-import { DatasetPermissionList } from '@fastgpt/global/support/permission/dataset/constant';
+import { DatasetRoleList } from '@fastgpt/global/support/permission/dataset/constant';
 import MemberManager from '../../MemberManager';
 import {
   getCollaboratorList,
@@ -29,6 +29,7 @@ import dynamic from 'next/dynamic';
 import type { EditAPIDatasetInfoFormType } from './components/EditApiServiceModal';
 import { type EditResourceInfoFormType } from '@/components/common/Modal/EditResourceModal';
 import MyTooltip from '@fastgpt/web/components/common/MyTooltip';
+import { ReadRoleVal } from '@fastgpt/global/support/permission/constant';
 
 const EditResourceModal = dynamic(() => import('@/components/common/Modal/EditResourceModal'));
 const EditAPIDatasetInfoModal = dynamic(() => import('./components/EditApiServiceModal'));
@@ -65,7 +66,7 @@ const Info = ({ datasetId }: { datasetId: string }) => {
       title: t('common:action_confirm')
     });
 
-  const { runAsync: onSave } = useRequest2(
+  const { runAsync: onSave } = useRequest(
     (data: DatasetItemType) => {
       return updateDataset({
         id: datasetId,
@@ -80,7 +81,7 @@ const Info = ({ datasetId }: { datasetId: string }) => {
     }
   );
 
-  const { runAsync: onRebuilding } = useRequest2(
+  const { runAsync: onRebuilding } = useRequest(
     (vectorModel: EmbeddingModelItemType) => {
       return postRebuildEmbedding({
         datasetId,
@@ -97,7 +98,7 @@ const Info = ({ datasetId }: { datasetId: string }) => {
     }
   );
 
-  const { runAsync: onEditBaseInfo } = useRequest2(updateDataset, {
+  const { runAsync: onEditBaseInfo } = useRequest(updateDataset, {
     onSuccess() {
       setEditedDataset(undefined);
     },
@@ -194,9 +195,11 @@ const Info = ({ datasetId }: { datasetId: string }) => {
               onChange={(e) => {
                 const vectorModel = embeddingModelList.find((item) => item.model === e);
                 if (!vectorModel) return;
-                return onOpenConfirmRebuild(async () => {
-                  await onRebuilding(vectorModel);
-                  setValue('vectorModel', vectorModel);
+                return onOpenConfirmRebuild({
+                  onConfirm: async () => {
+                    await onRebuilding(vectorModel);
+                    setValue('vectorModel', vectorModel);
+                  }
                 })();
               }}
             />
@@ -263,16 +266,15 @@ const Info = ({ datasetId }: { datasetId: string }) => {
                 const autoSync = e.target.checked;
                 const text = autoSync ? t('dataset:open_auto_sync') : t('dataset:close_auto_sync');
 
-                onOpenConfirmSyncSchedule(
-                  async () => {
+                onOpenConfirmSyncSchedule({
+                  onConfirm: async () => {
                     return updateDataset({
                       id: datasetId,
                       autoSync
                     });
                   },
-                  undefined,
-                  text
-                )();
+                  customContent: text
+                })();
               }}
             />
           </Flex>
@@ -380,9 +382,10 @@ const Info = ({ datasetId }: { datasetId: string }) => {
           <Box>
             <MemberManager
               managePer={{
+                defaultRole: ReadRoleVal,
                 permission: datasetDetail.permission,
                 onGetCollaboratorList: () => getCollaboratorList(datasetId),
-                permissionList: DatasetPermissionList,
+                roleList: DatasetRoleList,
                 onUpdateCollaborators: (body) =>
                   postUpdateDatasetCollaborators({
                     ...body,

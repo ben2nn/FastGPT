@@ -4,25 +4,23 @@ import { useForm } from 'react-hook-form';
 import { LoginPageTypeEnum } from '@/web/support/user/login/constants';
 import { postRegister } from '@/web/support/user/api';
 import { useSendCode } from '@/web/support/user/hooks/useSendCode';
-import type { ResLogin } from '@/global/support/api/userRes';
+import type { LoginSuccessResponse } from '@/global/support/api/userRes';
 import { useToast } from '@fastgpt/web/hooks/useToast';
-import { postCreateApp } from '@/web/core/app/api';
-import { emptyTemplates } from '@/web/core/app/templates';
 import { useSystemStore } from '@/web/common/system/useSystemStore';
 import { useTranslation } from 'next-i18next';
-import type { AppTypeEnum } from '@fastgpt/global/core/app/constants';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import {
   getBdVId,
   getFastGPTSem,
   getInviterId,
+  getMsclkid,
   getSourceDomain,
   removeFastGPTSem
 } from '@/web/support/marketing/utils';
 import { checkPasswordRule } from '@fastgpt/global/common/string/password';
 
 interface Props {
-  loginSuccess: (e: ResLogin) => void;
+  loginSuccess: (e: LoginSuccessResponse) => void;
   setPageType: Dispatch<`${LoginPageTypeEnum}`>;
 }
 
@@ -49,9 +47,9 @@ const RegisterForm = ({ setPageType, loginSuccess }: Props) => {
   });
   const username = watch('username');
 
-  const { SendCodeBox } = useSendCode({ type: 'register' });
+  const { SendCodeBox, openCodeAuthModal } = useSendCode({ type: 'register' });
 
-  const { runAsync: onclickRegister, loading: requesting } = useRequest2(
+  const { runAsync: onclickRegister, loading: requesting } = useRequest(
     async ({ username, password, code }: RegisterType) => {
       loginSuccess(
         await postRegister({
@@ -60,6 +58,7 @@ const RegisterForm = ({ setPageType, loginSuccess }: Props) => {
           password,
           inviterId: getInviterId(),
           bd_vid: getBdVId(),
+          msclkid: getMsclkid(),
           fastgpt_sem: getFastGPTSem(),
           sourceDomain: getSourceDomain()
         })
@@ -70,19 +69,6 @@ const RegisterForm = ({ setPageType, loginSuccess }: Props) => {
         status: 'success',
         title: t('user:register.success')
       });
-
-      // auto register template app
-      setTimeout(() => {
-        Object.entries(emptyTemplates).map(([type, emptyTemplate]) => {
-          postCreateApp({
-            avatar: emptyTemplate.avatar,
-            name: t(emptyTemplate.name as any),
-            modules: emptyTemplate.nodes,
-            edges: emptyTemplate.edges,
-            type: type as AppTypeEnum
-          });
-        });
-      }, 100);
     },
     {
       refreshDeps: [loginSuccess, t, toast]
@@ -120,7 +106,7 @@ const RegisterForm = ({ setPageType, loginSuccess }: Props) => {
       <Box
         mt={9}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && !requesting) {
+          if (!openCodeAuthModal && e.key === 'Enter' && !e.shiftKey && !requesting) {
             handleSubmit(onclickRegister, onSubmitErr)();
           }
         }}
@@ -206,7 +192,6 @@ const RegisterForm = ({ setPageType, loginSuccess }: Props) => {
           float={'right'}
           fontSize="mini"
           mt={3}
-          mb={'50px'}
           fontWeight={'medium'}
           color={'primary.700'}
           cursor={'pointer'}

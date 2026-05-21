@@ -2,7 +2,7 @@ import { GET, POST, PUT, DELETE } from '@/web/common/api/request';
 import type {
   GetPathProps,
   ParentTreePathItemType
-} from '@fastgpt/global/common/parentFolder/type.d';
+} from '@fastgpt/global/common/parentFolder/type';
 import type {
   DatasetItemType,
   DatasetListItemType,
@@ -13,7 +13,7 @@ import type {
 import type { GetDatasetCollectionsProps } from '@/global/core/api/datasetReq.d';
 import type {
   AddTagsToCollectionsParams,
-  ApiDatasetCreateDatasetCollectionParams,
+  ApiDatasetCreateDatasetCollectionV2Params,
   CreateDatasetCollectionParams,
   CreateDatasetCollectionTagParams,
   DatasetUpdateBody,
@@ -21,7 +21,7 @@ import type {
   FileIdCreateDatasetCollectionParams,
   reTrainingDatasetFileCollectionParams,
   LinkCreateDatasetCollectionParams,
-  PostWebsiteSyncParams,
+  PostDatasetSyncParams,
   TextCreateDatasetCollectionParams,
   UpdateDatasetCollectionTagParams
 } from '@fastgpt/global/core/dataset/api.d';
@@ -57,7 +57,6 @@ import type {
 } from '@/pages/api/core/dataset/apiDataset/listExistId';
 import type { GetQuoteDataResponse } from '@/pages/api/core/dataset/data/getQuoteData';
 import type { GetQuotePermissionResponse } from '@/pages/api/core/dataset/data/getPermission';
-import type { GetQueueLenResponse } from '@/pages/api/core/dataset/training/getQueueLen';
 import type { updateTrainingDataBody } from '@/pages/api/core/dataset/training/updateTrainingData';
 import type {
   getTrainingDataDetailBody,
@@ -69,7 +68,7 @@ import type {
   getTrainingErrorBody,
   getTrainingErrorResponse
 } from '@/pages/api/core/dataset/training/getTrainingError';
-import type { APIFileItem } from '@fastgpt/global/core/dataset/apiDataset/type';
+import type { APIFileItemType } from '@fastgpt/global/core/dataset/apiDataset/type';
 import type { GetQuoteDataProps } from '@/pages/api/core/dataset/data/getQuoteData';
 import type {
   GetApiDatasetCataLogResponse,
@@ -79,6 +78,11 @@ import type {
   GetApiDatasetPathBody,
   GetApiDatasetPathResponse
 } from '@/pages/api/core/dataset/apiDataset/getPathNames';
+import type { DelCollectionBody } from '@/pages/api/core/dataset/collection/delete';
+import type {
+  DatasetCreateWithFilesBody,
+  DatasetCreateWithFilesResponse
+} from '@/pages/api/core/dataset/createWithFiles';
 
 /* ======================== dataset ======================= */
 export const getDatasets = (data: GetDatasetListBody) =>
@@ -100,12 +104,15 @@ export const getDatasetById = (id: string) => GET<DatasetItemType>(`/core/datase
 export const postCreateDataset = (data: CreateDatasetParams) =>
   POST<string>(`/core/dataset/create`, data);
 
+export const postCreateDatasetWithFiles = (data: DatasetCreateWithFilesBody) =>
+  POST<DatasetCreateWithFilesResponse>(`/core/dataset/createWithFiles`, data);
+
 export const putDatasetById = (data: DatasetUpdateBody) => PUT<void>(`/core/dataset/update`, data);
 
 export const delDatasetById = (id: string) => DELETE(`/core/dataset/delete?id=${id}`);
 
-export const postWebsiteSync = (data: PostWebsiteSyncParams) =>
-  POST(`/proApi/core/dataset/websiteSync`, data, {
+export const postDatasetSync = (data: PostDatasetSyncParams) =>
+  POST(`/proApi/core/dataset/datasetSync`, data, {
     timeout: 600000
   }).catch();
 
@@ -138,9 +145,6 @@ export const postBackupDatasetCollection = ({
 
       const percent = Math.round((e.loaded / e.total) * 100);
       percentListen?.(percent);
-    },
-    headers: {
-      'Content-Type': 'multipart/form-data; charset=utf-8'
     }
   });
 };
@@ -164,9 +168,6 @@ export const postTemplateDatasetCollection = ({
 
       const percent = Math.round((e.loaded / e.total) * 100);
       percentListen?.(percent);
-    },
-    headers: {
-      'Content-Type': 'multipart/form-data; charset=utf-8'
     }
   });
 };
@@ -208,16 +209,16 @@ export const postCreateDatasetExternalFileCollection = (
     timeout: 360000
   });
 export const postCreateDatasetApiDatasetCollection = (
-  data: ApiDatasetCreateDatasetCollectionParams
+  data: ApiDatasetCreateDatasetCollectionV2Params
 ) =>
-  POST<{ collectionId: string }>(`/core/dataset/collection/create/apiCollection`, data, {
+  POST(`/core/dataset/collection/create/apiCollectionV2`, data, {
     timeout: 360000
   });
 
 export const putDatasetCollectionById = (data: UpdateDatasetCollectionParams) =>
   POST(`/core/dataset/collection/update`, data);
-export const delDatasetCollectionById = (params: { id: string }) =>
-  DELETE(`/core/dataset/collection/delete`, params);
+export const delDatasetCollectionById = (params: DelCollectionBody) =>
+  POST(`/core/dataset/collection/delete`, params);
 export const postLinkCollectionSync = (collectionId: string) =>
   POST<DatasetCollectionSyncResultEnum>(`/core/dataset/collection/sync`, {
     collectionId
@@ -280,9 +281,6 @@ export const getQuoteData = (data: GetQuoteDataProps) =>
 export const postRebuildEmbedding = (data: rebuildEmbeddingBody) =>
   POST(`/core/dataset/training/rebuildEmbedding`, data);
 
-/* get length of system training queue */
-export const getTrainingQueueLen = () =>
-  GET<GetQueueLenResponse>(`/core/dataset/training/getQueueLen`);
 export const getDatasetTrainingQueue = (datasetId: string) =>
   GET<getDatasetTrainingQueueResponse>(`/core/dataset/training/getDatasetTrainingQueue`, {
     datasetId
@@ -309,7 +307,7 @@ export const getCollectionSource = (data: readCollectionSourceBody) =>
 
 /* ================== apiDataset ======================== */
 export const getApiDatasetFileList = (data: GetApiDatasetFileListProps) =>
-  POST<APIFileItem[]>('/core/dataset/apiDataset/list', data);
+  POST<APIFileItemType[]>('/core/dataset/apiDataset/list', data);
 export const getApiDatasetFileListExistId = (data: listExistIdQuery) =>
   GET<listExistIdResponse>('/core/dataset/apiDataset/listExistId', data);
 

@@ -15,6 +15,7 @@ import { type NextPage } from 'next';
 import { getWebReqUrl } from '@fastgpt/web/common/system/utils';
 import SystemStoreContextProvider from '@fastgpt/web/context/useSystem';
 import { useRouter } from 'next/router';
+import { errorLogger } from '@/web/common/utils/errorLogger';
 
 type NextPageWithLayout = NextPage & {
   setLayout?: (page: ReactElement) => JSX.Element;
@@ -24,13 +25,9 @@ type AppPropsWithLayout = AppProps & {
 };
 
 // 哪些路由有自定义 Head
-const routesWithCustomHead = [
-  '/chat',
-  '/chat/share',
-  'chat/team',
-  '/app/detail/',
-  '/dataset/detail'
-];
+const routesWithCustomHead = ['/chat', '/chat/share', '/app/detail/', '/dataset/detail'];
+// 哪些路由不需要 Layout
+const routesWithoutLayout = ['/openapi'];
 
 function App({ Component, pageProps }: AppPropsWithLayout) {
   const { feConfigs, scripts, title } = useInitApp();
@@ -47,23 +44,38 @@ function App({ Component, pageProps }: AppPropsWithLayout) {
       },
       { passive: false }
     );
+
+    // Initialize error logger
+    errorLogger.init();
   }, []);
 
   const setLayout = Component.setLayout || ((page) => <>{page}</>);
 
   const router = useRouter();
   const showHead = !router?.pathname || !routesWithCustomHead.includes(router.pathname);
+  const shouldUseLayout = !router?.pathname || !routesWithoutLayout.includes(router.pathname);
+
+  if (router.pathname === '/openapi') {
+    return (
+      <>
+        {showHead && (
+          <NextHead
+            title={title}
+            desc={process.env.SYSTEM_DESCRIPTION || t('common:system_intro', { title })}
+            icon={getWebReqUrl(feConfigs?.favicon || process.env.SYSTEM_FAVICON)}
+          />
+        )}
+        {setLayout(<Component {...pageProps} />)}
+      </>
+    );
+  }
 
   return (
     <>
       {showHead && (
         <NextHead
           title={title}
-          desc={
-            feConfigs?.systemDescription ||
-            process.env.SYSTEM_DESCRIPTION ||
-            `${title}${t('app:intro')}`
-          }
+          desc={process.env.SYSTEM_DESCRIPTION || t('common:system_intro', { title })}
           icon={getWebReqUrl(feConfigs?.favicon || process.env.SYSTEM_FAVICON)}
         />
       )}
@@ -73,7 +85,11 @@ function App({ Component, pageProps }: AppPropsWithLayout) {
       <QueryClientContext>
         <SystemStoreContextProvider device={pageProps.deviceSize}>
           <ChakraUIContext>
-            <Layout>{setLayout(<Component {...pageProps} />)}</Layout>
+            {shouldUseLayout ? (
+              <Layout>{setLayout(<Component {...pageProps} />)}</Layout>
+            ) : (
+              setLayout(<Component {...pageProps} />)
+            )}
           </ChakraUIContext>
         </SystemStoreContextProvider>
       </QueryClientContext>

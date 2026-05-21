@@ -19,21 +19,12 @@ import type {
   DatasetTrainingSchemaType
 } from '@fastgpt/global/core/dataset/type';
 import { retryFn } from '@fastgpt/global/common/system/utils';
+import { delay } from '@fastgpt/service/common/bullmq';
 
 const reduceQueue = () => {
   global.vectorQueueLen = global.vectorQueueLen > 0 ? global.vectorQueueLen - 1 : 0;
 
   return global.vectorQueueLen === 0;
-};
-const reduceQueueAndReturn = (delay = 0) => {
-  reduceQueue();
-  if (delay) {
-    setTimeout(() => {
-      generateVector();
-    }, delay);
-  } else {
-    generateVector();
-  }
 };
 
 type PopulateType = {
@@ -50,121 +41,127 @@ export async function generateVector(): Promise<any> {
 
   if (global.vectorQueueLen >= max) return;
   global.vectorQueueLen++;
-  const start = Date.now();
-
-  // get training data
-  const {
-    data,
-    done = false,
-    error = false
-  } = await (async () => {
-    try {
-      const data = await MongoDatasetTraining.findOneAndUpdate(
-        {
-          mode: TrainingModeEnum.chunk,
-          retryCount: { $gt: 0 },
-          lockTime: { $lte: addMinutes(new Date(), -3) }
-        },
-        {
-          lockTime: new Date(),
-          $inc: { retryCount: -1 }
-        }
-      )
-        .populate<PopulateType>([
-          {
-            path: 'dataset',
-            select: 'vectorModel'
-          },
-          {
-            path: 'collection',
-            select: 'name indexPrefixTitle'
-          },
-          {
-            path: 'data',
-            select: '_id indexes'
-          }
-        ])
-        .lean();
-
-      // task preemption
-      if (!data) {
-        return {
-          done: true
-        };
-      }
-      return {
-        data
-      };
-    } catch (error) {
-      addLog.error(`Get Training Data error`, error);
-      return {
-        error: true
-      };
-    }
-  })();
-
-  if (done || !data) {
-    if (reduceQueue()) {
-      addLog.info(`[Vector Queue] Done`);
-    }
-    return;
-  }
-  if (error) {
-    addLog.error(`[Vector Queue] Error`, { error });
-    return reduceQueueAndReturn();
-  }
-
-  if (!data.dataset || !data.collection) {
-    addLog.info(`[Vector Queue] Dataset or collection not found`, data);
-    // Delete data
-    await MongoDatasetTraining.deleteOne({ _id: data._id });
-    return reduceQueueAndReturn();
-  }
-
-  // auth balance
-  if (!(await checkTeamAiPointsAndLock(data.teamId))) {
-    return reduceQueueAndReturn();
-  }
-
-  addLog.info(`[Vector Queue] Start`);
 
   try {
-    const { tokens } = await (async () => {
-      if (data.dataId) {
-        return rebuildData({ trainingData: data });
-      } else {
-        return insertData({ trainingData: data });
+    while (true) {
+      const start = Date.now();
+
+      // get training data
+      const {
+        data,
+        done = false,
+        error = false
+      } = await (async () => {
+        try {
+          const data = await MongoDatasetTraining.findOneAndUpdate(
+            {
+              mode: TrainingModeEnum.chunk,
+              retryCount: { $gt: 0 },
+              lockTime: { $lte: addMinutes(new Date(), -3) }
+            },
+            {
+              lockTime: new Date(),
+              $inc: { retryCount: -1 }
+            }
+          )
+            .populate<PopulateType>([
+              {
+                path: 'dataset',
+                select: 'vectorModel'
+              },
+              {
+                path: 'collection',
+                select: 'name indexPrefixTitle'
+              },
+              {
+                path: 'data',
+                select: '_id indexes'
+              }
+            ])
+            .lean();
+
+          // task preemption
+          if (!data) {
+            return {
+              done: true
+            };
+          }
+          return {
+            data
+          };
+        } catch (error) {
+          return {
+            error: true
+          };
+        }
+      })();
+
+      // Break loop
+      if (done || !data) {
+        break;
       }
-    })();
-
-    // push usage
-    pushGenerateVectorUsage({
-      teamId: data.teamId,
-      tmbId: data.tmbId,
-      inputTokens: tokens,
-      model: data.dataset.vectorModel,
-      billId: data.billId
-    });
-
-    addLog.info(`[Vector Queue] Finish`, {
-      time: Date.now() - start
-    });
-
-    return reduceQueueAndReturn();
-  } catch (err: any) {
-    addLog.error(`[Vector Queue] Error`, err);
-    await MongoDatasetTraining.updateOne(
-      {
-        teamId: data.teamId,
-        datasetId: data.datasetId,
-        _id: data._id
-      },
-      {
-        errorMsg: getErrText(err, 'unknown error')
+      if (error) {
+        addLog.error(`[Vector Queue] Error`, error);
+        await delay(500);
+        continue;
       }
-    );
-    return reduceQueueAndReturn(500);
+
+      if (!data.dataset || !data.collection) {
+        addLog.info(`[Vector Queue] Dataset or collection not found`, data);
+        // Delete data
+        await MongoDatasetTraining.deleteOne({ _id: data._id });
+        continue;
+      }
+
+      // auth balance
+      if (!(await checkTeamAiPointsAndLock(data.teamId))) {
+        continue;
+      }
+
+      addLog.info(`[Vector Queue] Start`);
+
+      try {
+        const { tokens } = await (async () => {
+          if (data.dataId) {
+            return rebuildData({ trainingData: data });
+          } else {
+            return insertData({ trainingData: data });
+          }
+        })();
+
+        // push usage
+        pushGenerateVectorUsage({
+          teamId: data.teamId,
+          tmbId: data.tmbId,
+          inputTokens: tokens,
+          model: data.dataset.vectorModel,
+          usageId: data.billId
+        });
+
+        addLog.info(`[Vector Queue] Finish`, {
+          time: Date.now() - start
+        });
+      } catch (err: any) {
+        addLog.error(`[Vector Queue] Error`, err);
+        await MongoDatasetTraining.updateOne(
+          {
+            _id: data._id
+          },
+          {
+            errorMsg: getErrText(err, 'unknown error')
+          }
+        );
+        await delay(100);
+      }
+    }
+  } catch (error) {
+    addLog.error(`[Vector Queue] Error`, error);
   }
+
+  if (reduceQueue()) {
+    addLog.info(`[Vector Queue] Done`);
+  }
+  addLog.debug(`[Vector Queue] break loop, current queue size: ${global.vectorQueueLen}`);
 }
 
 const rebuildData = async ({ trainingData }: { trainingData: TrainingDataType }) => {
@@ -222,25 +219,19 @@ const rebuildData = async ({ trainingData }: { trainingData: TrainingDataType })
 
   // update vector, update dataset_data rebuilding status, delete data from training
   // 1. Insert new vector to dataset_data
-  const updateResult: {
-    tokens: number;
-    insertId: string;
-  }[] = [];
-  let i = 0;
-  for await (const index of trainingData.data.indexes) {
-    const result = await insertDatasetDataVector({
-      query: index.text,
-      model: getEmbeddingModel(trainingData.dataset.vectorModel),
-      teamId: trainingData.teamId,
-      datasetId: trainingData.datasetId,
-      collectionId: trainingData.collectionId
-    });
-    trainingData.data.indexes[i].dataId = result.insertId;
-    updateResult.push(result);
-    i++;
-  }
+  const insertResult = await insertDatasetDataVector({
+    inputs: trainingData.data.indexes.map((index) => index.text),
+    model: getEmbeddingModel(trainingData.dataset.vectorModel),
+    teamId: trainingData.teamId,
+    datasetId: trainingData.datasetId,
+    collectionId: trainingData.collectionId
+  });
 
-  const { tokens } = await mongoSessionRun(async (session) => {
+  trainingData.data.indexes.forEach((item, index) => {
+    item.dataId = insertResult.insertIds[index];
+  });
+
+  await mongoSessionRun(async (session) => {
     // 2. Ensure that the training data is deleted after the Mongo update is successful
     await MongoDatasetData.updateOne(
       { _id: trainingData.data._id },
@@ -259,13 +250,9 @@ const rebuildData = async ({ trainingData }: { trainingData: TrainingDataType })
       teamId: trainingData.teamId,
       idList: deleteVectorIdList
     });
-
-    return {
-      tokens: updateResult.reduce((acc, cur) => acc + cur.tokens, 0)
-    };
   });
 
-  return { tokens };
+  return { tokens: insertResult.tokens };
 };
 
 const insertData = async ({ trainingData }: { trainingData: TrainingDataType }) => {
@@ -291,6 +278,7 @@ const insertData = async ({ trainingData }: { trainingData: TrainingDataType }) 
       embeddingModel: trainingData.dataset.vectorModel,
       session
     });
+
     // delete data from training
     await MongoDatasetTraining.deleteOne({ _id: trainingData._id }, { session });
 

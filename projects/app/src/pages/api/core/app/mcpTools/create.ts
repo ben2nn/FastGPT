@@ -4,15 +4,12 @@ import { TeamAppCreatePermissionVal } from '@fastgpt/global/support/permission/u
 import { authApp } from '@fastgpt/service/support/permission/app/auth';
 import { authUserPer } from '@fastgpt/service/support/permission/user/auth';
 import { type CreateAppBody, onCreateApp } from '../create';
-import { type McpToolConfigType } from '@fastgpt/global/core/app/type';
+import { type McpToolConfigType } from '@fastgpt/global/core/app/tool/mcpTool/type';
 import { mongoSessionRun } from '@fastgpt/service/common/mongo/sessionRun';
 import { AppTypeEnum } from '@fastgpt/global/core/app/constants';
-import {
-  getMCPToolRuntimeNode,
-  getMCPToolSetRuntimeNode
-} from '@fastgpt/global/core/app/mcpTools/utils';
+import { getMCPToolSetRuntimeNode } from '@fastgpt/global/core/app/tool/mcpTool/utils';
 import { pushTrack } from '@fastgpt/service/common/middle/tracks/utils';
-import { checkTeamAppLimit } from '@fastgpt/service/support/permission/teamLimit';
+import { checkTeamAppTypeLimit } from '@fastgpt/service/support/permission/teamLimit';
 import { WritePermissionVal } from '@fastgpt/global/support/permission/constant';
 import { type StoreSecretValueType } from '@fastgpt/global/common/secret/type';
 import { storeSecretValue } from '@fastgpt/service/common/secret/utils';
@@ -40,7 +37,7 @@ async function handler(
     ? await authApp({ req, appId: parentId, per: WritePermissionVal, authToken: true })
     : await authUserPer({ req, authToken: true, per: TeamAppCreatePermissionVal });
 
-  await checkTeamAppLimit(teamId);
+  await checkTeamAppTypeLimit({ teamId, appCheckType: 'tool' });
 
   const formatedHeaderAuth = storeSecretValue(headerSecret);
 
@@ -51,51 +48,32 @@ async function handler(
       parentId,
       teamId,
       tmbId,
-      type: AppTypeEnum.toolSet,
+      type: AppTypeEnum.mcpToolSet,
       modules: [
         getMCPToolSetRuntimeNode({
           url,
           toolList,
           name,
           avatar,
-          headerSecret: formatedHeaderAuth
+          headerSecret: formatedHeaderAuth,
+          toolId: ''
         })
       ],
       session
     });
 
-    for (const tool of toolList) {
-      await onCreateApp({
-        name: tool.name,
-        avatar,
-        parentId: mcpToolsId,
-        teamId,
-        tmbId,
-        type: AppTypeEnum.tool,
-        intro: tool.description,
-        modules: [
-          getMCPToolRuntimeNode({
-            tool,
-            url,
-            headerSecret: formatedHeaderAuth
-          })
-        ],
-        session
-      });
-    }
-
     return mcpToolsId;
   });
 
   pushTrack.createApp({
-    type: AppTypeEnum.toolSet,
+    type: AppTypeEnum.mcpToolSet,
     appId: mcpToolsId,
     uid: userId,
     teamId,
     tmbId
   });
 
-  return {};
+  return mcpToolsId;
 }
 
 export default NextAPI(handler);
