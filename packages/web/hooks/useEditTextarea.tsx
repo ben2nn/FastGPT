@@ -82,7 +82,6 @@ export const useEditTextarea = ({
     }
   }, [canEmpty, onClose]);
 
-  // eslint-disable-next-line react/display-name
   const EditModal = useCallback(
     ({
       maxLength = 30,

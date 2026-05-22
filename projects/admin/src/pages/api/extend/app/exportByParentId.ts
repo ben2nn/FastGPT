@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/common/mongo';
-import { findAppAndAllChildren } from '@fastgpt/service/core/app/controller';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
 
@@ -52,7 +51,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ success: false, error: 'Invalid parentId format' });
     }
 
-    // 5. 递归查找所有子应用
+    // 5. 递归查找所有子应用（动态导入避免触发 MQ/Redis 连接）
+    const { findAppAndAllChildren } = await import('@fastgpt/service/core/app/controller');
     const apps = await findAppAndAllChildren({
       teamId,
       appId: parentId
@@ -89,10 +89,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // 9. 设置响应头并返回
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename=app-export-${Date.now()}.json`
-    );
+    res.setHeader('Content-Disposition', `attachment; filename=app-export-${Date.now()}.json`);
     res.status(200).json(exportData);
   } catch (error) {
     console.error('Export app error:', error);

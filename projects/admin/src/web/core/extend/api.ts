@@ -55,7 +55,9 @@ export const updateUser = async (userId: string, userData: User) => {
 };
 
 export const deleteUser = async (userId: string) => {
-  const response = await authFetch(getWebReqUrl(`/api/extend/user/${userId}`), { method: 'DELETE' });
+  const response = await authFetch(getWebReqUrl(`/api/extend/user/${userId}`), {
+    method: 'DELETE'
+  });
   if (!response.ok) throw new Error('删除用户失败');
   return response.json();
 };
@@ -85,7 +87,9 @@ export const updateTeam = async (teamId: string, teamData: { name: string }) => 
 };
 
 export const deleteTeam = async (teamId: string) => {
-  const response = await authFetch(getWebReqUrl(`/api/extend/team/${teamId}`), { method: 'DELETE' });
+  const response = await authFetch(getWebReqUrl(`/api/extend/team/${teamId}`), {
+    method: 'DELETE'
+  });
   if (!response.ok) throw new Error('删除团队失败');
   return response.json();
 };
@@ -160,10 +164,14 @@ export const exportApp = async (parentId: string) => {
 };
 
 // 工作流导入
-export const importApp = async (file: string | object, targetParentId?: string) => {
+export const importApp = async (
+  file: string | object,
+  keepOriginalId: boolean,
+  targetParentId?: string
+) => {
   const response = await authFetch(getWebReqUrl('/api/extend/app/importFromJson'), {
     method: 'POST',
-    body: JSON.stringify({ file, targetParentId })
+    body: JSON.stringify({ file, keepOriginalId, targetParentId })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -186,10 +194,10 @@ export const exportModels = async (provider?: string, modelType?: string) => {
 };
 
 // 模型配置导入
-export const importModels = async (file: string | object) => {
+export const importModels = async (file: string | object, keepOriginalId?: boolean) => {
   const response = await authFetch(getWebReqUrl('/api/extend/model/importModels'), {
     method: 'POST',
-    body: JSON.stringify({ file })
+    body: JSON.stringify({ file, keepOriginalId })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -211,10 +219,10 @@ export const exportChannels = async () => {
 };
 
 // 渠道导入
-export const importChannels = async (file: string | object) => {
+export const importChannels = async (file: string | object, keepOriginalId?: boolean) => {
   const response = await authFetch(getWebReqUrl('/api/extend/channel/importChannels'), {
     method: 'POST',
-    body: JSON.stringify({ file })
+    body: JSON.stringify({ file, keepOriginalId })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));

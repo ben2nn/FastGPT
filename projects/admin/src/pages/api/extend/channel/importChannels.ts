@@ -1,30 +1,26 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
+import { Pool } from 'pg';
 
 const IMPORT_LIMIT = 100;
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const AIPROXY_API_ENDPOINT = process.env.AIPROXY_API_ENDPOINT;
-  const AIPROXY_API_TOKEN = process.env.AIPROXY_API_TOKEN;
+  const AIPROXY_PG_URL = process.env.AIPROXY_PG_URL;
 
   try {
-    // 1. 验证请求方法
     if (req.method !== 'POST') {
       return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    // 2. 验证 AI Proxy 配置
-    if (!AIPROXY_API_ENDPOINT || !AIPROXY_API_TOKEN) {
-      return res.status(500).json({ success: false, error: 'AI Proxy not configured' });
+    if (!AIPROXY_PG_URL) {
+      return res.status(500).json({ success: false, error: 'AIPROXY_PG_URL not configured' });
     }
 
-    // 3. 解析请求体
-    const { file } = req.body;
+    const { file, keepOriginalId } = req.body;
     if (!file) {
       return res.status(400).json({ success: false, error: 'Missing file in request body' });
     }
 
-    // 4. 解析 JSON 数据
     let importData: {
       version?: string;
       type?: string;
@@ -36,20 +32,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ success: false, error: 'Invalid JSON format' });
     }
 
-    // 5. 验证版本和类型
     if (importData.version !== '1.0') {
       return res.status(400).json({ success: false, error: 'Unsupported version' });
     }
     if (importData.type !== 'channels') {
       return res.status(400).json({ success: false, error: 'Invalid import type' });
     }
-
-    // 6. 验证 channels 为数组
     if (!Array.isArray(importData.channels)) {
       return res.status(400).json({ success: false, error: 'channels must be an array' });
     }
-
-    // 7. 检查导入数量限制
     if (importData.channels.length > IMPORT_LIMIT) {
       return res.status(400).json({
         success: false,
@@ -57,130 +48,137 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // 8. 获取现有渠道列表
-    const channelsResponse = await fetch(
-      `${AIPROXY_API_ENDPOINT}/api/channels/all`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${AIPROXY_API_TOKEN}`,
-          'Content-Type': 'application/json'
+    const pool = new Pool({ connectionString: AIPROXY_PG_URL });
+    const client = await pool.connect();
+
+    try {
+      // 查询现有渠道，构建名称到 ID 的映射
+      const { rows: existingChannels } = await client.query(
+        'SELECT id, name FROM channels WHERE deleted_at IS NULL'
+      );
+      const nameToIdMap = new Map<string, number>();
+      const idToChannelMap = new Map<number, { id: number; name: string }>();
+      for (const ch of existingChannels) {
+        if (ch.name) {
+          nameToIdMap.set(ch.name, ch.id);
         }
-      }
-    );
-
-    if (!channelsResponse.ok) {
-      throw new Error(`AI Proxy API error: ${channelsResponse.status}`);
-    }
-
-    const channelsData = await channelsResponse.json();
-    if (!Array.isArray(channelsData.data)) {
-      throw new Error('Invalid API response: data.data is not an array');
-    }
-    const existingChannels: Array<{ id: number; name: string }> = channelsData.data;
-
-    // 9. 构建名称到 ID 的映射
-    const nameToIdMap = new Map<string, number>();
-    for (const ch of existingChannels) {
-      if (ch.name) {
-        nameToIdMap.set(ch.name, ch.id);
-      }
-    }
-
-    // 10. 逐个导入渠道（创建或更新）
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let failedCount = 0;
-
-    for (const channel of importData.channels) {
-      // 验证必填字段
-      if (!channel.name || !channel.type) {
-        failedCount++;
-        continue;
+        idToChannelMap.set(ch.id, ch);
       }
 
-      try {
-        const existingId = nameToIdMap.get(String(channel.name));
+      let insertedCount = 0;
+      let updatedCount = 0;
+      let failedCount = 0;
 
-        if (existingId) {
-          // 更新现有渠道
-          const updateResponse = await fetch(
-            `${AIPROXY_API_ENDPOINT}/api/channel/${existingId}`,
-            {
-              method: 'PUT',
-              headers: {
-                Authorization: `Bearer ${AIPROXY_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                name: channel.name,
-                type: channel.type,
-                base_url: channel.base_url ?? '',
-                models: channel.models ?? [],
-                model_mapping: channel.model_mapping ?? {},
-                priority: channel.priority ?? 0,
-                key: (channel.key as string) ?? ''
-              })
+      for (const channel of importData.channels) {
+        if (!channel.name || !channel.type) {
+          failedCount++;
+          continue;
+        }
+
+        try {
+          let targetId: number | undefined;
+
+          if (keepOriginalId && channel.id) {
+            const originalId = Number(channel.id);
+            if (idToChannelMap.has(originalId)) {
+              targetId = originalId;
             }
-          );
+          }
 
-          if (updateResponse.ok) {
+          if (targetId === undefined) {
+            targetId = nameToIdMap.get(String(channel.name));
+          }
+
+          const modelsJson = JSON.stringify(channel.models ?? []);
+          const modelMappingJson = JSON.stringify(channel.model_mapping ?? {});
+          const setsJson = JSON.stringify(channel.sets ?? []);
+          const configsJson = JSON.stringify(channel.configs ?? {});
+
+          if (targetId !== undefined) {
+            // 更新现有渠道
+            await client.query(
+              `UPDATE channels SET
+                name = $1, type = $2, base_url = $3, proxy_url = $4,
+                models = $5, model_mapping = $6, priority = $7, status = $8,
+                sets = $9, skip_tls_verify = $10, enabled_no_permission_ban = $11,
+                enabled_auto_balance_check = $12, warn_error_rate = $13,
+                max_error_rate = $14, configs = $15
+              WHERE id = $16`,
+              [
+                String(channel.name),
+                Number(channel.type),
+                String(channel.base_url ?? ''),
+                String(channel.proxy_url ?? ''),
+                modelsJson,
+                modelMappingJson,
+                Number(channel.priority ?? 10),
+                Number(channel.status ?? 1),
+                setsJson,
+                Boolean(channel.skip_tls_verify ?? false),
+                Boolean(channel.enabled_no_permission_ban ?? false),
+                Boolean(channel.enabled_auto_balance_check ?? false),
+                Number(channel.warn_error_rate ?? 0),
+                Number(channel.max_error_rate ?? 0),
+                configsJson,
+                targetId
+              ]
+            );
             updatedCount++;
           } else {
-            console.warn(
-              `Failed to update channel "${channel.name}": ${updateResponse.status}`
+            // 创建新渠道
+            await client.query(
+              `INSERT INTO channels (
+                name, key, type, base_url, proxy_url, models, model_mapping,
+                priority, status, sets, skip_tls_verify, enabled_no_permission_ban,
+                enabled_auto_balance_check, warn_error_rate, max_error_rate, configs
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+              [
+                String(channel.name),
+                String((channel.key as string) ?? ''),
+                Number(channel.type),
+                String(channel.base_url ?? ''),
+                String(channel.proxy_url ?? ''),
+                modelsJson,
+                modelMappingJson,
+                Number(channel.priority ?? 10),
+                Number(channel.status ?? 1),
+                setsJson,
+                Boolean(channel.skip_tls_verify ?? false),
+                Boolean(channel.enabled_no_permission_ban ?? false),
+                Boolean(channel.enabled_auto_balance_check ?? false),
+                Number(channel.warn_error_rate ?? 0),
+                Number(channel.max_error_rate ?? 0),
+                configsJson
+              ]
             );
-            failedCount++;
-          }
-        } else {
-          // 创建新渠道
-          const createResponse = await fetch(
-            `${AIPROXY_API_ENDPOINT}/api/channel/`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${AIPROXY_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                name: channel.name,
-                type: channel.type,
-                base_url: channel.base_url ?? '',
-                models: channel.models ?? [],
-                model_mapping: channel.model_mapping ?? {},
-                priority: channel.priority ?? 0,
-                key: (channel.key as string) ?? ''
-              })
-            }
-          );
-
-          if (createResponse.ok) {
             insertedCount++;
-          } else {
-            console.warn(
-              `Failed to create channel "${channel.name}": ${createResponse.status}`
-            );
-            failedCount++;
           }
+        } catch (err) {
+          console.error(`Failed to import channel "${channel.name}":`, err);
+          failedCount++;
         }
-      } catch {
-        failedCount++;
       }
-    }
 
-    // 11. 返回导入结果
-    return res.status(200).json({
-      success: true,
-      data: {
-        insertedCount,
-        updatedCount,
-        failedCount
-      }
-    });
+      return res.status(200).json({
+        success: true,
+        data: { insertedCount, updatedCount, failedCount }
+      });
+    } finally {
+      client.release();
+      await pool.end();
+    }
   } catch (error) {
     console.error('Import channels error:', error);
     return res.status(500).json({ success: false, error: 'Import failed' });
   }
 }
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb'
+    }
+  }
+};
 
 export default NextAPI(handler);

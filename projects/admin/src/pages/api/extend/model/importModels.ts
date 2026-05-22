@@ -39,7 +39,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 4. 解析请求体
-    const { file } = req.body;
+    const { file, keepOriginalId } = req.body;
 
     if (!file) {
       return res.status(400).json({ success: false, error: 'File is required' });
@@ -76,7 +76,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // 9. 批量写入（upsert 模式）
+    // 9. 批量写入
     let insertedCount = 0;
     let updatedCount = 0;
     let failedCount = 0;
@@ -88,16 +88,34 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           continue;
         }
 
-        const result = await MongoSystemModel.updateOne(
-          { model: modelDoc.model },
-          { $set: { metadata: modelDoc.metadata } },
-          { upsert: true }
-        );
-
-        if (result.upsertedCount > 0) {
-          insertedCount++;
-        } else if (result.modifiedCount > 0) {
-          updatedCount++;
+        if (keepOriginalId && modelDoc._id) {
+          // 保留原 ID：先尝试更新，不存在则用原 _id 插入
+          const result = await MongoSystemModel.updateOne(
+            { model: modelDoc.model },
+            { $set: { metadata: modelDoc.metadata } }
+          );
+          if (result.matchedCount > 0) {
+            if (result.modifiedCount > 0) updatedCount++;
+          } else {
+            await MongoSystemModel.create({
+              _id: modelDoc._id,
+              model: modelDoc.model,
+              metadata: modelDoc.metadata
+            });
+            insertedCount++;
+          }
+        } else {
+          // 默认行为：upsert 模式
+          const result = await MongoSystemModel.updateOne(
+            { model: modelDoc.model },
+            { $set: { metadata: modelDoc.metadata } },
+            { upsert: true }
+          );
+          if (result.upsertedCount > 0) {
+            insertedCount++;
+          } else if (result.modifiedCount > 0) {
+            updatedCount++;
+          }
         }
       } catch {
         failedCount++;
@@ -118,5 +136,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     res.status(500).json({ success: false, error: 'Import failed' });
   }
 }
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb'
+    }
+  }
+};
 
 export default NextAPI(handler);

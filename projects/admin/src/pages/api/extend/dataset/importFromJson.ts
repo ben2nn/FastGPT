@@ -153,25 +153,57 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const updatedDataTexts = dataTexts.map(updateDoc);
     const updatedCollectionTags = collectionTags.map(updateDoc);
 
-    // 10. 批量写入数据库
-    const [datasetsResult, collectionsResult, datasResult, dataTextsResult, collectionTagsResult] =
+    // 10. 分批写入数据库（每批 2000 条，避免单次 insertMany 过大导致慢查询）
+    const BATCH_SIZE = 2000;
+    const duplicateWarnings: string[] = [];
+
+    async function batchInsert<T extends Record<string, unknown>>(
+      model: { insertMany: (docs: T[], opts: Record<string, unknown>) => Promise<T[]> },
+      docs: T[],
+      name: string
+    ) {
+      let insertedCount = 0;
+      for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+        const batch = docs.slice(i, i + BATCH_SIZE);
+        try {
+          const result = await model.insertMany(batch, { ordered: false });
+          insertedCount += result.length;
+        } catch (err: unknown) {
+          // ordered: false 遇到重复 key 时仍会抛错，但非重复的文档已成功插入
+          if (err instanceof Error && 'code' in err && (err as { code: number }).code === 11000) {
+            const writeResult = (err as { result?: { insertedCount?: number } }).result;
+            if (writeResult?.insertedCount) {
+              insertedCount += writeResult.insertedCount;
+            }
+            const dupCount = batch.length - (writeResult?.insertedCount ?? 0);
+            duplicateWarnings.push(`${name}: ${dupCount} 条重复已跳过`);
+          } else {
+            throw err;
+          }
+        }
+      }
+      return insertedCount;
+    }
+
+    const [datasetsCount, collectionsCount, datasCount, dataTextsCount, collectionTagsCount] =
       await Promise.all([
-        MongoDataset.insertMany(updatedDatasets, { ordered: false }),
-        MongoDatasetCollection.insertMany(updatedCollections, { ordered: false }),
-        MongoDatasetData.insertMany(updatedDatas, { ordered: false }),
-        MongoDatasetDataText.insertMany(updatedDataTexts, { ordered: false }),
-        MongoDatasetCollectionTags.insertMany(updatedCollectionTags, { ordered: false })
+        batchInsert(MongoDataset, updatedDatasets, 'datasets'),
+        batchInsert(MongoDatasetCollection, updatedCollections, 'collections'),
+        batchInsert(MongoDatasetData, updatedDatas, 'datas'),
+        batchInsert(MongoDatasetDataText, updatedDataTexts, 'dataTexts'),
+        batchInsert(MongoDatasetCollectionTags, updatedCollectionTags, 'collectionTags')
       ]);
 
     // 11. 返回导入结果
     res.status(200).json({
       success: true,
       data: {
-        datasetsCount: datasetsResult.length,
-        collectionsCount: collectionsResult.length,
-        datasCount: datasResult.length,
-        dataTextsCount: dataTextsResult.length,
-        collectionTagsCount: collectionTagsResult.length
+        datasetsCount,
+        collectionsCount,
+        datasCount,
+        dataTextsCount,
+        collectionTagsCount,
+        ...(duplicateWarnings.length > 0 ? { warnings: duplicateWarnings } : {})
       }
     });
   } catch (error) {
@@ -179,5 +211,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     res.status(500).json({ success: false, error: 'Import failed' });
   }
 }
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb'
+    }
+  }
+};
 
 export default NextAPI(handler);

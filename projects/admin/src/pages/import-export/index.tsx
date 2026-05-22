@@ -140,7 +140,10 @@ function DatasetTab() {
           <FormLabel mb={0} fontSize="sm">
             保留原 ID
           </FormLabel>
-          <Switch isChecked={keepOriginalId} onChange={(e) => setKeepOriginalId(e.target.checked)} />
+          <Switch
+            isChecked={keepOriginalId}
+            onChange={(e) => setKeepOriginalId(e.target.checked)}
+          />
         </FormControl>
         <FormControl>
           <FormLabel fontSize="sm">目标父文件夹 ID（可选）</FormLabel>
@@ -160,7 +163,18 @@ function DatasetTab() {
         >
           导入
         </Button>
-        {importResult && <ImportResultStats result={importResult} labels={{ datasetsCount: '数据集', collectionsCount: '集合', datasCount: '数据', dataTextsCount: '全文索引', collectionTagsCount: '标签' }} />}
+        {importResult && (
+          <ImportResultStats
+            result={importResult}
+            labels={{
+              datasetsCount: '数据集',
+              collectionsCount: '集合',
+              datasCount: '数据',
+              dataTextsCount: '全文索引',
+              collectionTagsCount: '标签'
+            }}
+          />
+        )}
       </ImportPanel>
     </Flex>
   );
@@ -172,6 +186,7 @@ function AppTab() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [exportParentId, setExportParentId] = useState('');
   const [importParentId, setImportParentId] = useState('');
+  const [keepOriginalId, setKeepOriginalId] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -203,7 +218,7 @@ function AppTab() {
     setImportResult(null);
     try {
       const text = await readFileAsJSON(selectedFile);
-      const result = await importApp(text, importParentId.trim() || undefined);
+      const result = await importApp(text, keepOriginalId, importParentId.trim() || undefined);
       setImportResult(result.data);
       toast({ title: '导入成功', status: 'success', duration: 3000 });
     } catch (e) {
@@ -238,6 +253,15 @@ function AppTab() {
 
       <ImportPanel title="导入工作流">
         <FileUpload fileRef={fileRef} selectedFile={selectedFile} onSelect={setSelectedFile} />
+        <FormControl display="flex" alignItems="center">
+          <FormLabel mb={0} fontSize="sm">
+            保留原 ID
+          </FormLabel>
+          <Switch
+            isChecked={keepOriginalId}
+            onChange={(e) => setKeepOriginalId(e.target.checked)}
+          />
+        </FormControl>
         <FormControl>
           <FormLabel fontSize="sm">目标父文件夹 ID（可选）</FormLabel>
           <Input
@@ -256,7 +280,12 @@ function AppTab() {
         >
           导入
         </Button>
-        {importResult && <ImportResultStats result={importResult} labels={{ appsCount: '应用', versionsCount: '版本' }} />}
+        {importResult && (
+          <ImportResultStats
+            result={importResult}
+            labels={{ appsCount: '应用', versionsCount: '版本' }}
+          />
+        )}
       </ImportPanel>
     </Flex>
   );
@@ -268,6 +297,7 @@ function ModelTab() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [provider, setProvider] = useState('');
   const [modelType, setModelType] = useState('');
+  const [keepOriginalId, setKeepOriginalId] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -295,7 +325,7 @@ function ModelTab() {
     setImportResult(null);
     try {
       const text = await readFileAsJSON(selectedFile);
-      const result = await importModels(text);
+      const result = await importModels(text, keepOriginalId);
       setImportResult(result.data);
       toast({ title: '导入成功', status: 'success', duration: 3000 });
     } catch (e) {
@@ -341,6 +371,15 @@ function ModelTab() {
 
       <ImportPanel title="导入模型配置">
         <FileUpload fileRef={fileRef} selectedFile={selectedFile} onSelect={setSelectedFile} />
+        <FormControl display="flex" alignItems="center">
+          <FormLabel mb={0} fontSize="sm">
+            保留原 ID
+          </FormLabel>
+          <Switch
+            isChecked={keepOriginalId}
+            onChange={(e) => setKeepOriginalId(e.target.checked)}
+          />
+        </FormControl>
         <Button
           leftIcon={<AttachmentIcon />}
           colorScheme="green"
@@ -351,7 +390,12 @@ function ModelTab() {
         >
           导入
         </Button>
-        {importResult && <ImportResultStats result={importResult} labels={{ insertedCount: '新增', updatedCount: '更新', failedCount: '失败' }} />}
+        {importResult && (
+          <ImportResultStats
+            result={importResult}
+            labels={{ insertedCount: '新增', updatedCount: '更新', failedCount: '失败' }}
+          />
+        )}
       </ImportPanel>
     </Flex>
   );
@@ -361,6 +405,7 @@ function ModelTab() {
 function ChannelTab() {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [keepOriginalId, setKeepOriginalId] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -388,7 +433,7 @@ function ChannelTab() {
     setImportResult(null);
     try {
       const text = await readFileAsJSON(selectedFile);
-      const result = await importChannels(text);
+      const result = await importChannels(text, keepOriginalId);
       setImportResult(result.data);
       toast({ title: '导入成功', status: 'success', duration: 3000 });
     } catch (e) {
@@ -418,6 +463,15 @@ function ChannelTab() {
 
       <ImportPanel title="导入渠道">
         <FileUpload fileRef={fileRef} selectedFile={selectedFile} onSelect={setSelectedFile} />
+        <FormControl display="flex" alignItems="center">
+          <FormLabel mb={0} fontSize="sm">
+            保留原 ID
+          </FormLabel>
+          <Switch
+            isChecked={keepOriginalId}
+            onChange={(e) => setKeepOriginalId(e.target.checked)}
+          />
+        </FormControl>
         <Text fontSize="xs" color="gray.500">
           按渠道名称匹配：已存在的渠道会更新，不存在的会创建
         </Text>
@@ -431,7 +485,12 @@ function ChannelTab() {
         >
           导入
         </Button>
-        {importResult && <ImportResultStats result={importResult} labels={{ insertedCount: '新增', updatedCount: '更新', failedCount: '失败' }} />}
+        {importResult && (
+          <ImportResultStats
+            result={importResult}
+            labels={{ insertedCount: '新增', updatedCount: '更新', failedCount: '失败' }}
+          />
+        )}
       </ImportPanel>
     </Flex>
   );
