@@ -19,7 +19,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     try {
       const { rows } = await client.query(
-        `SELECT id, name, type, key, base_url, proxy_url, models, model_mapping,
+        `SELECT id, name, type, key, base_url, models, model_mapping,
                 priority, status, sets, skip_tls_verify, enabled_no_permission_ban,
                 enabled_auto_balance_check, warn_error_rate, max_error_rate, configs
          FROM channels WHERE deleted_at IS NULL ORDER BY id`
@@ -31,7 +31,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         type: row.type,
         key: row.key,
         base_url: row.base_url,
-        proxy_url: row.proxy_url,
         models: typeof row.models === 'string' ? JSON.parse(row.models) : row.models ?? [],
         model_mapping:
           typeof row.model_mapping === 'string'
@@ -66,8 +65,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       await pool.end();
     }
   } catch (error) {
-    console.error('Export channels error:', error);
-    res.status(500).json({ success: false, error: 'Export failed' });
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error('Export channels error:', errMsg);
+    res.status(500).json({ success: false, error: errMsg });
   }
 }
 
