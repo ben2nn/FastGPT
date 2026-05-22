@@ -22,6 +22,8 @@ const formatJsonString = (data: any) => {
   return JSON.stringify(data).replace(/"/g, '""').replace(/\n/g, '\\n');
 };
 
+const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
+
 export type ExportChatLogsBody = GetAppChatLogsProps & {
   title: string;
   sourcesMap: Record<string, { label: string }>;
@@ -87,7 +89,7 @@ async function handler(req: ApiRequestProps<ExportChatLogsBody, {}>, res: NextAp
   const cursor = MongoChat.aggregate(
     [
       { $match: where },
-      { $limit: 50000 },
+      { $limit: EXPORT_LIMIT },
       {
         $lookup: {
           from: ChatItemCollectionName,

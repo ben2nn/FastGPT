@@ -4,7 +4,7 @@ import { connectToDatabase } from '@/service/common/mongo';
 import { MongoSystemModel } from '@fastgpt/service/core/ai/config/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
 
-const EXPORT_LIMIT = 10000;
+const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {

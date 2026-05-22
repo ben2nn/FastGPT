@@ -8,7 +8,7 @@ import { MongoDatasetDataText } from '@fastgpt/service/core/dataset/data/dataTex
 import { MongoDatasetCollectionTags } from '@fastgpt/service/core/dataset/tag/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
 
-const EXPORT_LIMIT = 50000;
+const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
