@@ -98,12 +98,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             // 更新现有渠道
             await client.query(
               `UPDATE channels SET
-                name = $1, type = $2, base_url = $3, proxy_url = $4,
-                models = $5, model_mapping = $6, priority = $7, status = $8,
-                sets = $9, skip_tls_verify = $10, enabled_no_permission_ban = $11,
-                enabled_auto_balance_check = $12, warn_error_rate = $13,
-                max_error_rate = $14, configs = $15
-              WHERE id = $16`,
+                name = $1, type = $2, base_url = $3,
+                models = $4, model_mapping = $5, priority = $6, status = $7,
+                sets = $8, skip_tls_verify = $9, enabled_no_permission_ban = $10,
+                enabled_auto_balance_check = $11, warn_error_rate = $12,
+                max_error_rate = $13, configs = $14
+              WHERE id = $15`,
               [
                 String(channel.name),
                 Number(channel.type),
@@ -128,10 +128,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             // 创建新渠道
             await client.query(
               `INSERT INTO channels (
-                name, key, type, base_url, proxy_url, models, model_mapping,
+                name, key, type, base_url, models, model_mapping,
                 priority, status, sets, skip_tls_verify, enabled_no_permission_ban,
                 enabled_auto_balance_check, warn_error_rate, max_error_rate, configs
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
               [
                 String(channel.name),
                 String((channel.key as string) ?? ''),
@@ -176,7 +176,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '50mb'
+      sizeLimit: '100mb'
     }
   }
 };
