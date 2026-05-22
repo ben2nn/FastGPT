@@ -13,7 +13,7 @@ import type { GetAppChatLogsProps } from '@/global/core/api/appReq';
 import { authApp } from '@fastgpt/service/support/permission/app/auth';
 import { Types } from 'mongoose';
 import { MongoChat } from '@fastgpt/service/core/chat/chatSchema';
-import { ChatItemCollectionName } from '@fastgpt/service/core/chat/chatItemSchema';
+import { ChatItemCollectionName } from '@fastgpt/service/core/chat/constants';
 import { MongoTeamMember } from '@fastgpt/service/support/user/team/teamMemberSchema';
 import { ChatItemValueTypeEnum } from '@fastgpt/global/core/chat/constants';
 import type { AIChatItemValueItemType } from '@fastgpt/global/core/chat/type';

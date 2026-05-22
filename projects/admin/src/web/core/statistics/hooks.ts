@@ -3,8 +3,7 @@
  * 封装统计数据查询逻辑，使用 react-query 管理数据状态
  */
 
-import type { UseQueryOptions } from '@tanstack/react-query';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import {
   getOverviewStatistics,
@@ -27,116 +26,103 @@ import type {
 
 /**
  * 使用总览统计数据
- *
- * @param filters 查询参数
- * @param options react-query 配置选项
- * @returns 查询结果
  */
 export const useOverviewStatistics = (
   filters: StatisticsQuery,
-  options?: Omit<UseQueryOptions<OverviewStatistics, Error>, 'queryKey' | 'queryFn'>
+  options?: { onError?: (error: Error) => void }
 ) => {
-  return useQuery<OverviewStatistics, Error>({
-    queryKey: ['statistics', 'overview', filters],
-    queryFn: () => getOverviewStatistics(filters),
-    placeholderData: keepPreviousData,
-    ...options
-  });
+  return useQuery<OverviewStatistics, Error>(
+    ['statistics', 'overview', filters],
+    () => getOverviewStatistics(filters),
+    {
+      placeholderData: () => undefined,
+      ...options
+    }
+  );
 };
 
 /**
  * 使用按应用统计数据
- *
- * @param filters 查询参数
- * @param options react-query 配置选项
- * @returns 查询结果
  */
 export const useAppStatistics = (
   filters: StatisticsQuery,
-  options?: Omit<UseQueryOptions<AppStatisticsResponse, Error>, 'queryKey' | 'queryFn'>
+  options?: { onError?: (error: Error) => void }
 ) => {
-  return useQuery<AppStatisticsResponse, Error>({
-    queryKey: ['statistics', 'by-app', filters],
-    queryFn: () => getAppStatistics(filters),
-    placeholderData: keepPreviousData,
-    ...options
-  });
+  return useQuery<AppStatisticsResponse, Error>(
+    ['statistics', 'by-app', filters],
+    () => getAppStatistics(filters),
+    {
+      placeholderData: () => undefined,
+      ...options
+    }
+  );
 };
 
 /**
  * 使用按模型统计数据
- *
- * @param filters 查询参数
- * @param options react-query 配置选项
- * @returns 查询结果
  */
 export const useModelStatistics = (
   filters: StatisticsQuery,
-  options?: Omit<UseQueryOptions<ModelStatisticsResponse, Error>, 'queryKey' | 'queryFn'>
+  options?: { onError?: (error: Error) => void }
 ) => {
-  return useQuery<ModelStatisticsResponse, Error>({
-    queryKey: ['statistics', 'by-model', filters],
-    queryFn: () => getModelStatistics(filters),
-    placeholderData: keepPreviousData,
-    ...options
-  });
+  return useQuery<ModelStatisticsResponse, Error>(
+    ['statistics', 'by-model', filters],
+    () => getModelStatistics(filters),
+    {
+      placeholderData: () => undefined,
+      ...options
+    }
+  );
 };
 
 /**
  * 使用时间趋势统计数据
- *
- * @param filters 查询参数
- * @param granularity 时间粒度
- * @param options react-query 配置选项
- * @returns 查询结果
  */
 export const useTrendStatistics = (
   filters: StatisticsQuery,
   granularity: 'day' | 'week' | 'month' = 'day',
-  options?: Omit<UseQueryOptions<TrendStatisticsResponse, Error>, 'queryKey' | 'queryFn'>
+  options?: { onError?: (error: Error) => void }
 ) => {
-  return useQuery<TrendStatisticsResponse, Error>({
-    queryKey: ['statistics', 'trend', filters, granularity],
-    queryFn: () => getTrendStatistics({ ...filters, granularity }),
-    placeholderData: keepPreviousData,
-    ...options
-  });
+  return useQuery<TrendStatisticsResponse, Error>(
+    ['statistics', 'trend', filters, granularity],
+    () => getTrendStatistics({ ...filters, granularity }),
+    {
+      placeholderData: () => undefined,
+      ...options
+    }
+  );
 };
 
 /**
  * 使用状态统计数据
- *
- * @param filters 查询参数
- * @param options react-query 配置选项
- * @returns 查询结果
  */
 export const useStatusStatistics = (
   filters: StatisticsQuery,
-  options?: Omit<UseQueryOptions<StatusStatisticsResponse, Error>, 'queryKey' | 'queryFn'>
+  options?: { onError?: (error: Error) => void }
 ) => {
-  return useQuery<StatusStatisticsResponse, Error>({
-    queryKey: ['statistics', 'status', filters],
-    queryFn: () => getStatusStatistics(filters),
-    placeholderData: keepPreviousData,
-    ...options
-  });
+  return useQuery<StatusStatisticsResponse, Error>(
+    ['statistics', 'status', filters],
+    () => getStatusStatistics(filters),
+    {
+      placeholderData: () => undefined,
+      ...options
+    }
+  );
 };
 
 /**
  * 使用统计列表数据
- *
- * @param filters 查询参数
- * @param options react-query 配置选项
- * @returns 查询结果
  */
 export const useStatisticsList = (
   filters: StatisticsQuery,
-  options?: Omit<UseQueryOptions<StatisticsListResponse, Error>, 'queryKey' | 'queryFn'>
+  options?: { onError?: (error: Error) => void }
 ) => {
-  return useQuery<StatisticsListResponse, Error>({
-    queryKey: ['statistics', 'list', filters],
-    queryFn: () => getStatisticsList(filters),
-    placeholderData: keepPreviousData,
-    ...options
-  });
+  return useQuery<StatisticsListResponse, Error>(
+    ['statistics', 'list', filters],
+    () => getStatisticsList(filters),
+    {
+      placeholderData: () => undefined,
+      ...options
+    }
+  );
 };
