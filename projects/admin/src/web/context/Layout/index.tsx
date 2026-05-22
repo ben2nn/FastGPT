@@ -12,7 +12,14 @@ import {
 } from '@chakra-ui/react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/web/context/AuthContext';
-import { ViewIcon, SettingsIcon, InfoIcon, MoonIcon, TimeIcon, DownloadIcon } from '@chakra-ui/icons';
+import {
+  ViewIcon,
+  SettingsIcon,
+  InfoIcon,
+  MoonIcon,
+  TimeIcon,
+  DownloadIcon
+} from '@chakra-ui/icons';
 
 interface LayoutProps {
   children: ReactNode;

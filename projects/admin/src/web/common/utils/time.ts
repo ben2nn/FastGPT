@@ -149,7 +149,11 @@ export function getTodayEndUTC(): string {
  * // 返回 7 天前 00:00:00 的上海时区时间
  */
 export function getDaysAgoStartUTC(days: number): string {
-  return dayjs().tz(DEFAULT_TIMEZONE).subtract(days, 'day').startOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
+  return dayjs()
+    .tz(DEFAULT_TIMEZONE)
+    .subtract(days, 'day')
+    .startOf('day')
+    .format('YYYY-MM-DDTHH:mm:ssZ');
 }
 
 /**
@@ -162,7 +166,11 @@ export function getDaysAgoStartUTC(days: number): string {
  * // 返回 7 天前 23:59:59 的上海时区时间
  */
 export function getDaysAgoEndUTC(days: number): string {
-  return dayjs().tz(DEFAULT_TIMEZONE).subtract(days, 'day').endOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
+  return dayjs()
+    .tz(DEFAULT_TIMEZONE)
+    .subtract(days, 'day')
+    .endOf('day')
+    .format('YYYY-MM-DDTHH:mm:ssZ');
 }
 
 /**

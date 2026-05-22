@@ -125,20 +125,20 @@ async function handler(
  */
 function getRecommendedParams(cronExpression: string): Record<string, any> {
   const parts = cronExpression.trim().split(/\s+/);
-  
+
   // cron 表达式格式: 秒 分 时 日 月 周 (6位) 或 分 时 日 月 周 (5位)
   // 例如: 0 2 * * * (每天凌晨2点) - 5位格式
   // 例如: 0 0 2 * * * (每天凌晨2点) - 6位格式
   // 例如: 0 0 * * * * (每小时整点) - 6位格式
   // 例如: 0 */5 * * * * (每5分钟) - 6位格式
-  
+
   if (parts.length < 5) {
     return {};
   }
 
   // 根据长度判断格式
   let minute, hour, dayOfMonth, month, dayOfWeek;
-  
+
   if (parts.length === 6) {
     // 6位格式: 秒 分 时 日 月 周
     [, minute, hour, dayOfMonth, month, dayOfWeek] = parts;
@@ -151,10 +151,14 @@ function getRecommendedParams(cronExpression: string): Record<string, any> {
   // 每天: 小时固定（不是 * 或 */n），日期为 *，周为 * 或不存在
   // 例如: 0 2 * * * (每天凌晨2点) - 5位
   // 例如: 0 0 2 * * * (每天凌晨2点) - 6位
-  if (hour !== '*' && !hour.includes('/') && !hour.includes(',') && 
-      dayOfMonth === '*' && 
-      (!month || month === '*') && 
-      (!dayOfWeek || dayOfWeek === '*' || dayOfWeek === '?')) {
+  if (
+    hour !== '*' &&
+    !hour.includes('/') &&
+    !hour.includes(',') &&
+    dayOfMonth === '*' &&
+    (!month || month === '*') &&
+    (!dayOfWeek || dayOfWeek === '*' || dayOfWeek === '?')
+  ) {
     return {
       startTime: '{{yesterday.start}}',
       endTime: '{{yesterday.end}}',
@@ -167,9 +171,11 @@ function getRecommendedParams(cronExpression: string): Record<string, any> {
   // 例如: 0 * * * * (每小时) - 5位
   // 例如: 0 0 * * * * (每小时整点) - 6位
   // 例如: 0 */30 * * * * (每30分钟) - 6位
-  if ((hour === '*' || hour.includes('/') || hour.includes(',')) && 
-      dayOfMonth === '*' && 
-      (!month || month === '*')) {
+  if (
+    (hour === '*' || hour.includes('/') || hour.includes(',')) &&
+    dayOfMonth === '*' &&
+    (!month || month === '*')
+  ) {
     return {
       startTime: '{{lastHour.start}}',
       endTime: '{{lastHour.end}}',
@@ -193,8 +199,12 @@ function getRecommendedParams(cronExpression: string): Record<string, any> {
   // 每月: 日期固定（不是 *），月份为 *
   // 例如: 0 2 1 * * (每月1号凌晨2点) - 5位
   // 例如: 0 0 2 1 * * (每月1号凌晨2点) - 6位
-  if (dayOfMonth !== '*' && !dayOfMonth.includes('/') && !dayOfMonth.includes(',') && 
-      (!month || month === '*')) {
+  if (
+    dayOfMonth !== '*' &&
+    !dayOfMonth.includes('/') &&
+    !dayOfMonth.includes(',') &&
+    (!month || month === '*')
+  ) {
     return {
       startTime: '{{lastMonth.start}}',
       endTime: '{{lastMonth.end}}',

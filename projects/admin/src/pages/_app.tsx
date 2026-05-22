@@ -1,7 +1,7 @@
 // pages/_app.tsx
 import { ChakraProvider, ColorModeScript, theme } from '@chakra-ui/react';
 import type { NextPage } from 'next';
-import type { ReactElement} from 'react';
+import type { ReactElement } from 'react';
 import { useState } from 'react';
 import type { AppProps } from 'next/app';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

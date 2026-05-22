@@ -62,15 +62,15 @@ const TaskListPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
     try {
       const res = await getTaskList();
       setTasks(res.tasks);
-      
+
       // 如果详情对话框打开，更新详情中的任务数据
       if (selectedTaskForDetail) {
-        const updatedTask = res.tasks.find(t => t.id === selectedTaskForDetail.id);
+        const updatedTask = res.tasks.find((t) => t.id === selectedTaskForDetail.id);
         if (updatedTask) {
           setSelectedTaskForDetail(updatedTask);
         }
       }
-      
+
       return res.tasks;
     } catch (err: any) {
       setError(err?.message || '加载任务列表失败');

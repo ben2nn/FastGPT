@@ -65,11 +65,11 @@ export class TaskManager {
 
       // 第二步：从数据库加载所有任务配置到内存
       const dbConfigs = await this.storage.getAllTaskConfigs();
-      
+
       for (const dbConfig of dbConfigs) {
         // 从 taskConfigs 中找到对应的 executor
-        const sourceConfig = taskConfigs.find(c => c.id === dbConfig.id);
-        
+        const sourceConfig = taskConfigs.find((c) => c.id === dbConfig.id);
+
         if (!sourceConfig) {
           addLog.warn(`数据库中的任务配置在代码中不存在: ${dbConfig.id}`);
           continue;

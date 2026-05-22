@@ -54,12 +54,7 @@ interface TaskDetailDialogProps {
 /**
  * 任务详情弹框组件
  */
-const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({
-  task,
-  isOpen,
-  onClose,
-  onUpdate
-}) => {
+const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({ task, isOpen, onClose, onUpdate }) => {
   const toast = useToast();
 
   // 统一编辑状态
@@ -126,12 +121,12 @@ const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({
 
       if (res.valid) {
         setNextExecutions(res.nextExecutions || []);
-        
+
         // 设置推荐的参数
         if (res.recommendedParams) {
           setRecommendedParams(res.recommendedParams);
         }
-        
+
         toast({
           title: 'Cron 表达式有效',
           description: '已显示接下来的执行时间和推荐参数',
@@ -297,7 +292,7 @@ const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({
                   </Button>
                 )}
               </Flex>
-              
+
               <Stack spacing={3}>
                 <Flex justify="space-between">
                   <Text fontWeight="medium" color="gray.600">
@@ -323,9 +318,7 @@ const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({
                         rows={2}
                         fontSize="sm"
                       />
-                      <FormHelperText fontSize="xs">
-                        简要描述任务的功能和用途
-                      </FormHelperText>
+                      <FormHelperText fontSize="xs">简要描述任务的功能和用途</FormHelperText>
                     </FormControl>
                   ) : (
                     <Text fontSize="sm" color="gray.700">
@@ -391,7 +384,7 @@ const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({
                   <Text fontWeight="medium" color="gray.600" mb={2}>
                     任务参数
                   </Text>
-                  
+
                   {isEditing ? (
                     <FormControl isInvalid={!!paramsError}>
                       <Textarea
@@ -404,7 +397,7 @@ const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({
                         bg="gray.50"
                       />
                       {paramsError && <FormErrorMessage>{paramsError}</FormErrorMessage>}
-                      
+
                       {/* 推荐参数提示 */}
                       {recommendedParams && (
                         <Alert status="info" mt={2} borderRadius="md">
@@ -435,9 +428,13 @@ const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({
                           </Button>
                         </Alert>
                       )}
-                      
+
                       <FormHelperText fontSize="xs">
-                        支持动态参数模板，如 {'{'}{'{'} yesterday.start {'}'}{'}'}、{'{'}{'{'} yesterday.end {'}'}{'}'} 等
+                        支持动态参数模板，如 {'{'}
+                        {'{'} yesterday.start {'}'}
+                        {'}'}、{'{'}
+                        {'{'} yesterday.end {'}'}
+                        {'}'} 等
                       </FormHelperText>
                     </FormControl>
                   ) : (
@@ -463,7 +460,9 @@ const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({
                       onClick={handleSave}
                       isLoading={isUpdating}
                       loadingText="保存中"
-                      isDisabled={!!cronError || !!paramsError || !cronExpression.trim() || !params.trim()}
+                      isDisabled={
+                        !!cronError || !!paramsError || !cronExpression.trim() || !params.trim()
+                      }
                     >
                       保存全部
                     </Button>
@@ -616,8 +615,6 @@ const TaskDetailDialog: React.FC<TaskDetailDialogProps> = ({
                 )}
               </Stack>
             </Box>
-
-
           </Stack>
         </ModalBody>
 

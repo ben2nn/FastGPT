@@ -109,10 +109,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // 9. 设置响应头并返回
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename=dataset-export-${Date.now()}.json`
-    );
+    res.setHeader('Content-Disposition', `attachment; filename=dataset-export-${Date.now()}.json`);
     res.status(200).json(exportData);
   } catch (error) {
     console.error('Export dataset error:', error);

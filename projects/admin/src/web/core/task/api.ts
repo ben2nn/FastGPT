@@ -178,10 +178,9 @@ export const updateCronExpression = (
  * @param params 任务参数
  */
 export const updateTaskParams = (taskId: string, params: Record<string, any>) => {
-  return POST<{ success: boolean; message: string }>(
-    `/admin/tasks/${taskId}/update-params`,
-    { params }
-  );
+  return POST<{ success: boolean; message: string }>(`/admin/tasks/${taskId}/update-params`, {
+    params
+  });
 };
 
 /**
@@ -195,15 +194,12 @@ export const validateCronExpression = (
   cronExpression: string,
   timezone?: string
 ) => {
-  return POST<{ 
-    valid: boolean; 
-    message: string; 
+  return POST<{
+    valid: boolean;
+    message: string;
     nextExecutions?: string[];
     recommendedParams?: Record<string, any>;
-  }>(
-    `/admin/tasks/${taskId}/validate-cron`,
-    { cronExpression, timezone }
-  );
+  }>(`/admin/tasks/${taskId}/validate-cron`, { cronExpression, timezone });
 };
 
 /**

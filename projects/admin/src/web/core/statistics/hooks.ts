@@ -3,7 +3,7 @@
  * 封装统计数据查询逻辑，使用 react-query 管理数据状态
  */
 
-import type { UseQueryOptions} from '@tanstack/react-query';
+import type { UseQueryOptions } from '@tanstack/react-query';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 import {
