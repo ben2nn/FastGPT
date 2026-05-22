@@ -10,9 +10,7 @@ RUN apk add --no-cache libc6-compat && npm install -g pnpm@9.4.0
 # copy packages and one project
 COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY ./packages/global ./packages/global
-COPY ./packages/plugins ./packages/plugins
 COPY ./packages/service ./packages/service
-COPY ./packages/templates ./packages/templates
 COPY ./packages/web ./packages/web
 COPY ./projects/admin/package.json ./projects/admin/package.json
 
