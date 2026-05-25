@@ -8,6 +8,35 @@ import { MongoDatasetDataText } from '@fastgpt/service/core/dataset/data/dataTex
 import { MongoDatasetCollectionTags } from '@fastgpt/service/core/dataset/tag/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
 import { Types } from 'mongoose';
+import formidable from 'formidable';
+import { readFile } from 'fs/promises';
+
+// 禁用默认 bodyParser，使用 formidable 处理文件上传
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
+
+async function parseFormData(req: NextApiRequest): Promise<{
+  fields: formidable.Fields;
+  files: formidable.Files;
+}> {
+  return new Promise((resolve, reject) => {
+    const form = formidable({
+      maxFileSize: 500 * 1024 * 1024, // 500MB
+      keepExtensions: true
+    });
+
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve({ fields, files });
+      }
+    });
+  });
+}
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -49,19 +78,44 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(401).json({ error: '无法获取团队信息' });
     }
 
-    // 4. 解析请求体
-    const { file, keepOriginalId, targetParentId } = req.body;
-
-    if (!file) {
-      return res.status(400).json({ error: 'File is required' });
+    // 4. 解析 FormData
+    let fields: formidable.Fields;
+    let files: formidable.Files;
+    try {
+      const result = await parseFormData(req);
+      fields = result.fields;
+      files = result.files;
+    } catch (error) {
+      console.error('Parse form data error:', error);
+      return res
+        .status(400)
+        .json({ error: '文件上传失败：' + (error instanceof Error ? error.message : '未知错误') });
     }
 
-    // 5. 解析 JSON 文件
+    // 获取表单字段
+    const keepOriginalId = fields.keepOriginalId?.[0] === 'true';
+    const targetParentId = fields.targetParentId?.[0] || undefined;
+
+    // 获取上传的文件
+    const fileField = files.file;
+    const uploadedFile = Array.isArray(fileField) ? fileField[0] : fileField;
+    if (!uploadedFile) {
+      return res.status(400).json({ error: '请上传 JSON 文件' });
+    }
+
+    // 5. 读取并解析 JSON 文件
     let importData;
     try {
-      importData = typeof file === 'string' ? JSON.parse(file) : file;
-    } catch {
-      return res.status(400).json({ error: 'Invalid JSON format' });
+      const fileContent = await readFile(uploadedFile.filepath, 'utf-8');
+      importData = JSON.parse(fileContent);
+    } catch (error) {
+      console.error('Parse JSON error:', error);
+      return res.status(400).json({ error: 'JSON 文件格式错误' });
+    }
+
+    // 5.5 验证导入数据的基本结构
+    if (!importData || typeof importData !== 'object') {
+      return res.status(400).json({ error: '导入数据格式错误：应为 JSON 对象' });
     }
 
     // 6. 验证 JSON 结构
@@ -86,7 +140,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 6.5. 检查导入数据量限制
-    const IMPORT_LIMIT = 50000;
+    const IMPORT_LIMIT = parseInt(process.env.IMPORT_LIMIT || '50000', 10);
     const totalDocs =
       datasets.length +
       collections.length +
@@ -100,60 +154,47 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // 7. 处理 ID 映射
+    // 7. 处理 ID 映射（逐个集合遍历，避免 allDocs 展开导致内存倍增）
     const idMap = new Map<string, string>();
 
     if (!keepOriginalId) {
-      // 为所有文档生成新 ID
-      const allDocs = [...datasets, ...collections, ...datas, ...dataTexts, ...collectionTags];
-      for (const doc of allDocs) {
-        const oldId = doc._id.toString();
-        const newId = new Types.ObjectId().toString();
-        idMap.set(oldId, newId);
+      for (const arr of [datasets, collections, datas, dataTexts, collectionTags]) {
+        for (const doc of arr) {
+          idMap.set(String(doc._id), new Types.ObjectId().toString());
+        }
       }
     }
 
-    // 8. 更新文档引用
-    const updateId = (id: string) => {
-      if (keepOriginalId) return id;
-      return idMap.get(id) || id;
-    };
+    // 8. 原地更新文档引用（不创建副本，直接修改原数组中的对象）
+    function updateDoc(doc: Record<string, unknown>) {
+      if (!keepOriginalId) {
+        doc._id = idMap.get(String(doc._id)) || doc._id;
+        if (doc.parentId) doc.parentId = idMap.get(String(doc.parentId)) || doc.parentId;
+        if (doc.datasetId) doc.datasetId = idMap.get(String(doc.datasetId)) || doc.datasetId;
+        if (doc.collectionId)
+          doc.collectionId = idMap.get(String(doc.collectionId)) || doc.collectionId;
+        if (doc.dataId) doc.dataId = idMap.get(String(doc.dataId)) || doc.dataId;
+      }
+      doc.teamId = teamId;
+      doc.tmbId = tmbId;
+    }
 
-    const updateDoc = (doc: Record<string, unknown>) => {
-      const updated = { ...doc };
-      updated._id = updateId(doc._id as string);
-      if (updated.parentId) {
-        updated.parentId = updateId(updated.parentId as string);
-      }
-      if (updated.datasetId) {
-        updated.datasetId = updateId(updated.datasetId as string);
-      }
-      if (updated.collectionId) {
-        updated.collectionId = updateId(updated.collectionId as string);
-      }
-      if (updated.dataId) {
-        updated.dataId = updateId(updated.dataId as string);
-      }
-      updated.teamId = teamId;
-      updated.tmbId = tmbId;
-      return updated;
-    };
+    // 9. 原地更新顶级数据集的 parentId
+    for (const doc of datasets) {
+      updateDoc(doc);
+      if (targetParentId) doc.parentId = targetParentId;
+    }
+    collections.forEach(updateDoc);
+    datas.forEach(updateDoc);
+    dataTexts.forEach(updateDoc);
+    collectionTags.forEach(updateDoc);
 
-    // 9. 更新顶级数据集的 parentId
-    const updatedDatasets = datasets.map((doc: Record<string, unknown>) => {
-      const updated = updateDoc(doc);
-      if (targetParentId) {
-        updated.parentId = targetParentId;
-      }
-      return updated;
-    });
+    // 释放 idMap，减少内存占用
+    if (!keepOriginalId) {
+      idMap.clear();
+    }
 
-    const updatedCollections = collections.map(updateDoc);
-    const updatedDatas = datas.map(updateDoc);
-    const updatedDataTexts = dataTexts.map(updateDoc);
-    const updatedCollectionTags = collectionTags.map(updateDoc);
-
-    // 10. 分批写入数据库（每批 2000 条，避免单次 insertMany 过大导致慢查询）
+    // 10. 分批写入数据库（顺序执行，降低 MongoDB 连接压力）
     const BATCH_SIZE = 2000;
     const duplicateWarnings: string[] = [];
 
@@ -169,7 +210,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           const result = await model.insertMany(batch, { ordered: false });
           insertedCount += result.length;
         } catch (err: unknown) {
-          // ordered: false 遇到重复 key 时仍会抛错，但非重复的文档已成功插入
           if (err instanceof Error && 'code' in err && (err as { code: number }).code === 11000) {
             const writeResult = (err as { result?: { insertedCount?: number } }).result;
             if (writeResult?.insertedCount) {
@@ -185,14 +225,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return insertedCount;
     }
 
-    const [datasetsCount, collectionsCount, datasCount, dataTextsCount, collectionTagsCount] =
-      await Promise.all([
-        batchInsert(MongoDataset, updatedDatasets, 'datasets'),
-        batchInsert(MongoDatasetCollection, updatedCollections, 'collections'),
-        batchInsert(MongoDatasetData, updatedDatas, 'datas'),
-        batchInsert(MongoDatasetDataText, updatedDataTexts, 'dataTexts'),
-        batchInsert(MongoDatasetCollectionTags, updatedCollectionTags, 'collectionTags')
-      ]);
+    const datasetsCount = await batchInsert(MongoDataset, datasets, 'datasets');
+    const collectionsCount = await batchInsert(MongoDatasetCollection, collections, 'collections');
+    const datasCount = await batchInsert(MongoDatasetData, datas, 'datas');
+    const dataTextsCount = await batchInsert(MongoDatasetDataText, dataTexts, 'dataTexts');
+    const collectionTagsCount = await batchInsert(
+      MongoDatasetCollectionTags,
+      collectionTags,
+      'collectionTags'
+    );
 
     // 11. 返回导入结果
     res.status(200).json({
@@ -207,17 +248,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
     });
   } catch (error) {
-    console.error('Import dataset error:', error);
-    res.status(500).json({ success: false, error: 'Import failed' });
+    const errMsg =
+      error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+    console.error('Import dataset error:', errMsg);
+    res.status(500).json({ success: false, error: errMsg });
   }
 }
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '100mb'
-    }
-  }
-};
 
 export default NextAPI(handler);

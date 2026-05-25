@@ -77,7 +77,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 6.5. 检查导入数据量限制
-    const IMPORT_LIMIT = 50000;
+    const IMPORT_LIMIT = parseInt(process.env.IMPORT_LIMIT || '50000', 10);
     const totalDocs = apps.length + versions.length;
     if (totalDocs > IMPORT_LIMIT) {
       return res.status(400).json({

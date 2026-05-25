@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
 import { Pool } from 'pg';
 
-const IMPORT_LIMIT = 100;
+const IMPORT_LIMIT = parseInt(process.env.IMPORT_LIMIT || '100', 10);
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   const AIPROXY_PG_URL = process.env.AIPROXY_PG_URL;
@@ -92,34 +92,30 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           const modelsJson = JSON.stringify(channel.models ?? []);
           const modelMappingJson = JSON.stringify(channel.model_mapping ?? {});
           const setsJson = JSON.stringify(channel.sets ?? []);
-          const configsJson = JSON.stringify(channel.configs ?? {});
+          const configJson = JSON.stringify(channel.config ?? channel.configs ?? {});
 
           if (targetId !== undefined) {
             // 更新现有渠道
             await client.query(
               `UPDATE channels SET
-                name = $1, type = $2, base_url = $3,
-                models = $4, model_mapping = $5, priority = $6, status = $7,
-                sets = $8, skip_tls_verify = $9, enabled_no_permission_ban = $10,
-                enabled_auto_balance_check = $11, warn_error_rate = $12,
-                max_error_rate = $13, configs = $14
-              WHERE id = $15`,
+                name = $1, key = $2, type = $3, base_url = $4,
+                models = $5, model_mapping = $6, priority = $7, status = $8,
+                sets = $9, enabled_auto_balance_check = $10,
+                balance_threshold = $11, config = $12
+              WHERE id = $13`,
               [
                 String(channel.name),
+                String((channel.key as string) ?? ''),
                 Number(channel.type),
                 String(channel.base_url ?? ''),
-                String(channel.proxy_url ?? ''),
                 modelsJson,
                 modelMappingJson,
                 Number(channel.priority ?? 10),
                 Number(channel.status ?? 1),
                 setsJson,
-                Boolean(channel.skip_tls_verify ?? false),
-                Boolean(channel.enabled_no_permission_ban ?? false),
                 Boolean(channel.enabled_auto_balance_check ?? false),
-                Number(channel.warn_error_rate ?? 0),
-                Number(channel.max_error_rate ?? 0),
-                configsJson,
+                Number(channel.balance_threshold ?? 0),
+                configJson,
                 targetId
               ]
             );
@@ -129,26 +125,22 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             await client.query(
               `INSERT INTO channels (
                 name, key, type, base_url, models, model_mapping,
-                priority, status, sets, skip_tls_verify, enabled_no_permission_ban,
-                enabled_auto_balance_check, warn_error_rate, max_error_rate, configs
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+                priority, status, sets, enabled_auto_balance_check,
+                balance_threshold, config
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
               [
                 String(channel.name),
                 String((channel.key as string) ?? ''),
                 Number(channel.type),
                 String(channel.base_url ?? ''),
-                String(channel.proxy_url ?? ''),
                 modelsJson,
                 modelMappingJson,
                 Number(channel.priority ?? 10),
                 Number(channel.status ?? 1),
                 setsJson,
-                Boolean(channel.skip_tls_verify ?? false),
-                Boolean(channel.enabled_no_permission_ban ?? false),
                 Boolean(channel.enabled_auto_balance_check ?? false),
-                Number(channel.warn_error_rate ?? 0),
-                Number(channel.max_error_rate ?? 0),
-                configsJson
+                Number(channel.balance_threshold ?? 0),
+                configJson
               ]
             );
             insertedCount++;

@@ -134,14 +134,18 @@ export const exportDataset = async (parentId: string) => {
 };
 
 // 知识库导入
-export const importDataset = async (
-  file: string | object,
-  keepOriginalId: boolean,
-  targetParentId?: string
-) => {
-  const response = await authFetch(getWebReqUrl('/api/extend/dataset/importFromJson'), {
+export const importDataset = async (formData: FormData) => {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers['token'] = token;
+  }
+
+  const response = await fetch(getWebReqUrl('/api/extend/dataset/importFromJson'), {
     method: 'POST',
-    body: JSON.stringify({ file, keepOriginalId, targetParentId })
+    headers,
+    body: formData
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));

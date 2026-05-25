@@ -54,8 +54,25 @@ function downloadJSON(data: object, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// 文件大小限制：500MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
+
+function validateFileSize(file: File): void {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`文件过大：${(file.size / 1024 / 1024).toFixed(1)}MB，最大允许 50MB`);
+  }
+}
+
 function readFileAsJSON(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
+    // 先验证文件大小
+    try {
+      validateFileSize(file);
+    } catch (e) {
+      reject(e);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(new Error('文件读取失败'));
@@ -100,8 +117,15 @@ function DatasetTab() {
     setImporting(true);
     setImportResult(null);
     try {
-      const text = await readFileAsJSON(selectedFile);
-      const result = await importDataset(text, keepOriginalId, importParentId.trim() || undefined);
+      // 使用 FormData 上传文件，避免 JSON.stringify 内存翻倍
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('keepOriginalId', String(keepOriginalId));
+      if (importParentId.trim()) {
+        formData.append('targetParentId', importParentId.trim());
+      }
+
+      const result = await importDataset(formData);
       setImportResult(result.data);
       toast({ title: '导入成功', status: 'success', duration: 3000 });
     } catch (e) {
@@ -547,6 +571,34 @@ function FileUpload({
 }) {
   const borderColor = useColorModeValue('gray.300', 'gray.600');
   const bgColor = useColorModeValue('gray.50', 'gray.700');
+  const toast = useToast();
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null;
+    if (f) {
+      // 验证文件大小
+      if (f.size > MAX_FILE_SIZE) {
+        toast({
+          title: '文件过大',
+          description: `文件大小 ${formatFileSize(f.size)}，最大允许 500MB`,
+          status: 'error',
+          duration: 5000
+        });
+        // 清空 input
+        if (fileRef.current) {
+          fileRef.current.value = '';
+        }
+        return;
+      }
+    }
+    onSelect(f);
+  };
 
   return (
     <Box>
@@ -555,10 +607,7 @@ function FileUpload({
         type="file"
         accept=".json"
         style={{ display: 'none' }}
-        onChange={(e) => {
-          const f = e.target.files?.[0] || null;
-          onSelect(f);
-        }}
+        onChange={handleFileChange}
       />
       <Box
         borderWidth="2px"
@@ -573,13 +622,24 @@ function FileUpload({
         onClick={() => fileRef.current?.click()}
       >
         {selectedFile ? (
-          <Text fontSize="sm" color="blue.600">
-            {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-          </Text>
+          <VStack spacing={1}>
+            <Text fontSize="sm" color="blue.600">
+              {selectedFile.name}
+            </Text>
+            <Text fontSize="xs" color={selectedFile.size > MAX_FILE_SIZE ? 'red.500' : 'gray.500'}>
+              {formatFileSize(selectedFile.size)}
+              {selectedFile.size > MAX_FILE_SIZE && ' (超出限制)'}
+            </Text>
+          </VStack>
         ) : (
-          <Text fontSize="sm" color="gray.500">
-            点击选择 JSON 文件
-          </Text>
+          <VStack spacing={1}>
+            <Text fontSize="sm" color="gray.500">
+              点击选择 JSON 文件
+            </Text>
+            <Text fontSize="xs" color="gray.400">
+              最大支持 500MB
+            </Text>
+          </VStack>
         )}
       </Box>
     </Box>
