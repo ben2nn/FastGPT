@@ -63,6 +63,7 @@ jobs:
           registry: cloud.hrids.cn:7600
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
+          insecure: true
 
       - name: Build for ${{ matrix.arch }}
         id: build
@@ -115,6 +116,7 @@ jobs:
           registry: cloud.hrids.cn:7600
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
+          insecure: true
 
       - name: Download digests
         uses: actions/download-artifact@v4
