@@ -234,3 +234,33 @@ export const importChannels = async (file: string | object, keepOriginalId?: boo
   }
   return response.json();
 };
+
+// 工具导出
+export const exportTools = async (parentId?: string) => {
+  const response = await authFetch(getWebReqUrl('/api/extend/tool/exportTools'), {
+    method: 'POST',
+    body: JSON.stringify({ parentId })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '工具导出失败');
+  }
+  return response.json();
+};
+
+// 工具导入
+export const importTools = async (
+  file: string | object,
+  keepOriginalId: boolean,
+  targetParentId?: string
+) => {
+  const response = await authFetch(getWebReqUrl('/api/extend/tool/importTools'), {
+    method: 'POST',
+    body: JSON.stringify({ file, keepOriginalId, targetParentId })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '工具导入失败');
+  }
+  return response.json();
+};
