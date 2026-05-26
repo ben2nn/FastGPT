@@ -38,6 +38,10 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver-opts: network=host
+          buildkitd-config-inline: |
+            [registry."cloud.hrids.cn:7600"]
+              http = true
+              insecure = true
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
@@ -53,17 +57,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Configure Docker for insecure registry
-        run: |
-          sudo mkdir -p /etc/docker
-          echo '{"insecure-registries":["cloud.hrids.cn:7600"]}' | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker
-
       - name: Login to Harbor
-        run: |
-          # 增加超时时间
-          echo "${{ secrets.HARBOR_PASSWORD }}" | docker login cloud.hrids.cn:7600 -u ${{ secrets.HARBOR_USERNAME }} --password-stdin || \
-          (sleep 10 && echo "${{ secrets.HARBOR_PASSWORD }}" | docker login cloud.hrids.cn:7600 -u ${{ secrets.HARBOR_USERNAME }} --password-stdin)
+        uses: docker/login-action@v3
+        with:
+          registry: cloud.hrids.cn:7600
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Build for ${{ matrix.arch }}
         id: build
@@ -110,17 +109,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Configure Docker for insecure registry
-        run: |
-          sudo mkdir -p /etc/docker
-          echo '{"insecure-registries":["cloud.hrids.cn:7600"]}' | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker
-
       - name: Login to Harbor
-        run: |
-          # 增加超时时间
-          echo "${{ secrets.HARBOR_PASSWORD }}" | docker login cloud.hrids.cn:7600 -u ${{ secrets.HARBOR_USERNAME }} --password-stdin || \
-          (sleep 10 && echo "${{ secrets.HARBOR_PASSWORD }}" | docker login cloud.hrids.cn:7600 -u ${{ secrets.HARBOR_USERNAME }} --password-stdin)
+        uses: docker/login-action@v3
+        with:
+          registry: cloud.hrids.cn:7600
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -131,6 +125,11 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."cloud.hrids.cn:7600"]
+              http = true
+              insecure = true
 
       - name: Set image name and tag
         run: |
