@@ -57,6 +57,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: cloud.hrids.cn:7600
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Build for ${{ matrix.archs.arch }}
         id: build
@@ -70,7 +76,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=${{ matrix.sub_routes.repo }} image
-          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/${{ matrix.sub_routes.repo }}",push-by-digest=true,push=true
+          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/${{ matrix.sub_routes.repo }},cloud.hrids.cn:7600/ai_project/${{ matrix.sub_routes.repo }}",push-by-digest=true,push=true
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -109,6 +115,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: cloud.hrids.cn:7600
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -125,15 +137,19 @@ jobs:
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/${{ matrix.sub_routes.repo }}:latest" >> $GITHUB_ENV
             echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/${{ matrix.sub_routes.repo }}:latest" >> $GITHUB_ENV
+            echo "Harbor_Tag=cloud.hrids.cn:7600/ai_project/${{ matrix.sub_routes.repo }}:latest" >> $GITHUB_ENV
+            echo "Harbor_Latest=cloud.hrids.cn:7600/ai_project/${{ matrix.sub_routes.repo }}:latest" >> $GITHUB_ENV
           else
             echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/${{ matrix.sub_routes.repo }}:${{ github.ref_name }}" >> $GITHUB_ENV
             echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/${{ matrix.sub_routes.repo }}:latest" >> $GITHUB_ENV
+            echo "Harbor_Tag=cloud.hrids.cn:7600/ai_project/${{ matrix.sub_routes.repo }}:${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "Harbor_Latest=cloud.hrids.cn:7600/ai_project/${{ matrix.sub_routes.repo }}:latest" >> $GITHUB_ENV
           fi
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
-          TAGS="$(echo -e "${Git_Tag}\n${Git_Latest}")"
+          TAGS="$(echo -e "${Git_Tag}\n${Git_Latest}\n${Harbor_Tag}\n${Harbor_Latest}")"
           for TAG in $TAGS; do
             docker buildx imagetools create -t $TAG \
               $(printf 'ghcr.io/${{ github.repository_owner }}/${{ matrix.sub_routes.repo }}@sha256:%s ' *)
