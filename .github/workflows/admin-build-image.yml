@@ -1,13 +1,21 @@
-name: Build fastgpt-mcp-server images
+name: Build fastgpt-admin images
 on:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'NEXT_PUBLIC_BASE_URL for admin frontend'
+        required: false
+        type: string
   push:
     paths:
-      - 'projects/mcp_server/**'
+      - 'projects/admin/**'
+      - 'packages/global/**'
+      - 'packages/service/**'
+      - 'packages/web/**'
     tags:
       - 'v*'
 jobs:
-  build-fastgpt-mcp_server-images:
+  build-fastgpt-admin-images:
     permissions:
       packages: write
       contents: read
@@ -34,9 +42,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-mcp-server-buildx-${{ github.sha }}
+          key: ${{ runner.os }}-admin-buildx-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-mcp_server-buildx-
+            ${{ runner.os }}-admin-buildx-
 
       # login docker
       - name: Login to GitHub Container Registry
@@ -56,12 +64,14 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: projects/mcp_server/Dockerfile
+          file: projects/admin/Dockerfile
           platforms: linux/${{ matrix.arch }}
+          build-args: |
+            base_url=${{ inputs.base_url || secrets.ADMIN_BASE_URL }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.description=fastgpt-mcp_server image
-          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-mcp_server,${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-mcp_server",push-by-digest=true,push=true
+            org.opencontainers.image.description=fastgpt-admin image
+          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-admin,${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-admin",push-by-digest=true,push=true
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -74,18 +84,18 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-fastgpt-mcp_server-${{ github.sha }}-${{ matrix.arch }}
+          name: digests-fastgpt-admin-${{ github.sha }}-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
 
-  release-fastgpt-mcp_server-images:
+  release-fastgpt-admin-images:
     permissions:
       packages: write
       contents: read
       attestations: write
       id-token: write
-    needs: build-fastgpt-mcp_server-images
+    needs: build-fastgpt-admin-images
     runs-on: ubuntu-24.04
     steps:
       - name: Login to GitHub Container Registry
@@ -104,7 +114,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
-          pattern: digests-fastgpt-mcp_server-${{ github.sha }}-*
+          pattern: digests-fastgpt-admin-${{ github.sha }}-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
@@ -113,15 +123,15 @@ jobs:
       - name: Set image name and tag
         run: |
           if [[ "${{ github.ref_name }}" == "main" ]]; then
-            echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-mcp_server:latest" >> $GITHUB_ENV
-            echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-mcp_server:latest" >> $GITHUB_ENV
-            echo "Docker_Hub_Tag=${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-mcp_server:latest" >> $GITHUB_ENV
-            echo "Docker_Hub_Latest=${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-mcp_server:latest" >> $GITHUB_ENV
+            echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Docker_Hub_Tag=${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Docker_Hub_Latest=${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-admin:latest" >> $GITHUB_ENV
           else
-            echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-mcp_server:${{ github.ref_name }}" >> $GITHUB_ENV
-            echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-mcp_server:latest" >> $GITHUB_ENV
-            echo "Docker_Hub_Tag=${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-mcp_server:${{ github.ref_name }}" >> $GITHUB_ENV
-            echo "Docker_Hub_Latest=${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-mcp_server:latest" >> $GITHUB_ENV
+            echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Docker_Hub_Tag=${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-admin:${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "Docker_Hub_Latest=${{ secrets.DOCKER_IMAGE_NAME }}/fastgpt-admin:latest" >> $GITHUB_ENV
           fi
 
       - name: Create manifest list and push
@@ -130,6 +140,6 @@ jobs:
           TAGS="$(echo -e "${Git_Tag}\n${Git_Latest}\n${Docker_Hub_Tag}\n${Docker_Hub_Latest}")"
           for TAG in $TAGS; do
             docker buildx imagetools create -t $TAG \
-              $(printf 'ghcr.io/${{ github.repository_owner }}/fastgpt-mcp_server@sha256:%s ' *)
+              $(printf 'ghcr.io/${{ github.repository_owner }}/fastgpt-admin@sha256:%s ' *)
             sleep 5
           done

@@ -34,6 +34,8 @@ import {
   importDataset,
   exportApp,
   importApp,
+  exportTools,
+  importTools,
   exportModels,
   importModels,
   exportChannels,
@@ -54,8 +56,25 @@ function downloadJSON(data: object, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// 文件大小限制：500MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
+
+function validateFileSize(file: File): void {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`文件过大：${(file.size / 1024 / 1024).toFixed(1)}MB，最大允许 50MB`);
+  }
+}
+
 function readFileAsJSON(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
+    // 先验证文件大小
+    try {
+      validateFileSize(file);
+    } catch (e) {
+      reject(e);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(new Error('文件读取失败'));
@@ -100,8 +119,15 @@ function DatasetTab() {
     setImporting(true);
     setImportResult(null);
     try {
-      const text = await readFileAsJSON(selectedFile);
-      const result = await importDataset(text, keepOriginalId, importParentId.trim() || undefined);
+      // 使用 FormData 上传文件，避免 JSON.stringify 内存翻倍
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('keepOriginalId', String(keepOriginalId));
+      if (importParentId.trim()) {
+        formData.append('targetParentId', importParentId.trim());
+      }
+
+      const result = await importDataset(formData);
       setImportResult(result.data);
       toast({ title: '导入成功', status: 'success', duration: 3000 });
     } catch (e) {
@@ -401,6 +427,113 @@ function ModelTab() {
   );
 }
 
+// ========== 工具 Tab ==========
+function ToolTab() {
+  const toast = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [exportParentId, setExportParentId] = useState('');
+  const [importParentId, setImportParentId] = useState('');
+  const [keepOriginalId, setKeepOriginalId] = useState(true);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<Record<string, number> | null>(null);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = await exportTools(exportParentId.trim() || undefined);
+      downloadJSON(data, `tool-export-${Date.now()}.json`);
+      toast({ title: '导出成功', status: 'success', duration: 3000 });
+    } catch (e) {
+      toast({ title: (e as Error).message, status: 'error', duration: 5000 });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      toast({ title: '请选择 JSON 文件', status: 'warning', duration: 3000 });
+      return;
+    }
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const text = await readFileAsJSON(selectedFile);
+      const result = await importTools(text, keepOriginalId, importParentId.trim() || undefined);
+      setImportResult(result.data);
+      toast({ title: '导入成功', status: 'success', duration: 3000 });
+    } catch (e) {
+      toast({ title: (e as Error).message, status: 'error', duration: 5000 });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <Flex gap={6} direction={{ base: 'column', md: 'row' }}>
+      <ExportPanel title="导出工具">
+        <FormControl>
+          <FormLabel fontSize="sm">parentId（可选）</FormLabel>
+          <Input
+            placeholder="留空导出全部工具"
+            value={exportParentId}
+            onChange={(e) => setExportParentId(e.target.value)}
+          />
+        </FormControl>
+        <Button
+          leftIcon={<DownloadIcon />}
+          colorScheme="blue"
+          onClick={handleExport}
+          isLoading={exporting}
+          loadingText="导出中..."
+          w="full"
+        >
+          导出
+        </Button>
+      </ExportPanel>
+
+      <ImportPanel title="导入工具">
+        <FileUpload fileRef={fileRef} selectedFile={selectedFile} onSelect={setSelectedFile} />
+        <FormControl display="flex" alignItems="center">
+          <FormLabel mb={0} fontSize="sm">
+            保留原 ID
+          </FormLabel>
+          <Switch
+            isChecked={keepOriginalId}
+            onChange={(e) => setKeepOriginalId(e.target.checked)}
+          />
+        </FormControl>
+        <FormControl>
+          <FormLabel fontSize="sm">目标父文件夹 ID（可选）</FormLabel>
+          <Input
+            placeholder="留空则导入到根目录"
+            value={importParentId}
+            onChange={(e) => setImportParentId(e.target.value)}
+          />
+        </FormControl>
+        <Button
+          leftIcon={<AttachmentIcon />}
+          colorScheme="green"
+          onClick={handleImport}
+          isLoading={importing}
+          loadingText="导入中..."
+          w="full"
+        >
+          导入
+        </Button>
+        {importResult && (
+          <ImportResultStats
+            result={importResult}
+            labels={{ appsCount: '应用', versionsCount: '版本' }}
+          />
+        )}
+      </ImportPanel>
+    </Flex>
+  );
+}
+
 // ========== 渠道 Tab ==========
 function ChannelTab() {
   const toast = useToast();
@@ -547,6 +680,34 @@ function FileUpload({
 }) {
   const borderColor = useColorModeValue('gray.300', 'gray.600');
   const bgColor = useColorModeValue('gray.50', 'gray.700');
+  const toast = useToast();
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null;
+    if (f) {
+      // 验证文件大小
+      if (f.size > MAX_FILE_SIZE) {
+        toast({
+          title: '文件过大',
+          description: `文件大小 ${formatFileSize(f.size)}，最大允许 500MB`,
+          status: 'error',
+          duration: 5000
+        });
+        // 清空 input
+        if (fileRef.current) {
+          fileRef.current.value = '';
+        }
+        return;
+      }
+    }
+    onSelect(f);
+  };
 
   return (
     <Box>
@@ -555,10 +716,7 @@ function FileUpload({
         type="file"
         accept=".json"
         style={{ display: 'none' }}
-        onChange={(e) => {
-          const f = e.target.files?.[0] || null;
-          onSelect(f);
-        }}
+        onChange={handleFileChange}
       />
       <Box
         borderWidth="2px"
@@ -573,13 +731,24 @@ function FileUpload({
         onClick={() => fileRef.current?.click()}
       >
         {selectedFile ? (
-          <Text fontSize="sm" color="blue.600">
-            {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-          </Text>
+          <VStack spacing={1}>
+            <Text fontSize="sm" color="blue.600">
+              {selectedFile.name}
+            </Text>
+            <Text fontSize="xs" color={selectedFile.size > MAX_FILE_SIZE ? 'red.500' : 'gray.500'}>
+              {formatFileSize(selectedFile.size)}
+              {selectedFile.size > MAX_FILE_SIZE && ' (超出限制)'}
+            </Text>
+          </VStack>
         ) : (
-          <Text fontSize="sm" color="gray.500">
-            点击选择 JSON 文件
-          </Text>
+          <VStack spacing={1}>
+            <Text fontSize="sm" color="gray.500">
+              点击选择 JSON 文件
+            </Text>
+            <Text fontSize="xs" color="gray.400">
+              最大支持 500MB
+            </Text>
+          </VStack>
         )}
       </Box>
     </Box>
@@ -621,6 +790,7 @@ export default function ImportExportPage({ ssrAuthenticated }: { ssrAuthenticate
           <TabList>
             <Tab>知识库</Tab>
             <Tab>工作流</Tab>
+            <Tab>工具</Tab>
             <Tab>模型配置</Tab>
             <Tab>渠道</Tab>
           </TabList>
@@ -631,6 +801,9 @@ export default function ImportExportPage({ ssrAuthenticated }: { ssrAuthenticate
             </TabPanel>
             <TabPanel px={0}>
               <AppTab />
+            </TabPanel>
+            <TabPanel px={0}>
+              <ToolTab />
             </TabPanel>
             <TabPanel px={0}>
               <ModelTab />

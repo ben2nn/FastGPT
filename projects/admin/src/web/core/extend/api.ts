@@ -134,14 +134,18 @@ export const exportDataset = async (parentId: string) => {
 };
 
 // 知识库导入
-export const importDataset = async (
-  file: string | object,
-  keepOriginalId: boolean,
-  targetParentId?: string
-) => {
-  const response = await authFetch(getWebReqUrl('/api/extend/dataset/importFromJson'), {
+export const importDataset = async (formData: FormData) => {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers['token'] = token;
+  }
+
+  const response = await fetch(getWebReqUrl('/api/extend/dataset/importFromJson'), {
     method: 'POST',
-    body: JSON.stringify({ file, keepOriginalId, targetParentId })
+    headers,
+    body: formData
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -227,6 +231,36 @@ export const importChannels = async (file: string | object, keepOriginalId?: boo
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.error || '渠道导入失败');
+  }
+  return response.json();
+};
+
+// 工具导出
+export const exportTools = async (parentId?: string) => {
+  const response = await authFetch(getWebReqUrl('/api/extend/tool/exportTools'), {
+    method: 'POST',
+    body: JSON.stringify({ parentId })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '工具导出失败');
+  }
+  return response.json();
+};
+
+// 工具导入
+export const importTools = async (
+  file: string | object,
+  keepOriginalId: boolean,
+  targetParentId?: string
+) => {
+  const response = await authFetch(getWebReqUrl('/api/extend/tool/importTools'), {
+    method: 'POST',
+    body: JSON.stringify({ file, keepOriginalId, targetParentId })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '工具导入失败');
   }
   return response.json();
 };
