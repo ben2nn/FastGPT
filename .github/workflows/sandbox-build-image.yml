@@ -46,11 +46,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Login to Harbor
-        uses: docker/login-action@v3
-        with:
-          registry: cloud.hrids.cn:7600
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+        run: echo "${{ secrets.HARBOR_PASSWORD }}" | docker login harbor.hrids.com -u ${{ secrets.HARBOR_USERNAME }} --password-stdin
 
       - name: Build for ${{ matrix.arch }}
         id: build
@@ -62,7 +58,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=fastgpt-sandbox image
-          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-sandbox,cloud.hrids.cn:7600/ai_project/fastgpt-sandbox",push-by-digest=true,push=true
+          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-sandbox,harbor.hrids.com/ai_project/fastgpt-sandbox",push-by-digest=true,push=true
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -96,11 +92,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Login to Harbor
-        uses: docker/login-action@v3
-        with:
-          registry: cloud.hrids.cn:7600
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+        run: echo "${{ secrets.HARBOR_PASSWORD }}" | docker login harbor.hrids.com -u ${{ secrets.HARBOR_USERNAME }} --password-stdin
 
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -117,13 +109,13 @@ jobs:
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-sandbox:latest" >> $GITHUB_ENV
             echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-sandbox:latest" >> $GITHUB_ENV
-            echo "Harbor_Tag=cloud.hrids.cn:7600/ai_project/fastgpt-sandbox:latest" >> $GITHUB_ENV
-            echo "Harbor_Latest=cloud.hrids.cn:7600/ai_project/fastgpt-sandbox:latest" >> $GITHUB_ENV
+            echo "Harbor_Tag=harbor.hrids.com/ai_project/fastgpt-sandbox:latest" >> $GITHUB_ENV
+            echo "Harbor_Latest=harbor.hrids.com/ai_project/fastgpt-sandbox:latest" >> $GITHUB_ENV
           else
             echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-sandbox:${{ github.ref_name }}" >> $GITHUB_ENV
             echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-sandbox:latest" >> $GITHUB_ENV
-            echo "Harbor_Tag=cloud.hrids.cn:7600/ai_project/fastgpt-sandbox:${{ github.ref_name }}" >> $GITHUB_ENV
-            echo "Harbor_Latest=cloud.hrids.cn:7600/ai_project/fastgpt-sandbox:latest" >> $GITHUB_ENV
+            echo "Harbor_Tag=harbor.hrids.com/ai_project/fastgpt-sandbox:${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "Harbor_Latest=harbor.hrids.com/ai_project/fastgpt-sandbox:latest" >> $GITHUB_ENV
           fi
 
       - name: Create manifest list and push
