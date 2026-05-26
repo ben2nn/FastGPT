@@ -34,6 +34,8 @@ import {
   importDataset,
   exportApp,
   importApp,
+  exportTools,
+  importTools,
   exportModels,
   importModels,
   exportChannels,
@@ -425,6 +427,113 @@ function ModelTab() {
   );
 }
 
+// ========== 工具 Tab ==========
+function ToolTab() {
+  const toast = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [exportParentId, setExportParentId] = useState('');
+  const [importParentId, setImportParentId] = useState('');
+  const [keepOriginalId, setKeepOriginalId] = useState(true);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<Record<string, number> | null>(null);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = await exportTools(exportParentId.trim() || undefined);
+      downloadJSON(data, `tool-export-${Date.now()}.json`);
+      toast({ title: '导出成功', status: 'success', duration: 3000 });
+    } catch (e) {
+      toast({ title: (e as Error).message, status: 'error', duration: 5000 });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      toast({ title: '请选择 JSON 文件', status: 'warning', duration: 3000 });
+      return;
+    }
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const text = await readFileAsJSON(selectedFile);
+      const result = await importTools(text, keepOriginalId, importParentId.trim() || undefined);
+      setImportResult(result.data);
+      toast({ title: '导入成功', status: 'success', duration: 3000 });
+    } catch (e) {
+      toast({ title: (e as Error).message, status: 'error', duration: 5000 });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <Flex gap={6} direction={{ base: 'column', md: 'row' }}>
+      <ExportPanel title="导出工具">
+        <FormControl>
+          <FormLabel fontSize="sm">parentId（可选）</FormLabel>
+          <Input
+            placeholder="留空导出全部工具"
+            value={exportParentId}
+            onChange={(e) => setExportParentId(e.target.value)}
+          />
+        </FormControl>
+        <Button
+          leftIcon={<DownloadIcon />}
+          colorScheme="blue"
+          onClick={handleExport}
+          isLoading={exporting}
+          loadingText="导出中..."
+          w="full"
+        >
+          导出
+        </Button>
+      </ExportPanel>
+
+      <ImportPanel title="导入工具">
+        <FileUpload fileRef={fileRef} selectedFile={selectedFile} onSelect={setSelectedFile} />
+        <FormControl display="flex" alignItems="center">
+          <FormLabel mb={0} fontSize="sm">
+            保留原 ID
+          </FormLabel>
+          <Switch
+            isChecked={keepOriginalId}
+            onChange={(e) => setKeepOriginalId(e.target.checked)}
+          />
+        </FormControl>
+        <FormControl>
+          <FormLabel fontSize="sm">目标父文件夹 ID（可选）</FormLabel>
+          <Input
+            placeholder="留空则导入到根目录"
+            value={importParentId}
+            onChange={(e) => setImportParentId(e.target.value)}
+          />
+        </FormControl>
+        <Button
+          leftIcon={<AttachmentIcon />}
+          colorScheme="green"
+          onClick={handleImport}
+          isLoading={importing}
+          loadingText="导入中..."
+          w="full"
+        >
+          导入
+        </Button>
+        {importResult && (
+          <ImportResultStats
+            result={importResult}
+            labels={{ appsCount: '应用', versionsCount: '版本' }}
+          />
+        )}
+      </ImportPanel>
+    </Flex>
+  );
+}
+
 // ========== 渠道 Tab ==========
 function ChannelTab() {
   const toast = useToast();
@@ -681,6 +790,7 @@ export default function ImportExportPage({ ssrAuthenticated }: { ssrAuthenticate
           <TabList>
             <Tab>知识库</Tab>
             <Tab>工作流</Tab>
+            <Tab>工具</Tab>
             <Tab>模型配置</Tab>
             <Tab>渠道</Tab>
           </TabList>
@@ -691,6 +801,9 @@ export default function ImportExportPage({ ssrAuthenticated }: { ssrAuthenticate
             </TabPanel>
             <TabPanel px={0}>
               <AppTab />
+            </TabPanel>
+            <TabPanel px={0}>
+              <ToolTab />
             </TabPanel>
             <TabPanel px={0}>
               <ModelTab />
