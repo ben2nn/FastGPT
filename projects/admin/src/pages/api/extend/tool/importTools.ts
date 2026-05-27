@@ -5,6 +5,9 @@ import { MongoApp } from '@fastgpt/service/core/app/schema';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
 import { ToolTypeList, AppFolderTypeList } from '@fastgpt/global/core/app/constants';
+import { MongoOutLink } from '@fastgpt/service/support/outLink/schema';
+import { MongoOpenApi } from '@fastgpt/service/support/openapi/schema';
+import { getNanoid } from '@fastgpt/global/common/string/tools';
 import { Types } from 'mongoose';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -44,7 +47,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 解析请求体
-    const { file, keepOriginalId, targetParentId } = req.body;
+    const { file, keepOriginalId, targetParentId, keepApiKey } = req.body as {
+      file: unknown;
+      keepOriginalId?: boolean;
+      targetParentId?: string;
+      keepApiKey?: boolean;
+    };
 
     if (!file) {
       return res.status(400).json({ success: false, error: 'File is required' });
@@ -59,11 +67,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 校验格式
-    if (importData.version !== '1.0' || importData.type !== 'tool') {
+    if (!['1.0', '2.0'].includes(importData.version) || importData.type !== 'tool') {
       return res.status(400).json({ success: false, error: 'Invalid import file format' });
     }
 
     const { apps, versions } = importData;
+    const outLinks: Record<string, unknown>[] = importData.outLinks || [];
+    const openApis: Record<string, unknown>[] = importData.openApis || [];
 
     if (!Array.isArray(apps) || !Array.isArray(versions)) {
       return res.status(400).json({
@@ -86,7 +96,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // 检查导入数据量限制
     const IMPORT_LIMIT = parseInt(process.env.IMPORT_LIMIT || '50000', 10);
-    const totalDocs = apps.length + versions.length;
+    const totalDocs = apps.length + versions.length + outLinks.length + openApis.length;
     if (totalDocs > IMPORT_LIMIT) {
       return res.status(400).json({
         success: false,
@@ -98,7 +108,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const idMap = new Map<string, string>();
 
     if (!keepOriginalId) {
-      const allDocs = [...apps, ...versions];
+      const allDocs = [...apps, ...versions, ...outLinks, ...openApis];
       for (const doc of allDocs) {
         const oldId = String(doc._id);
         const newId = new Types.ObjectId().toString();
@@ -145,6 +155,34 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return updated;
     });
 
+    const updatedOutLinks = outLinks.map((doc: Record<string, unknown>) => {
+      const updated = { ...doc };
+      updated._id = updateId(String(doc._id));
+      if (updated.appId) {
+        updated.appId = updateId(String(updated.appId));
+      }
+      updated.teamId = teamId;
+      updated.tmbId = tmbId;
+      return updated;
+    });
+
+    const updatedOpenApis = openApis.map((doc: Record<string, unknown>) => {
+      const updated = { ...doc };
+      updated._id = updateId(String(doc._id));
+      if (updated.appId) {
+        updated.appId = updateId(String(updated.appId));
+      }
+      updated.teamId = teamId;
+      updated.tmbId = tmbId;
+      if (!keepApiKey) {
+        const nanoid = getNanoid(Math.floor(Math.random() * 14) + 52);
+        updated.apiKey = `fastgpt-${nanoid}`;
+      }
+      updated.createTime = new Date();
+      updated.usagePoints = 0;
+      return updated;
+    });
+
     // 分批写入
     const BATCH_SIZE = 2000;
     const duplicateWarnings: string[] = [];
@@ -176,9 +214,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return insertedCount;
     }
 
-    const [appsCount, versionsCount] = await Promise.all([
+    const [appsCount, versionsCount, outLinksCount, openApisCount] = await Promise.all([
       batchInsert(MongoApp, updatedApps, 'apps'),
-      batchInsert(MongoAppVersion, updatedVersions, 'versions')
+      batchInsert(MongoAppVersion, updatedVersions, 'versions'),
+      updatedOutLinks.length > 0
+        ? batchInsert(MongoOutLink, updatedOutLinks, 'outLinks')
+        : Promise.resolve(0),
+      updatedOpenApis.length > 0
+        ? batchInsert(MongoOpenApi, updatedOpenApis, 'openApis')
+        : Promise.resolve(0)
     ]);
 
     res.status(200).json({
@@ -186,6 +230,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       data: {
         appsCount,
         versionsCount,
+        outLinksCount,
+        openApisCount,
         ...(duplicateWarnings.length > 0 ? { warnings: duplicateWarnings } : {})
       }
     });

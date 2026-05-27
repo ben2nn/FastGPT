@@ -77,7 +77,7 @@ export class StatisticsService {
    */
   private async executeQuery<T extends QueryResultRow = any>(
     query: SqlQuery,
-    timeoutMs: number = 5000
+    timeoutMs: number = 15000
   ): Promise<QueryResult<T>> {
     const pool = this.getPool();
 
@@ -353,62 +353,9 @@ export class StatisticsService {
    */
   async getStatisticsList(filters: StatisticsQuery): Promise<StatisticsListResponse> {
     try {
-      addLog.info('执行统计列表查询', { filters });
-
       // 构建查询
       const listQuery = this.queryBuilder.buildStatisticsListQuery(filters);
       const countQuery = this.queryBuilder.buildStatisticsListCountQuery(filters);
-
-      // 记录 SQL 查询和参数（用于调试）
-      addLog.debug('统计列表查询 SQL', {
-        listQuery: {
-          text: listQuery.text,
-          values: listQuery.values
-        },
-        countQuery: {
-          text: countQuery.text,
-          values: countQuery.values
-        }
-      });
-
-      // 先检查数据库中是否有数据（调试用）
-      try {
-        const totalCountResult = await this.executeQuery<{ count: string }>({
-          text: 'SELECT COUNT(*) as count FROM model_call_logs',
-          values: []
-        });
-        const totalCount = parseInt(totalCountResult.rows[0].count, 10);
-        addLog.debug('数据库总记录数', { totalCount });
-
-        if (totalCount > 0) {
-          // 检查时间范围内的记录数
-          const rangeCountResult = await this.executeQuery<{ count: string }>({
-            text: 'SELECT COUNT(*) as count FROM model_call_logs WHERE call_timestamp >= $1 AND call_timestamp <= $2',
-            values: [filters.startTime, filters.endTime]
-          });
-          const rangeCount = parseInt(rangeCountResult.rows[0].count, 10);
-          addLog.debug('时间范围内的记录数', {
-            startTime: filters.startTime,
-            endTime: filters.endTime,
-            rangeCount
-          });
-
-          // 检查数据的时间范围
-          const timeRangeResult = await this.executeQuery<{
-            min_time: Date;
-            max_time: Date;
-          }>({
-            text: 'SELECT MIN(call_timestamp) as min_time, MAX(call_timestamp) as max_time FROM model_call_logs',
-            values: []
-          });
-          addLog.debug('数据库中的时间范围', {
-            minTime: timeRangeResult.rows[0].min_time,
-            maxTime: timeRangeResult.rows[0].max_time
-          });
-        }
-      } catch (debugError) {
-        addLog.warn('调试查询失败', debugError as Error);
-      }
 
       // 并行执行列表查询和总数查询
       const [listResult, countResult] = await Promise.all([

@@ -3,6 +3,8 @@ import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/common/mongo';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
+import { MongoOutLink } from '@fastgpt/service/support/outLink/schema';
+import { MongoOpenApi } from '@fastgpt/service/support/openapi/schema';
 
 const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
@@ -46,7 +48,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 4. 获取并验证 parentId
-    const { parentId } = req.body;
+    const { parentId, keepApiKey } = req.body as { parentId?: string; keepApiKey?: boolean };
     if (!parentId || !/^[0-9a-fA-F]{24}$/.test(parentId)) {
       return res.status(400).json({ success: false, error: 'Invalid parentId format' });
     }
@@ -60,7 +62,27 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const appIds = apps.map((a) => a._id);
 
-    // 6. 检查数据量是否超过限制
+    // 6. 查询关联的 OutLink（免登录窗口 + 门户配置）
+    const outLinks = await MongoOutLink.find({ appId: { $in: appIds } })
+      .select('-teamId -tmbId -usagePoints -lastTime')
+      .lean();
+
+    // 查询关联的 OpenApi（API 访问 Key）
+    const openApiProjection: Record<string, number> = {
+      teamId: 0,
+      tmbId: 0,
+      usagePoints: 0,
+      lastUsedTime: 0,
+      createTime: 0
+    };
+    if (!keepApiKey) {
+      openApiProjection.apiKey = 0;
+    }
+    const openApis = await MongoOpenApi.find({ appId: { $in: appIds } })
+      .select(openApiProjection)
+      .lean();
+
+    // 7. 检查数据量是否超过限制
     const versionCount = await MongoAppVersion.countDocuments({
       appId: { $in: appIds }
     });
@@ -72,22 +94,24 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // 7. 查询版本数据
+    // 8. 查询版本数据
     const versions = await MongoAppVersion.find({ appId: { $in: appIds } })
       .limit(EXPORT_LIMIT)
       .lean();
 
-    // 8. 组装导出数据
+    // 9. 组装导出数据
     const exportData = {
-      version: '1.0',
+      version: '2.0',
       type: 'app',
       exportTime: new Date().toISOString(),
       teamId,
       apps,
-      versions
+      versions,
+      outLinks,
+      openApis
     };
 
-    // 9. 设置响应头并返回
+    // 10. 设置响应头并返回
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename=app-export-${Date.now()}.json`);
     res.status(200).json(exportData);

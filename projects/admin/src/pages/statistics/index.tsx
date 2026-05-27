@@ -15,7 +15,7 @@ import type { StatisticsQuery } from '@/service/core/statistics/statistics';
  * 统计页面
  * 整合所有统计组件，提供完整的数据统计和可视化功能
  */
-export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) {
+export default function Statistics() {
   const queryClient = useQueryClient();
 
   // 筛选条件状态 - 使用默认时间范围（最近7天，从00:00:00到23:59:59）
@@ -56,24 +56,19 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
    * 刷新所有统计数据
    */
   const refreshAllData = useCallback(() => {
-    // 使所有统计查询失效，触发重新获取
     queryClient.invalidateQueries({ queryKey: ['statistics'] });
   }, [queryClient]);
 
   /**
    * 自动刷新逻辑
-   * 使用定时器实现，最小间隔 30 秒
    */
   useEffect(() => {
-    // 清除之前的定时器
     if (refreshTimerRef.current) {
       clearInterval(refreshTimerRef.current);
       refreshTimerRef.current = null;
     }
 
-    // 如果启用自动刷新，设置新的定时器
     if (autoRefresh) {
-      // 确保刷新间隔至少为 30 秒
       const intervalMs = Math.max(refreshInterval, 30) * 1000;
 
       refreshTimerRef.current = setInterval(() => {
@@ -81,7 +76,6 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
       }, intervalMs);
     }
 
-    // 清理函数
     return () => {
       if (refreshTimerRef.current) {
         clearInterval(refreshTimerRef.current);
@@ -96,11 +90,9 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && refreshTimerRef.current) {
-        // 页面不可见时清除定时器
         clearInterval(refreshTimerRef.current);
         refreshTimerRef.current = null;
       } else if (!document.hidden && autoRefresh) {
-        // 页面可见且启用自动刷新时重新设置定时器
         const intervalMs = Math.max(refreshInterval, 30) * 1000;
         refreshTimerRef.current = setInterval(() => {
           refreshAllData();
@@ -125,44 +117,31 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
   }, []);
 
   return (
-    <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
+    <ProtectedRoute>
       <Layout title="数据统计">
         <VStack spacing={6} align="stretch" w="100%">
           {/* 筛选面板 */}
-          <FilterPanel
-            onFilterChange={handleFilterChange}
-            initialFilters={filters}
-            onAutoRefreshChange={handleAutoRefreshChange}
-          />
+          <Box bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={4}>
+            <FilterPanel
+              onFilterChange={handleFilterChange}
+              initialFilters={filters}
+              onAutoRefreshChange={handleAutoRefreshChange}
+            />
+          </Box>
 
           {/* 统计列表 */}
-          <Box w="100%">
+          <Box
+            w="100%"
+            bg="white"
+            borderRadius="lg"
+            border="1px"
+            borderColor="borderColor.low"
+            p={4}
+          >
             <StatisticsList filters={filters} />
           </Box>
         </VStack>
       </Layout>
     </ProtectedRoute>
   );
-}
-
-export async function getServerSideProps(context: any) {
-  try {
-    const { requireAuth } = await import('@/web/common/utils/auth');
-    const authRedirect = requireAuth(context);
-    if (authRedirect) {
-      return authRedirect;
-    }
-
-    return {
-      props: { ssrAuthenticated: true }
-    };
-  } catch (error) {
-    console.error('getServerSideProps error:', error);
-    return {
-      redirect: {
-        destination: '/login',
-        permanent: false
-      }
-    };
-  }
 }

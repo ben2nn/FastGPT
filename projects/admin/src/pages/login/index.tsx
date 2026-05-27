@@ -1,15 +1,16 @@
 import React from 'react';
-import { Box, Container, Flex, Heading, VStack, useToast, Text } from '@chakra-ui/react';
+import { Box, Flex, Heading, Text, useToast } from '@chakra-ui/react';
+import { motion } from 'framer-motion';
 import { useAuth } from '@/web/context/AuthContext';
-import { getWebReqUrl } from '@/web/common/utils';
 import type { LoginFormData } from '../../components/LoginForm';
 import LoginForm from '../../components/LoginForm';
+
+const MotionBox = motion(Box);
 
 export default function LoginPage() {
   const { login } = useAuth();
   const toast = useToast();
 
-  // 处理表单提交
   const handleSubmit = async (data: LoginFormData) => {
     try {
       await login(data.username, data.password);
@@ -21,9 +22,6 @@ export default function LoginPage() {
         isClosable: true
       });
 
-      // 登录成功后重定向到首页
-      // 使用 router.push，Next.js 会自动处理 basePath
-      // 如果需要强制刷新，可以使用 router.replace 或 window.location
       const basePath = process.env.NEXT_PUBLIC_BASE_URL || '';
       window.location.href = `${basePath}/dashboard`;
     } catch (error) {
@@ -34,37 +32,85 @@ export default function LoginPage() {
         duration: 3000,
         isClosable: true
       });
-      // 错误已通过 toast 显示，不需要重新抛出
     }
   };
 
   return (
-    <Flex minH="100vh" align="center" justify="center" bg="gray.50">
-      <Container maxW="md">
-        <Box bg="white" p={8} borderRadius="lg" boxShadow="lg">
-          <VStack spacing={6} align="stretch">
-            <Heading as="h1" size="xl" textAlign="center" color="blue.600">
-              登录
-            </Heading>
-            <Text textAlign="center" color="gray.600">
-              管理员登录
-            </Text>
+    <Flex minH="100vh">
+      {/* 左侧品牌面板 */}
+      <Box
+        flex={1}
+        bg="linear-gradient(135deg, #2152d9 0%, #3370ff 40%, #4e83fd 100%)"
+        display={{ base: 'none', md: 'flex' }}
+        alignItems="center"
+        justifyContent="center"
+        position="relative"
+        overflow="hidden"
+      >
+        {/* 装饰性背景元素 */}
+        <Box
+          position="absolute"
+          top="-20%"
+          right="-10%"
+          w="400px"
+          h="400px"
+          borderRadius="full"
+          bg="whiteAlpha.100"
+        />
+        <Box
+          position="absolute"
+          bottom="-30%"
+          left="-15%"
+          w="500px"
+          h="500px"
+          borderRadius="full"
+          bg="whiteAlpha.050"
+        />
 
-            <LoginForm onSubmit={handleSubmit} />
-          </VStack>
-        </Box>
-      </Container>
+        <MotionBox
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          textAlign="center"
+          zIndex={1}
+        >
+          <Heading color="white" size="2xl" mb={4}>
+            FastGPT Admin
+          </Heading>
+          <Text color="whiteAlpha.800" fontSize="lg">
+            AI Agent 管理平台
+          </Text>
+        </MotionBox>
+      </Box>
+
+      {/* 右侧表单面板 */}
+      <Flex flex={1} align="center" justify="center" bg="white" p={8}>
+        <MotionBox
+          w="full"
+          maxW="400px"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+        >
+          <Heading as="h1" size="xl" mb={2} color="myGray.900">
+            欢迎回来
+          </Heading>
+          <Text color="myGray.500" mb={8}>
+            请登录管理员账号
+          </Text>
+
+          <LoginForm onSubmit={handleSubmit} />
+        </MotionBox>
+      </Flex>
     </Flex>
   );
 }
 
 export async function getServerSideProps(context: any) {
   try {
-    // 检查认证状态
     const token = context.req.cookies?.admin_token;
 
     if (token) {
-      // 已登录，重定向到 dashboard
       return {
         redirect: {
           destination: '/dashboard',
@@ -73,13 +119,11 @@ export async function getServerSideProps(context: any) {
       };
     }
 
-    // 未登录，显示登录页
     return {
       props: {}
     };
   } catch (error) {
     console.error('getServerSideProps error:', error);
-    // 发生错误时仍然显示登录页
     return {
       props: {}
     };

@@ -1,25 +1,36 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Flex, VStack, useToast } from '@chakra-ui/react';
 import { useQueryClient } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 
 import { ProtectedRoute } from '@/web/context/ProtectedRoute';
 import Layout from '@/web/context/Layout';
 import { getDefaultTimeRange } from '@/web/common/utils/time';
 
-import FilterDatePanel from '@/components/statistics/FilterDatePanel';
-import OverviewCards from '@/components/statistics/OverviewCards';
-import TrendChart from '@/components/statistics/TrendChart';
-import StatusChart from '@/components/statistics/StatusChart';
-import AppRankingChart from '@/components/statistics/AppRankingChart';
-import ModelDistChart from '@/components/statistics/ModelDistChart';
-
 import type { StatisticsQuery } from '@/service/core/statistics/statistics';
+
+// 延迟加载图表组件
+const FilterDatePanel = dynamic(() => import('@/components/statistics/FilterDatePanel'), {
+  ssr: false,
+  loading: () => <Box h="48px" />
+});
+const OverviewCards = dynamic(() => import('@/components/statistics/OverviewCards'), {
+  ssr: false
+});
+const TrendChart = dynamic(() => import('@/components/statistics/TrendChart'), { ssr: false });
+const StatusChart = dynamic(() => import('@/components/statistics/StatusChart'), { ssr: false });
+const AppRankingChart = dynamic(() => import('@/components/statistics/AppRankingChart'), {
+  ssr: false
+});
+const ModelDistChart = dynamic(() => import('@/components/statistics/ModelDistChart'), {
+  ssr: false
+});
 
 /**
  * 统计页面
  * 整合所有统计组件，提供完整的数据统计和可视化功能
  */
-export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) {
+export default function Statistics() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -61,7 +72,6 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
    * 刷新所有统计数据
    */
   const refreshAllData = useCallback(() => {
-    // 使所有统计查询失效，触发重新获取
     queryClient.invalidateQueries({ queryKey: ['statistics'] });
   }, [queryClient]);
 
@@ -85,18 +95,14 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
 
   /**
    * 自动刷新逻辑
-   * 使用定时器实现，最小间隔 30 秒
    */
   useEffect(() => {
-    // 清除之前的定时器
     if (refreshTimerRef.current) {
       clearInterval(refreshTimerRef.current);
       refreshTimerRef.current = null;
     }
 
-    // 如果启用自动刷新，设置新的定时器
     if (autoRefresh) {
-      // 确保刷新间隔至少为 30 秒
       const intervalMs = Math.max(refreshInterval, 30) * 1000;
 
       refreshTimerRef.current = setInterval(() => {
@@ -104,7 +110,6 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
       }, intervalMs);
     }
 
-    // 清理函数
     return () => {
       if (refreshTimerRef.current) {
         clearInterval(refreshTimerRef.current);
@@ -119,11 +124,9 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && refreshTimerRef.current) {
-        // 页面不可见时清除定时器
         clearInterval(refreshTimerRef.current);
         refreshTimerRef.current = null;
       } else if (!document.hidden && autoRefresh) {
-        // 页面可见且启用自动刷新时重新设置定时器
         const intervalMs = Math.max(refreshInterval, 30) * 1000;
         refreshTimerRef.current = setInterval(() => {
           refreshAllData();
@@ -148,35 +151,69 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
   }, []);
 
   return (
-    <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
+    <ProtectedRoute>
       <Layout title="首页">
         <VStack spacing={6} align="stretch" w="100%">
           {/* 第一行：筛选面板 */}
-          <FilterDatePanel
-            onFilterChange={handleFilterChange}
-            initialFilters={filters}
-            onAutoRefreshChange={handleAutoRefreshChange}
-          />
+          <Box bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={4}>
+            <FilterDatePanel
+              onFilterChange={handleFilterChange}
+              initialFilters={filters}
+              onAutoRefreshChange={handleAutoRefreshChange}
+            />
+          </Box>
 
           {/* 第二行：总览卡片 */}
           <OverviewCards filters={filters} onError={handleError} />
 
           {/* 第三行：趋势图表 + 状态图表 */}
           <Flex gap={6} direction={{ base: 'column', lg: 'row' }}>
-            <Box flex="2" minW="0">
+            <Box
+              flex="2"
+              minW="0"
+              bg="white"
+              borderRadius="lg"
+              border="1px"
+              borderColor="borderColor.low"
+              p={4}
+            >
               <TrendChart filters={filters} onError={handleError} />
             </Box>
-            <Box flex="1" minW="0">
+            <Box
+              flex="1"
+              minW="0"
+              bg="white"
+              borderRadius="lg"
+              border="1px"
+              borderColor="borderColor.low"
+              p={4}
+            >
               <StatusChart filters={filters} onError={handleError} />
             </Box>
           </Flex>
 
           {/* 第四行：应用排行图表 + 模型分布图表 */}
           <Flex gap={6} direction={{ base: 'column', lg: 'row' }}>
-            <Box flex="1" minW="0">
+            <Box
+              flex="1"
+              minW="0"
+              bg="white"
+              borderRadius="lg"
+              border="1px"
+              borderColor="borderColor.low"
+              p={4}
+            >
               <AppRankingChart filters={filters} onError={handleError} />
             </Box>
-            <Box flex="1" minW="0">
+            <Box
+              flex="1"
+              minW="0"
+              bg="white"
+              borderRadius="lg"
+              border="1px"
+              borderColor="borderColor.low"
+              p={4}
+            >
               <ModelDistChart filters={filters} onError={handleError} />
             </Box>
           </Flex>
@@ -184,31 +221,4 @@ export default function Statistics({ ssrAuthenticated }: { ssrAuthenticated?: bo
       </Layout>
     </ProtectedRoute>
   );
-}
-
-export async function getServerSideProps(context: any) {
-  try {
-    const token = context.req.cookies?.admin_token;
-
-    if (!token) {
-      return {
-        redirect: {
-          destination: '/login',
-          permanent: false
-        }
-      };
-    }
-
-    return {
-      props: { ssrAuthenticated: true }
-    };
-  } catch (error) {
-    console.error('getServerSideProps error:', error);
-    return {
-      redirect: {
-        destination: '/login',
-        permanent: false
-      }
-    };
-  }
 }

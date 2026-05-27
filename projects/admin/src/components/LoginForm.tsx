@@ -28,13 +28,22 @@ const LoginForm = ({ onSubmit, isLoading = false }: LoginFormProps) => {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
-      <VStack spacing={4}>
+      <VStack spacing={5}>
         <FormControl isInvalid={!!errors.username} isRequired>
-          <FormLabel>用户名</FormLabel>
+          <FormLabel fontSize="sm" fontWeight="500" color="myGray.700">
+            用户名
+          </FormLabel>
           <Input
             size="lg"
             placeholder="请输入用户名"
             disabled={loading}
+            bg="myGray.50"
+            border="1px"
+            borderColor="borderColor.low"
+            _focus={{
+              borderColor: 'primary.600',
+              boxShadow: '0 0 0 1px var(--chakra-colors-primary-600)'
+            }}
             {...register('username', {
               required: '请输入用户名'
             })}
@@ -43,12 +52,21 @@ const LoginForm = ({ onSubmit, isLoading = false }: LoginFormProps) => {
         </FormControl>
 
         <FormControl isInvalid={!!errors.password} isRequired>
-          <FormLabel>密码</FormLabel>
+          <FormLabel fontSize="sm" fontWeight="500" color="myGray.700">
+            密码
+          </FormLabel>
           <Input
             type="password"
             size="lg"
             placeholder="请输入密码"
             disabled={loading}
+            bg="myGray.50"
+            border="1px"
+            borderColor="borderColor.low"
+            _focus={{
+              borderColor: 'primary.600',
+              boxShadow: '0 0 0 1px var(--chakra-colors-primary-600)'
+            }}
             {...register('password', {
               required: '请输入密码'
             })}
@@ -58,12 +76,12 @@ const LoginForm = ({ onSubmit, isLoading = false }: LoginFormProps) => {
 
         <Button
           type="submit"
-          colorScheme="blue"
+          variant="primary"
           size="lg"
           width="full"
           isLoading={loading}
           loadingText="登录中..."
-          mt={4}
+          mt={2}
         >
           登录
         </Button>

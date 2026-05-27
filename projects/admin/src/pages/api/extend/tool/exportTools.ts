@@ -5,6 +5,8 @@ import { MongoApp } from '@fastgpt/service/core/app/schema';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
 import { ToolTypeList, AppFolderTypeList } from '@fastgpt/global/core/app/constants';
+import { MongoOutLink } from '@fastgpt/service/support/outLink/schema';
+import { MongoOpenApi } from '@fastgpt/service/support/openapi/schema';
 
 const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
@@ -44,7 +46,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 获取 parentId（可选）
-    const { parentId } = req.body;
+    const { parentId, keepApiKey } = req.body as { parentId?: string; keepApiKey?: boolean };
 
     let apps;
 
@@ -93,12 +95,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     if (apps.length === 0) {
       return res.status(200).json({
-        version: '1.0',
+        version: '2.0',
         type: 'tool',
         exportTime: new Date().toISOString(),
         teamId,
         apps: [],
-        versions: []
+        versions: [],
+        outLinks: [],
+        openApis: []
       });
     }
 
@@ -120,13 +124,33 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       .limit(EXPORT_LIMIT)
       .lean();
 
+    const outLinks = await MongoOutLink.find({ appId: { $in: appIds } })
+      .select('-teamId -tmbId -usagePoints -lastTime')
+      .lean();
+
+    const openApiProjection: Record<string, number> = {
+      teamId: 0,
+      tmbId: 0,
+      usagePoints: 0,
+      lastUsedTime: 0,
+      createTime: 0
+    };
+    if (!keepApiKey) {
+      openApiProjection.apiKey = 0;
+    }
+    const openApis = await MongoOpenApi.find({ appId: { $in: appIds } })
+      .select(openApiProjection)
+      .lean();
+
     const exportData = {
-      version: '1.0',
+      version: '2.0',
       type: 'tool',
       exportTime: new Date().toISOString(),
       teamId,
       apps,
-      versions
+      versions,
+      outLinks,
+      openApis
     };
 
     res.setHeader('Content-Type', 'application/json; charset=utf-8');

@@ -9,7 +9,6 @@ import {
   Flex,
   Text,
   Button,
-  Badge,
   Table,
   Thead,
   Tbody,
@@ -21,25 +20,17 @@ import {
   AlertIcon,
   AlertTitle,
   AlertDescription,
-  Card,
-  CardHeader,
-  CardBody,
-  Heading,
-  Stack,
-  StackDivider,
   Select,
   HStack,
   useToast,
-  IconButton,
-  Collapse,
-  Code
+  Collapse
 } from '@chakra-ui/react';
 import { useRouter } from 'next/router';
-import { ChevronLeftIcon, ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn';
 
+import MyIcon from '@fastgpt/web/components/common/Icon';
 import { getTaskDetail, getExecutionHistory, toggleTask } from '@/web/core/task/api';
 import type { TaskDetail, TaskExecution, ExecutionHistoryQuery } from '@/web/core/task/api';
 import ExecuteTaskDialog from '@/components/tasks/ExecuteTaskDialog';
@@ -55,7 +46,7 @@ dayjs.locale('zh-cn');
 /**
  * 任务详情页面组件
  */
-const TaskDetailPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
+const TaskDetailPage = () => {
   const router = useRouter();
   const toast = useToast();
   const { taskId } = router.query as { taskId: string };
@@ -151,17 +142,17 @@ const TaskDetailPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) =>
     }
   };
 
-  // 获取状态徽章
-  const getStatusBadge = (status: string) => {
+  // 获取状态样式
+  const getStatusStyle = (status: string) => {
     switch (status) {
       case 'success':
-        return <Badge colorScheme="green">成功</Badge>;
+        return { color: 'green.600', bg: 'green.50', label: '成功' };
       case 'failed':
-        return <Badge colorScheme="red">失败</Badge>;
+        return { color: 'red.600', bg: 'red.50', label: '失败' };
       case 'running':
-        return <Badge colorScheme="blue">运行中</Badge>;
+        return { color: 'primary.600', bg: 'primary.50', label: '运行中' };
       default:
-        return <Badge colorScheme="gray">未知</Badge>;
+        return { color: 'myGray.500', bg: 'myGray.50', label: '未知' };
     }
   };
 
@@ -177,10 +168,10 @@ const TaskDetailPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) =>
 
   if (loading) {
     return (
-      <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
+      <ProtectedRoute>
         <Layout title="任务详情">
           <Flex justify="center" align="center" h="400px">
-            <Spinner size="xl" color="blue.500" />
+            <Spinner size="xl" color="primary.600" />
           </Flex>
         </Layout>
       </ProtectedRoute>
@@ -189,15 +180,15 @@ const TaskDetailPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) =>
 
   if (error || !taskDetail) {
     return (
-      <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
+      <ProtectedRoute>
         <Layout title="任务详情">
-          <Alert status="error" borderRadius="md">
-            <AlertIcon />
+          <Alert status="error" borderRadius="lg" bg="red.50" border="1px" borderColor="red.200">
+            <AlertIcon color="red.600" />
             <Box flex="1">
-              <AlertTitle>加载失败</AlertTitle>
-              <AlertDescription>{error || '任务不存在'}</AlertDescription>
+              <AlertTitle color="red.800">加载失败</AlertTitle>
+              <AlertDescription color="red.700">{error || '任务不存在'}</AlertDescription>
             </Box>
-            <Button size="sm" onClick={() => router.push('/tasks')}>
+            <Button size="sm" variant="ghost" color="red.600" onClick={() => router.push('/tasks')}>
               返回列表
             </Button>
           </Alert>
@@ -213,32 +204,35 @@ const TaskDetailPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) =>
           {/* 页面标题 */}
           <Flex justify="space-between" align="center" mb={6}>
             <Flex align="center">
-              <IconButton
-                aria-label="返回"
-                icon={<ChevronLeftIcon />}
-                variant="ghost"
-                mr={2}
+              <MyIcon
+                name="common/arrowLeft"
+                w="24px"
+                h="24px"
+                color="myGray.400"
+                cursor="pointer"
+                _hover={{ color: 'primary.600' }}
+                mr={3}
                 onClick={() => router.push('/tasks')}
               />
               <Box>
-                <Text fontSize="2xl" fontWeight="bold">
+                <Text fontSize="2xl" fontWeight="bold" color="myGray.900">
                   {taskDetail.config.name}
                 </Text>
-                <Text fontSize="sm" color="gray.600" mt={1}>
+                <Text fontSize="sm" color="myGray.500" mt={1}>
                   {taskDetail.config.description || '暂无描述'}
                 </Text>
               </Box>
             </Flex>
             <HStack spacing={3}>
               <Button
-                colorScheme={taskDetail.config.enabled ? 'red' : 'green'}
-                variant="outline"
+                variant={taskDetail.config.enabled ? 'dangerFill' : 'primary'}
                 onClick={() => handleToggleTask(!taskDetail.config.enabled)}
               >
                 {taskDetail.config.enabled ? '禁用任务' : '启用任务'}
               </Button>
               <Button
-                colorScheme="blue"
+                variant="primary"
+                leftIcon={<MyIcon name="common/playFill" w="16px" h="16px" />}
                 onClick={() => setShowExecuteDialog(true)}
                 isDisabled={taskDetail.config.isRunning}
               >
@@ -248,165 +242,201 @@ const TaskDetailPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) =>
           </Flex>
 
           {/* 任务配置信息 */}
-          <Card mb={6}>
-            <CardHeader>
-              <Heading size="md">任务配置</Heading>
-            </CardHeader>
-            <CardBody>
-              <Stack divider={<StackDivider />} spacing={4}>
-                <Flex justify="space-between">
-                  <Text fontWeight="medium" color="gray.600">
-                    任务 ID
+          <Box bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={6} mb={6}>
+            <Text fontSize="lg" fontWeight="600" color="myGray.900" mb={4}>
+              任务配置
+            </Text>
+            <Box>
+              {[
+                { label: '任务 ID', value: taskDetail.config.id, mono: true },
+                { label: 'Cron 表达式', value: taskDetail.config.cronExpression, mono: true },
+                { label: '时区', value: taskDetail.config.timezone || DEFAULT_TIMEZONE },
+                { label: '执行器', value: taskDetail.config.executorName },
+                {
+                  label: '最大执行时间',
+                  value: `${taskDetail.config.maxExecutionTime || 3600000}ms`
+                },
+                { label: '重试次数', value: String(taskDetail.config.retryCount || 0) },
+                { label: '重试间隔', value: `${taskDetail.config.retryInterval || 60000}ms` },
+                {
+                  label: '启用状态',
+                  value: taskDetail.config.enabled ? '已启用' : '已禁用',
+                  isStatus: true,
+                  statusColor: taskDetail.config.enabled ? 'green.600' : 'myGray.500'
+                },
+                {
+                  label: '下次执行时间',
+                  value: taskDetail.nextExecutionTime
+                    ? formatTime(taskDetail.nextExecutionTime)
+                    : '已禁用'
+                }
+              ].map((item, index) => (
+                <Flex
+                  key={index}
+                  justify="space-between"
+                  py={3}
+                  borderBottom={index < 8 ? '1px' : 'none'}
+                  borderColor="borderColor.low"
+                >
+                  <Text fontWeight="medium" color="myGray.500" fontSize="sm">
+                    {item.label}
                   </Text>
-                  <Text fontFamily="monospace">{taskDetail.config.id}</Text>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text fontWeight="medium" color="gray.600">
-                    Cron 表达式
-                  </Text>
-                  <Text fontFamily="monospace">{taskDetail.config.cronExpression}</Text>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text fontWeight="medium" color="gray.600">
-                    时区
-                  </Text>
-                  <Text>{taskDetail.config.timezone || DEFAULT_TIMEZONE}</Text>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text fontWeight="medium" color="gray.600">
-                    执行器
-                  </Text>
-                  <Text>{taskDetail.config.executorName}</Text>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text fontWeight="medium" color="gray.600">
-                    最大执行时间
-                  </Text>
-                  <Text>{taskDetail.config.maxExecutionTime || 3600000}ms</Text>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text fontWeight="medium" color="gray.600">
-                    重试次数
-                  </Text>
-                  <Text>{taskDetail.config.retryCount || 0}</Text>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text fontWeight="medium" color="gray.600">
-                    重试间隔
-                  </Text>
-                  <Text>{taskDetail.config.retryInterval || 60000}ms</Text>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text fontWeight="medium" color="gray.600">
-                    启用状态
-                  </Text>
-                  <Badge colorScheme={taskDetail.config.enabled ? 'green' : 'gray'}>
-                    {taskDetail.config.enabled ? '已启用' : '已禁用'}
-                  </Badge>
-                </Flex>
-                <Flex justify="space-between">
-                  <Text fontWeight="medium" color="gray.600">
-                    下次执行时间
-                  </Text>
-                  <Text>
-                    {taskDetail.nextExecutionTime
-                      ? formatTime(taskDetail.nextExecutionTime)
-                      : '已禁用'}
-                  </Text>
-                </Flex>
-                {taskDetail.config.defaultParams && (
-                  <Box>
-                    <Text fontWeight="medium" color="gray.600" mb={2}>
-                      默认参数
-                    </Text>
-                    <Code
-                      display="block"
-                      whiteSpace="pre"
-                      p={3}
-                      borderRadius="md"
+                  {item.isStatus ? (
+                    <HStack spacing={1}>
+                      <Box w="6px" h="6px" borderRadius="full" bg={item.statusColor} />
+                      <Text fontSize="sm" color={item.statusColor}>
+                        {item.value}
+                      </Text>
+                    </HStack>
+                  ) : (
+                    <Text
                       fontSize="sm"
-                      overflow="auto"
+                      color="myGray.900"
+                      fontFamily={item.mono ? 'mono' : 'inherit'}
                     >
+                      {item.value}
+                    </Text>
+                  )}
+                </Flex>
+              ))}
+              {taskDetail.config.defaultParams && (
+                <Box mt={4}>
+                  <Text fontWeight="medium" color="myGray.500" fontSize="sm" mb={2}>
+                    默认参数
+                  </Text>
+                  <Box
+                    bg="myGray.50"
+                    p={3}
+                    borderRadius="md"
+                    fontSize="sm"
+                    fontFamily="mono"
+                    overflow="auto"
+                    maxH="200px"
+                    border="1px"
+                    borderColor="borderColor.low"
+                  >
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
                       {JSON.stringify(taskDetail.config.defaultParams, null, 2)}
-                    </Code>
+                    </pre>
                   </Box>
-                )}
-              </Stack>
-            </CardBody>
-          </Card>
+                </Box>
+              )}
+            </Box>
+          </Box>
 
           {/* 执行统计图表 */}
-          <Box mb={6}>
+          <Box mb={6} bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={6}>
             <ExecutionCharts executions={executions} loading={executionsLoading} />
           </Box>
 
           {/* 执行历史 */}
-          <Card>
-            <CardHeader>
-              <Flex justify="space-between" align="center">
-                <Heading size="md">执行历史</Heading>
-                <HStack spacing={3}>
-                  <Select
-                    size="sm"
-                    w="150px"
-                    value={query.status}
-                    onChange={(e) => setQuery({ ...query, status: e.target.value, page: 1 })}
-                  >
-                    <option value="">全部状态</option>
-                    <option value="success">成功</option>
-                    <option value="failed">失败</option>
-                    <option value="running">运行中</option>
-                  </Select>
-                  <Button size="sm" onClick={loadExecutions} isLoading={executionsLoading}>
-                    刷新
-                  </Button>
-                </HStack>
+          <Box bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={6}>
+            <Flex justify="space-between" align="center" mb={4}>
+              <Text fontSize="lg" fontWeight="600" color="myGray.900">
+                执行历史
+              </Text>
+              <HStack spacing={3}>
+                <Box
+                  as="select"
+                  size="sm"
+                  w="150px"
+                  value={query.status}
+                  onChange={(e) => setQuery({ ...query, status: e.target.value, page: 1 })}
+                  p={2}
+                  borderRadius="md"
+                  border="1px"
+                  borderColor="borderColor.low"
+                  bg="myGray.50"
+                  fontSize="sm"
+                >
+                  <option value="">全部状态</option>
+                  <option value="success">成功</option>
+                  <option value="failed">失败</option>
+                  <option value="running">运行中</option>
+                </Box>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  color="primary.600"
+                  leftIcon={<MyIcon name="common/refresh" w="14px" h="14px" />}
+                  onClick={loadExecutions}
+                  isLoading={executionsLoading}
+                >
+                  刷新
+                </Button>
+              </HStack>
+            </Flex>
+
+            {executionsLoading && executions.length === 0 ? (
+              <Flex justify="center" py={8}>
+                <Spinner color="primary.600" />
               </Flex>
-            </CardHeader>
-            <CardBody>
-              {executionsLoading && executions.length === 0 ? (
-                <Flex justify="center" py={8}>
-                  <Spinner color="blue.500" />
-                </Flex>
-              ) : executions.length === 0 ? (
-                <Text textAlign="center" color="gray.500" py={8}>
-                  暂无执行记录
-                </Text>
-              ) : (
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>执行 ID</Th>
-                      <Th>开始时间</Th>
-                      <Th>结束时间</Th>
-                      <Th>状态</Th>
-                      <Th>耗时</Th>
-                      <Th>操作</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {executions.map((execution) => (
+            ) : executions.length === 0 ? (
+              <Text textAlign="center" color="myGray.400" py={8}>
+                暂无执行记录
+              </Text>
+            ) : (
+              <Table variant="simple" size="sm">
+                <Thead>
+                  <Tr>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      执行 ID
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      开始时间
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      结束时间
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      状态
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      耗时
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      操作
+                    </Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {executions.map((execution) => {
+                    const statusStyle = getStatusStyle(execution.status);
+                    return (
                       <React.Fragment key={execution.id}>
-                        <Tr _hover={{ bg: 'gray.50' }}>
-                          <Td fontFamily="monospace">{execution.id}</Td>
-                          <Td>{formatTime(execution.startTime)}</Td>
-                          <Td>{execution.endTime ? formatTime(execution.endTime) : '-'}</Td>
-                          <Td>{getStatusBadge(execution.status)}</Td>
+                        <Tr _hover={{ bg: 'myGray.50' }}>
+                          <Td fontFamily="mono" fontSize="sm" color="myGray.700">
+                            {execution.id}
+                          </Td>
+                          <Td fontSize="sm" color="myGray.700">
+                            {formatTime(execution.startTime)}
+                          </Td>
+                          <Td fontSize="sm" color="myGray.700">
+                            {execution.endTime ? formatTime(execution.endTime) : '-'}
+                          </Td>
                           <Td>
+                            <HStack spacing={1}>
+                              <Box w="6px" h="6px" borderRadius="full" bg={statusStyle.color} />
+                              <Text fontSize="sm" color={statusStyle.color}>
+                                {statusStyle.label}
+                              </Text>
+                            </HStack>
+                          </Td>
+                          <Td fontSize="sm" color="myGray.700">
                             {execution.executionTimeMs ? `${execution.executionTimeMs}ms` : '-'}
                           </Td>
                           <Td>
-                            <IconButton
-                              aria-label="展开详情"
-                              icon={
-                                expandedExecutionId === execution.id ? (
-                                  <ChevronUpIcon />
-                                ) : (
-                                  <ChevronDownIcon />
-                                )
+                            <MyIcon
+                              name={
+                                expandedExecutionId === execution.id
+                                  ? 'common/downArrowFill'
+                                  : 'common/arrowRight'
                               }
-                              size="sm"
-                              variant="ghost"
+                              w="16px"
+                              h="16px"
+                              color="myGray.400"
+                              cursor="pointer"
+                              _hover={{ color: 'primary.600' }}
                               onClick={() => toggleExpand(execution.id)}
                             />
                           </Td>
@@ -414,95 +444,130 @@ const TaskDetailPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) =>
                         <Tr>
                           <Td colSpan={6} p={0}>
                             <Collapse in={expandedExecutionId === execution.id}>
-                              <Box bg="gray.50" p={4}>
-                                <Stack spacing={3}>
+                              <Box bg="myGray.50" p={4}>
+                                <Box spacing={3}>
                                   {execution.params && (
-                                    <Box>
-                                      <Text fontWeight="medium" mb={2}>
+                                    <Box mb={3}>
+                                      <Text
+                                        fontWeight="medium"
+                                        mb={2}
+                                        color="myGray.700"
+                                        fontSize="sm"
+                                      >
                                         执行参数
                                       </Text>
-                                      <Code
-                                        display="block"
-                                        whiteSpace="pre"
+                                      <Box
+                                        bg="white"
                                         p={3}
                                         borderRadius="md"
                                         fontSize="xs"
+                                        fontFamily="mono"
                                         overflow="auto"
                                         maxH="200px"
+                                        border="1px"
+                                        borderColor="borderColor.low"
                                       >
-                                        {JSON.stringify(execution.params, null, 2)}
-                                      </Code>
+                                        <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                                          {JSON.stringify(execution.params, null, 2)}
+                                        </pre>
+                                      </Box>
                                     </Box>
                                   )}
                                   {execution.result && (
-                                    <Box>
-                                      <Text fontWeight="medium" mb={2}>
+                                    <Box mb={3}>
+                                      <Text
+                                        fontWeight="medium"
+                                        mb={2}
+                                        color="myGray.700"
+                                        fontSize="sm"
+                                      >
                                         执行结果
                                       </Text>
-                                      <Code
-                                        display="block"
-                                        whiteSpace="pre"
+                                      <Box
+                                        bg="white"
                                         p={3}
                                         borderRadius="md"
                                         fontSize="xs"
+                                        fontFamily="mono"
                                         overflow="auto"
                                         maxH="200px"
+                                        border="1px"
+                                        borderColor="borderColor.low"
                                       >
-                                        {JSON.stringify(execution.result, null, 2)}
-                                      </Code>
+                                        <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                                          {JSON.stringify(execution.result, null, 2)}
+                                        </pre>
+                                      </Box>
                                     </Box>
                                   )}
                                   {execution.errorMessage && (
                                     <Box>
-                                      <Text fontWeight="medium" mb={2} color="red.600">
+                                      <Text
+                                        fontWeight="medium"
+                                        mb={2}
+                                        color="red.600"
+                                        fontSize="sm"
+                                      >
                                         错误信息
                                       </Text>
-                                      <Alert status="error" borderRadius="md">
-                                        <AlertIcon />
-                                        <Text fontSize="sm">{execution.errorMessage}</Text>
+                                      <Alert
+                                        status="error"
+                                        borderRadius="md"
+                                        bg="red.50"
+                                        border="1px"
+                                        borderColor="red.200"
+                                      >
+                                        <AlertIcon color="red.600" />
+                                        <Text fontSize="sm" color="red.700">
+                                          {execution.errorMessage}
+                                        </Text>
                                       </Alert>
                                     </Box>
                                   )}
-                                </Stack>
+                                </Box>
                               </Box>
                             </Collapse>
                           </Td>
                         </Tr>
                       </React.Fragment>
-                    ))}
-                  </Tbody>
-                </Table>
-              )}
+                    );
+                  })}
+                </Tbody>
+              </Table>
+            )}
 
-              {/* 分页 */}
-              {total > query.pageSize! && (
-                <Flex justify="space-between" align="center" mt={4}>
-                  <Text fontSize="sm" color="gray.600">
-                    共 {total} 条记录
+            {/* 分页 */}
+            {total > query.pageSize! && (
+              <Flex justify="space-between" align="center" mt={4}>
+                <Text fontSize="sm" color="myGray.500">
+                  共 {total} 条记录
+                </Text>
+                <HStack>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    color="primary.600"
+                    onClick={() => setQuery({ ...query, page: query.page! - 1 })}
+                    isDisabled={query.page === 1}
+                  >
+                    上一页
+                  </Button>
+                  <Text fontSize="sm" color="myGray.700">
+                    第 {query.page} / {Math.ceil(total / query.pageSize!)} 页
                   </Text>
-                  <HStack>
-                    <Button
-                      size="sm"
-                      onClick={() => setQuery({ ...query, page: query.page! - 1 })}
-                      isDisabled={query.page === 1}
-                    >
-                      上一页
-                    </Button>
-                    <Text fontSize="sm">
-                      第 {query.page} / {Math.ceil(total / query.pageSize!)} 页
-                    </Text>
-                    <Button
-                      size="sm"
-                      onClick={() => setQuery({ ...query, page: query.page! + 1 })}
-                      isDisabled={query.page! >= Math.ceil(total / query.pageSize!)}
-                    >
-                      下一页
-                    </Button>
-                  </HStack>
-                </Flex>
-              )}
-            </CardBody>
-          </Card>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    color="primary.600"
+                    onClick={() => setQuery({ ...query, page: query.page! + 1 })}
+                    isDisabled={query.page! >= Math.ceil(total / query.pageSize!)}
+                  >
+                    下一页
+                  </Button>
+                </HStack>
+              </Flex>
+            )}
+          </Box>
 
           {/* 执行任务对话框 */}
           {showExecuteDialog && (
@@ -524,30 +589,3 @@ const TaskDetailPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) =>
 };
 
 export default TaskDetailPage;
-
-export async function getServerSideProps(context: any) {
-  try {
-    const token = context.req.cookies?.admin_token;
-
-    if (!token) {
-      return {
-        redirect: {
-          destination: '/login',
-          permanent: false
-        }
-      };
-    }
-
-    return {
-      props: { ssrAuthenticated: true }
-    };
-  } catch (error) {
-    console.error('getServerSideProps error:', error);
-    return {
-      redirect: {
-        destination: '/login',
-        permanent: false
-      }
-    };
-  }
-}

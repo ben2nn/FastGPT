@@ -15,19 +15,20 @@ import {
   Td,
   Button,
   Switch,
-  Badge,
   Text,
   Spinner,
   Alert,
   AlertIcon,
   AlertTitle,
   AlertDescription,
-  useToast
+  useToast,
+  HStack
 } from '@chakra-ui/react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn';
 
+import MyIcon from '@fastgpt/web/components/common/Icon';
 import { getTaskList, toggleTask } from '@/web/core/task/api';
 import type { TaskListItem } from '@/web/core/task/api';
 import ExecuteTaskDialog from '@/components/tasks/ExecuteTaskDialog';
@@ -43,7 +44,7 @@ dayjs.locale('zh-cn');
 /**
  * 任务列表页面组件
  */
-const TaskListPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
+const TaskListPage = () => {
   const toast = useToast();
 
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
@@ -125,25 +126,25 @@ const TaskListPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
     setSelectedTaskForHistory(task);
   };
 
-  // 获取状态徽章
-  const getStatusBadge = (task: TaskListItem) => {
+  // 获取状态样式
+  const getStatusStyle = (task: TaskListItem) => {
     if (task.isRunning) {
-      return <Badge colorScheme="blue">运行中</Badge>;
+      return { color: 'primary.600', bg: 'primary.50', label: '运行中' };
     }
 
     if (!task.lastExecution) {
-      return <Badge colorScheme="gray">未执行</Badge>;
+      return { color: 'myGray.500', bg: 'myGray.50', label: '未执行' };
     }
 
     switch (task.lastExecution.status) {
       case 'success':
-        return <Badge colorScheme="green">成功</Badge>;
+        return { color: 'green.600', bg: 'green.50', label: '成功' };
       case 'failed':
-        return <Badge colorScheme="red">失败</Badge>;
+        return { color: 'red.600', bg: 'red.50', label: '失败' };
       case 'running':
-        return <Badge colorScheme="blue">运行中</Badge>;
+        return { color: 'primary.600', bg: 'primary.50', label: '运行中' };
       default:
-        return <Badge colorScheme="gray">未知</Badge>;
+        return { color: 'myGray.500', bg: 'myGray.50', label: '未知' };
     }
   };
 
@@ -160,18 +161,19 @@ const TaskListPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
   };
 
   return (
-    <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
+    <ProtectedRoute>
       <Layout title="任务管理">
         <Box>
           {/* 页面标题 */}
           <Flex justify="space-between" align="center" mb={6}>
             <Box>
-              <Text fontSize="sm" color="gray.600" mt={1}>
+              <Text fontSize="sm" color="myGray.500" mt={1}>
                 管理和监控系统定时任务
               </Text>
             </Box>
             <Button
-              colorScheme="blue"
+              variant="primary"
+              leftIcon={<MyIcon name="common/refresh" w="16px" h="16px" />}
               onClick={loadTasks}
               isLoading={loading}
               loadingText="刷新中..."
@@ -182,13 +184,20 @@ const TaskListPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
 
           {/* 错误提示 */}
           {error && (
-            <Alert status="error" mb={4} borderRadius="md">
-              <AlertIcon />
+            <Alert
+              status="error"
+              mb={4}
+              borderRadius="lg"
+              bg="red.50"
+              border="1px"
+              borderColor="red.200"
+            >
+              <AlertIcon color="red.600" />
               <Box flex="1">
-                <AlertTitle>加载失败</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
+                <AlertTitle color="red.800">加载失败</AlertTitle>
+                <AlertDescription color="red.700">{error}</AlertDescription>
               </Box>
-              <Button size="sm" onClick={loadTasks}>
+              <Button size="sm" variant="ghost" color="red.600" onClick={loadTasks}>
                 重试
               </Button>
             </Alert>
@@ -197,111 +206,150 @@ const TaskListPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
           {/* 加载中 */}
           {loading && !error && (
             <Flex justify="center" align="center" h="400px">
-              <Spinner size="xl" color="blue.500" />
+              <Spinner size="xl" color="primary.600" />
             </Flex>
           )}
 
           {/* 任务列表 */}
           {!loading && !error && (
-            <Box bg="white" borderRadius="lg" shadow="sm" overflow="hidden">
+            <Box
+              bg="white"
+              borderRadius="lg"
+              shadow="sm"
+              overflow="hidden"
+              border="1px"
+              borderColor="borderColor.low"
+            >
               <Table variant="simple">
-                <Thead bg="gray.50">
+                <Thead bg="myGray.50">
                   <Tr>
-                    <Th>任务名称</Th>
-                    <Th>描述</Th>
-                    <Th>Cron 表达式</Th>
-                    <Th>状态</Th>
-                    <Th>最近执行</Th>
-                    <Th>下次执行</Th>
-                    <Th>启用</Th>
-                    <Th>操作</Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      任务名称
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      描述
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      Cron 表达式
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      状态
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      最近执行
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      下次执行
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      启用
+                    </Th>
+                    <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                      操作
+                    </Th>
                   </Tr>
                 </Thead>
                 <Tbody>
                   {tasks.length === 0 ? (
                     <Tr>
                       <Td colSpan={8} textAlign="center" py={8}>
-                        <Text color="gray.500">暂无任务</Text>
+                        <Text color="myGray.400">暂无任务</Text>
                       </Td>
                     </Tr>
                   ) : (
-                    tasks.map((task) => (
-                      <Tr key={task.id} _hover={{ bg: 'gray.50' }}>
-                        <Td>
-                          <Text fontWeight="medium">{task.name}</Text>
-                        </Td>
-                        <Td>
-                          <Text fontSize="sm" color="gray.600" noOfLines={2} maxW="200px">
-                            {task.description || '-'}
-                          </Text>
-                        </Td>
-                        <Td>
-                          <Text fontSize="sm" fontFamily="monospace">
-                            {task.cronExpression}
-                          </Text>
-                        </Td>
-                        <Td>{getStatusBadge(task)}</Td>
-                        <Td>
-                          {task.lastExecution ? (
-                            <Box>
-                              <Text fontSize="sm">
-                                {formatRelativeTime(task.lastExecution.startTime)}
-                              </Text>
-                              {task.lastExecution.executionTimeMs && (
-                                <Text fontSize="xs" color="gray.500">
-                                  耗时 {task.lastExecution.executionTimeMs}ms
-                                </Text>
-                              )}
-                            </Box>
-                          ) : (
-                            <Text fontSize="sm" color="gray.500">
-                              未执行
+                    tasks.map((task) => {
+                      const statusStyle = getStatusStyle(task);
+                      return (
+                        <Tr key={task.id} _hover={{ bg: 'myGray.50' }}>
+                          <Td>
+                            <Text fontWeight="medium" color="myGray.900">
+                              {task.name}
                             </Text>
-                          )}
-                        </Td>
-                        <Td>
-                          <Text fontSize="sm">
-                            {task.enabled ? formatRelativeTime(task.nextExecutionTime) : '已禁用'}
-                          </Text>
-                        </Td>
-                        <Td>
-                          <Switch
-                            isChecked={task.enabled}
-                            onChange={(e) => handleToggleTask(task.id, e.target.checked)}
-                            isDisabled={togglingTaskId === task.id}
-                            colorScheme="blue"
-                          />
-                        </Td>
-                        <Td>
-                          <Flex gap={2} flexWrap="wrap">
-                            <Button
-                              size="sm"
-                              variant="ghost"
+                          </Td>
+                          <Td>
+                            <Text fontSize="sm" color="myGray.500" noOfLines={2} maxW="200px">
+                              {task.description || '-'}
+                            </Text>
+                          </Td>
+                          <Td>
+                            <Text fontSize="sm" fontFamily="mono" color="myGray.700">
+                              {task.cronExpression}
+                            </Text>
+                          </Td>
+                          <Td>
+                            <HStack spacing={1}>
+                              <Box w="6px" h="6px" borderRadius="full" bg={statusStyle.color} />
+                              <Text fontSize="sm" color={statusStyle.color}>
+                                {statusStyle.label}
+                              </Text>
+                            </HStack>
+                          </Td>
+                          <Td>
+                            {task.lastExecution ? (
+                              <Box>
+                                <Text fontSize="sm" color="myGray.700">
+                                  {formatRelativeTime(task.lastExecution.startTime)}
+                                </Text>
+                                {task.lastExecution.executionTimeMs && (
+                                  <Text fontSize="xs" color="myGray.400">
+                                    耗时 {task.lastExecution.executionTimeMs}ms
+                                  </Text>
+                                )}
+                              </Box>
+                            ) : (
+                              <Text fontSize="sm" color="myGray.400">
+                                未执行
+                              </Text>
+                            )}
+                          </Td>
+                          <Td>
+                            <Text fontSize="sm" color="myGray.700">
+                              {task.enabled ? formatRelativeTime(task.nextExecutionTime) : '已禁用'}
+                            </Text>
+                          </Td>
+                          <Td>
+                            <Switch
+                              isChecked={task.enabled}
+                              onChange={(e) => handleToggleTask(task.id, e.target.checked)}
+                              isDisabled={togglingTaskId === task.id}
                               colorScheme="blue"
-                              onClick={() => handleViewDetail(task)}
-                            >
-                              详情
-                            </Button>
-                            <Button
                               size="sm"
-                              variant="ghost"
-                              colorScheme="purple"
-                              onClick={() => handleViewHistory(task)}
-                            >
-                              历史
-                            </Button>
-                            <Button
-                              size="sm"
-                              colorScheme="green"
-                              onClick={() => handleExecuteTask(task)}
-                              isDisabled={task.isRunning}
-                            >
-                              {task.isRunning ? '运行中' : '立即执行'}
-                            </Button>
-                          </Flex>
-                        </Td>
-                      </Tr>
-                    ))
+                            />
+                          </Td>
+                          <Td>
+                            <HStack spacing={2}>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                color="primary.600"
+                                leftIcon={<MyIcon name="common/detail" w="12px" h="12px" />}
+                                onClick={() => handleViewDetail(task)}
+                              >
+                                详情
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                color="adora.600"
+                                leftIcon={<MyIcon name="common/logLight" w="12px" h="12px" />}
+                                onClick={() => handleViewHistory(task)}
+                              >
+                                历史
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="primary"
+                                leftIcon={<MyIcon name="common/playFill" w="12px" h="12px" />}
+                                onClick={() => handleExecuteTask(task)}
+                                isDisabled={task.isRunning}
+                              >
+                                {task.isRunning ? '运行中' : '执行'}
+                              </Button>
+                            </HStack>
+                          </Td>
+                        </Tr>
+                      );
+                    })
                   )}
                 </Tbody>
               </Table>
@@ -342,30 +390,3 @@ const TaskListPage = ({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) => {
 };
 
 export default TaskListPage;
-
-export async function getServerSideProps(context: any) {
-  try {
-    const token = context.req.cookies?.admin_token;
-
-    if (!token) {
-      return {
-        redirect: {
-          destination: '/login',
-          permanent: false
-        }
-      };
-    }
-
-    return {
-      props: { ssrAuthenticated: true }
-    };
-  } catch (error) {
-    console.error('getServerSideProps error:', error);
-    return {
-      redirect: {
-        destination: '/login',
-        permanent: false
-      }
-    };
-  }
-}

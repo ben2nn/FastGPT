@@ -14,30 +14,21 @@ import {
   Tr,
   Th,
   Td,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalCloseButton,
   useDisclosure,
   useToast,
-  Select,
   Flex,
   Text,
-  Badge,
   Divider,
-  useColorModeValue,
   Avatar
 } from '@chakra-ui/react';
-import { AddIcon, EditIcon } from '@chakra-ui/icons';
+import MyIcon from '@fastgpt/web/components/common/Icon';
 import { ProtectedRoute } from '@/web/context/ProtectedRoute';
 import type { User } from '@/types/user';
 import { fetchUsers, addUser, updateUser, deleteUser } from '@/web/core/extend/api';
 import Layout from '@/web/context/Layout';
 import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
-export default function UserManagement({ ssrAuthenticated }: { ssrAuthenticated?: boolean }) {
+export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | undefined>(undefined);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -46,8 +37,6 @@ export default function UserManagement({ ssrAuthenticated }: { ssrAuthenticated?
 
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
 
   useEffect(() => {
     loadUsers();
@@ -118,16 +107,16 @@ export default function UserManagement({ ssrAuthenticated }: { ssrAuthenticated?
   );
 
   return (
-    <ProtectedRoute ssrAuthenticated={ssrAuthenticated}>
+    <ProtectedRoute>
       <Layout title="用户管理">
-        <Box bg={bgColor} borderWidth="1px" borderColor={borderColor} borderRadius="md" p={6}>
+        <Box bg="white" borderWidth="1px" borderColor="borderColor.low" borderRadius="lg" p={6}>
           <Flex justify="space-between" align="center" mb={6}>
-            <Text fontSize="2xl" fontWeight="600">
+            <Text fontSize="xl" fontWeight="600" color="myGray.900">
               用户列表
             </Text>
             <Button
-              leftIcon={<AddIcon />}
-              colorScheme="blue"
+              variant="primary"
+              leftIcon={<MyIcon name="common/addLight" w="16px" h="16px" />}
               onClick={() => {
                 setCurrentUser(undefined);
                 onOpen();
@@ -138,55 +127,113 @@ export default function UserManagement({ ssrAuthenticated }: { ssrAuthenticated?
           </Flex>
 
           <Box mb={4}>
-            <Input
-              placeholder="搜索用户名..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              size="lg"
-            />
+            <Flex
+              align="center"
+              bg="myGray.50"
+              borderRadius="md"
+              border="1px"
+              borderColor="borderColor.low"
+              px={3}
+            >
+              <MyIcon name="common/searchLight" w="16px" h="16px" color="myGray.400" />
+              <Input
+                placeholder="搜索用户名..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                border="none"
+                bg="transparent"
+                _focus={{ boxShadow: 'none' }}
+              />
+            </Flex>
           </Box>
 
-          <Divider mb={6} />
+          <Divider mb={6} borderColor="borderColor.low" />
 
           <Table variant="simple">
             <Thead>
               <Tr>
-                <Th>用户</Th>
-                <Th>状态</Th>
-                <Th isNumeric>余额</Th>
-                <Th>分成比例</Th>
-                <Th>时区</Th>
-                <Th textAlign="right">操作</Th>
+                <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                  用户
+                </Th>
+                <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                  状态
+                </Th>
+                <Th
+                  color="myGray.500"
+                  fontSize="xs"
+                  fontWeight="500"
+                  textTransform="none"
+                  isNumeric
+                >
+                  余额
+                </Th>
+                <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                  分成比例
+                </Th>
+                <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                  时区
+                </Th>
+                <Th
+                  color="myGray.500"
+                  fontSize="xs"
+                  fontWeight="500"
+                  textTransform="none"
+                  textAlign="right"
+                >
+                  操作
+                </Th>
               </Tr>
             </Thead>
             <Tbody>
               {filteredUsers.map((user) => (
-                <Tr key={user._id}>
+                <Tr key={user._id} _hover={{ bg: 'myGray.50' }}>
                   <Td>
                     <HStack spacing={3}>
                       <Avatar name={user.username} src={user.avatar} size="sm" />
-                      <Text fontWeight="500">{user.username}</Text>
+                      <Text fontWeight="500" color="myGray.900">
+                        {user.username}
+                      </Text>
                     </HStack>
                   </Td>
                   <Td>
-                    <Badge colorScheme={user.status === 'active' ? 'green' : 'gray'}>
-                      {user.status === 'active' ? '活跃' : '未激活'}
-                    </Badge>
+                    <HStack spacing={1}>
+                      <Box
+                        w="8px"
+                        h="8px"
+                        borderRadius="full"
+                        bg={user.status === 'active' ? 'green.500' : 'myGray.400'}
+                      />
+                      <Text
+                        fontSize="sm"
+                        color={user.status === 'active' ? 'green.600' : 'myGray.500'}
+                      >
+                        {user.status === 'active' ? '活跃' : '未激活'}
+                      </Text>
+                    </HStack>
                   </Td>
-                  <Td isNumeric>{user.balance ? user.balance.toLocaleString() : '0'}</Td>
-                  <Td>{user.promotionRate ?? 0}%</Td>
-                  <Td fontSize="sm" color="gray.600">
+                  <Td isNumeric color="myGray.700">
+                    {user.balance ? user.balance.toLocaleString() : '0'}
+                  </Td>
+                  <Td color="myGray.700">{user.promotionRate ?? 0}%</Td>
+                  <Td fontSize="sm" color="myGray.500">
                     {user.timezone || '-'}
                   </Td>
                   <Td textAlign="right">
                     <HStack spacing={2} justify="flex-end">
-                      <Button size="sm" variant="outline" onClick={() => handleEditUser(user)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        color="primary.600"
+                        leftIcon={<MyIcon name="common/edit" w="14px" h="14px" />}
+                        onClick={() => handleEditUser(user)}
+                      >
                         编辑
                       </Button>
                       <Button
                         size="sm"
-                        variant="outline"
-                        colorScheme="purple"
+                        variant="ghost"
+                        color="adora.600"
+                        leftIcon={<MyIcon name="common/lock" w="14px" h="14px" />}
                         onClick={() => {
                           setPasswordUserId(user._id!);
                           setIsPasswordModalOpen(true);
@@ -197,8 +244,9 @@ export default function UserManagement({ ssrAuthenticated }: { ssrAuthenticated?
                       {user.username !== 'root' && (
                         <Button
                           size="sm"
-                          variant="outline"
-                          colorScheme="red"
+                          variant="ghost"
+                          color="red.600"
+                          leftIcon={<MyIcon name="common/trash" w="14px" h="14px" />}
                           onClick={() => handleDeleteUser(user._id!)}
                         >
                           删除
@@ -213,40 +261,205 @@ export default function UserManagement({ ssrAuthenticated }: { ssrAuthenticated?
         </Box>
 
         {/* 用户模态框 */}
-        <Modal isOpen={isOpen} onClose={onClose} size="2xl">
-          <ModalOverlay backdropFilter="blur(4px)" />
-          <ModalContent maxW="900px">
-            <ModalHeader fontSize="xl" fontWeight="700" borderBottomWidth="1px" pb={4}>
-              {currentUser ? '✏️ 编辑用户信息' : '➕ 创建新用户'}
-            </ModalHeader>
-            <ModalCloseButton />
-            <ModalBody py={6}>
-              <UserForm
-                user={currentUser}
-                onSubmit={currentUser ? handleUpdateUser : handleAddUser}
-              />
-            </ModalBody>
-          </ModalContent>
-        </Modal>
+        {isOpen && (
+          <UserModal
+            user={currentUser}
+            isOpen={isOpen}
+            onClose={onClose}
+            onSubmit={currentUser ? handleUpdateUser : handleAddUser}
+          />
+        )}
 
         {/* 密码模态框 */}
-        <Modal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} size="md">
-          <ModalOverlay />
-          <ModalContent>
-            <ModalHeader>修改密码</ModalHeader>
-            <ModalCloseButton />
-            <ModalBody pb={6}>
-              <PasswordForm onSubmit={handleChangePassword} />
-            </ModalBody>
-          </ModalContent>
-        </Modal>
+        {isPasswordModalOpen && (
+          <PasswordModal
+            isOpen={isPasswordModalOpen}
+            onClose={() => setIsPasswordModalOpen(false)}
+            onSubmit={handleChangePassword}
+          />
+        )}
       </Layout>
     </ProtectedRoute>
   );
 }
 
-// 表单组件
-function PasswordForm({ onSubmit }: { onSubmit: (password: string) => void }) {
+// 简化的模态框组件
+function UserModal({
+  user,
+  isOpen,
+  onClose,
+  onSubmit
+}: {
+  user?: User;
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: User) => void;
+}) {
+  const [formData, setFormData] = useState<User>(
+    user || {
+      username: '',
+      password: '',
+      status: 'active',
+      avatar: '',
+      balance: 100000,
+      promotionRate: 10,
+      timezone: DEFAULT_TIMEZONE
+    }
+  );
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === 'balance' || name === 'promotionRate' ? Number(value) : value
+    }));
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <Box
+      position="fixed"
+      top={0}
+      left={0}
+      right={0}
+      bottom={0}
+      bg="blackAlpha.600"
+      zIndex={1000}
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+    >
+      <Box bg="white" borderRadius="lg" p={6} maxW="500px" w="full" maxH="90vh" overflow="auto">
+        <Flex justify="space-between" align="center" mb={4}>
+          <Text fontSize="lg" fontWeight="600" color="myGray.900">
+            {user ? '编辑用户' : '创建用户'}
+          </Text>
+          <MyIcon
+            name="common/closeLight"
+            w="20px"
+            h="20px"
+            cursor="pointer"
+            color="myGray.400"
+            onClick={onClose}
+          />
+        </Flex>
+        <form onSubmit={handleSubmit}>
+          <VStack spacing={4}>
+            <FormControl isRequired>
+              <FormLabel fontSize="sm" fontWeight="500" color="myGray.700">
+                用户名
+              </FormLabel>
+              <Input
+                name="username"
+                value={formData.username}
+                onChange={handleChange}
+                placeholder="请输入用户名"
+                bg="myGray.50"
+                border="1px"
+                borderColor="borderColor.low"
+              />
+            </FormControl>
+            {!user && (
+              <FormControl isRequired>
+                <FormLabel fontSize="sm" fontWeight="500" color="myGray.700">
+                  密码
+                </FormLabel>
+                <Input
+                  name="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="请输入密码（至少4位）"
+                  bg="myGray.50"
+                  border="1px"
+                  borderColor="borderColor.low"
+                />
+              </FormControl>
+            )}
+            <FormControl>
+              <FormLabel fontSize="sm" fontWeight="500" color="myGray.700">
+                状态
+              </FormLabel>
+              <Box
+                as="select"
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                w="full"
+                p={2}
+                borderRadius="md"
+                border="1px"
+                borderColor="borderColor.low"
+                bg="myGray.50"
+              >
+                <option value="active">活跃</option>
+                <option value="inactive">未激活</option>
+              </Box>
+            </FormControl>
+            <HStack spacing={4} w="full">
+              <FormControl flex={1}>
+                <FormLabel fontSize="sm" fontWeight="500" color="myGray.700">
+                  账户余额
+                </FormLabel>
+                <Input
+                  name="balance"
+                  type="number"
+                  value={formData.balance}
+                  onChange={handleChange}
+                  bg="myGray.50"
+                  border="1px"
+                  borderColor="borderColor.low"
+                />
+              </FormControl>
+              <FormControl flex={1}>
+                <FormLabel fontSize="sm" fontWeight="500" color="myGray.700">
+                  分成比例 (%)
+                </FormLabel>
+                <Input
+                  name="promotionRate"
+                  type="number"
+                  value={formData.promotionRate}
+                  onChange={handleChange}
+                  min="0"
+                  max="100"
+                  bg="myGray.50"
+                  border="1px"
+                  borderColor="borderColor.low"
+                />
+              </FormControl>
+            </HStack>
+            <Divider />
+            <HStack spacing={3} w="full" justify="flex-end">
+              <Button variant="ghost" onClick={onClose}>
+                取消
+              </Button>
+              <Button type="submit" variant="primary">
+                {user ? '保存' : '创建'}
+              </Button>
+            </HStack>
+          </VStack>
+        </form>
+      </Box>
+    </Box>
+  );
+}
+
+// 密码修改模态框
+function PasswordModal({
+  isOpen,
+  onClose,
+  onSubmit
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (password: string) => void;
+}) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -264,306 +477,85 @@ function PasswordForm({ onSubmit }: { onSubmit: (password: string) => void }) {
     onSubmit(password);
   };
 
-  return (
-    <form onSubmit={handleSubmit}>
-      <VStack spacing={4}>
-        <FormControl isRequired>
-          <FormLabel>新密码</FormLabel>
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setError('');
-            }}
-          />
-        </FormControl>
-        <FormControl isRequired>
-          <FormLabel>确认密码</FormLabel>
-          <Input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => {
-              setConfirmPassword(e.target.value);
-              setError('');
-            }}
-          />
-        </FormControl>
-        {error && (
-          <Text color="red.500" fontSize="sm">
-            {error}
-          </Text>
-        )}
-        <Button type="submit" colorScheme="blue" width="full">
-          确认修改
-        </Button>
-      </VStack>
-    </form>
-  );
-}
-
-interface UserFormProps {
-  user?: User;
-  onSubmit: (data: User) => void;
-}
-
-function UserForm({ user, onSubmit }: UserFormProps) {
-  const [formData, setFormData] = useState<User>(
-    user || {
-      username: '',
-      password: '',
-      status: 'active',
-      avatar: '',
-      balance: 100000,
-      promotionRate: 10,
-      timezone: DEFAULT_TIMEZONE
-    }
-  );
-
-  const bgColor = useColorModeValue('gray.50', 'gray.700');
-  const borderColor = useColorModeValue('gray.200', 'gray.600');
-
-  // 可用的头像列表
-  const avatarOptions = [
-    { name: '蓝色', path: '/imgs/avatar/BlueAvatar.svg' },
-    { name: '亮蓝色', path: '/imgs/avatar/BrightBlueAvatar.svg' },
-    { name: '绿色', path: '/imgs/avatar/GreenAvatar.svg' },
-    { name: '橙色', path: '/imgs/avatar/OrangeAvatar.svg' },
-    { name: '紫色', path: '/imgs/avatar/PurpleAvatar.svg' },
-    { name: '红色', path: '/imgs/avatar/RedAvatar.svg' },
-    { name: '皇家蓝', path: '/imgs/avatar/RoyalBlueAvatar.svg' },
-    { name: '青色', path: '/imgs/avatar/TealAvatar.svg' },
-    { name: '灰色现代', path: '/imgs/avatar/GrayModernAvatar.svg' },
-    { name: 'Adora', path: '/imgs/avatar/AdoraAvatar.svg' }
-  ];
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === 'balance' || name === 'promotionRate' ? Number(value) : value
-    }));
-  };
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    onSubmit(formData);
-  };
+  if (!isOpen) return null;
 
   return (
-    <form onSubmit={handleSubmit}>
-      <VStack spacing={6} align="stretch">
-        {/* 头像选择区域 */}
-        <Box>
-          <Text fontSize="md" fontWeight="600" mb={3} color="gray.700">
-            头像设置
+    <Box
+      position="fixed"
+      top={0}
+      left={0}
+      right={0}
+      bottom={0}
+      bg="blackAlpha.600"
+      zIndex={1000}
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+    >
+      <Box bg="white" borderRadius="lg" p={6} maxW="400px" w="full">
+        <Flex justify="space-between" align="center" mb={4}>
+          <Text fontSize="lg" fontWeight="600" color="myGray.900">
+            修改密码
           </Text>
-          <VStack
-            spacing={4}
-            p={4}
-            bg={bgColor}
-            borderRadius="lg"
-            borderWidth="1px"
-            borderColor={borderColor}
-          >
-            <Flex w="full" gap={6} align="flex-start">
-              <VStack spacing={2}>
-                <Text fontSize="sm" fontWeight="500" color="gray.600">
-                  当前头像
-                </Text>
-                <Avatar
-                  name={formData.username}
-                  src={formData.avatar}
-                  size="xl"
-                  borderWidth="2px"
-                  borderColor="blue.400"
-                />
-              </VStack>
-
-              <Box flex={1}>
-                <Text fontSize="sm" fontWeight="500" mb={3} color="gray.600">
-                  选择头像（点击切换）
-                </Text>
-                <Flex wrap="wrap" gap={3}>
-                  {avatarOptions.map((avatar) => (
-                    <Box
-                      key={avatar.path}
-                      cursor="pointer"
-                      p={2}
-                      borderWidth="2px"
-                      borderRadius="lg"
-                      borderColor={formData.avatar === avatar.path ? 'blue.500' : 'transparent'}
-                      bg={formData.avatar === avatar.path ? 'blue.50' : 'transparent'}
-                      _hover={{
-                        borderColor: 'blue.400',
-                        transform: 'scale(1.05)',
-                        shadow: 'md'
-                      }}
-                      transition="all 0.2s"
-                      onClick={() => setFormData((prev) => ({ ...prev, avatar: avatar.path }))}
-                      title={avatar.name}
-                    >
-                      <Avatar src={avatar.path} size="sm" />
-                    </Box>
-                  ))}
-                </Flex>
-              </Box>
-            </Flex>
-          </VStack>
-        </Box>
-
-        {/* 基本信息区域 */}
-        <Box>
-          <Text fontSize="md" fontWeight="600" mb={3} color="gray.700">
-            基本信息
-          </Text>
-          <VStack
-            spacing={4}
-            p={4}
-            bg={bgColor}
-            borderRadius="lg"
-            borderWidth="1px"
-            borderColor={borderColor}
-          >
-            <HStack spacing={4} w="full">
-              <FormControl flex={1} isRequired>
-                <FormLabel fontSize="sm" fontWeight="500">
-                  用户名
-                </FormLabel>
-                <Input
-                  name="username"
-                  value={formData.username}
-                  onChange={handleChange}
-                  placeholder="请输入用户名"
-                  size="md"
-                />
-              </FormControl>
-              {!user && (
-                <FormControl flex={1} isRequired>
-                  <FormLabel fontSize="sm" fontWeight="500">
-                    密码
-                  </FormLabel>
-                  <Input
-                    name="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    placeholder="请输入密码（至少4位）"
-                    size="md"
-                  />
-                </FormControl>
-              )}
-            </HStack>
-
-            <HStack spacing={4} w="full">
-              <FormControl flex={1}>
-                <FormLabel fontSize="sm" fontWeight="500">
-                  状态
-                </FormLabel>
-                <Select name="status" value={formData.status} onChange={handleChange} size="md">
-                  <option value="active">✓ 活跃</option>
-                  <option value="inactive">✗ 未激活</option>
-                </Select>
-              </FormControl>
-
-              <FormControl flex={1}>
-                <FormLabel fontSize="sm" fontWeight="500">
-                  时区
-                </FormLabel>
-                <Input
-                  name="timezone"
-                  value={formData.timezone}
-                  onChange={handleChange}
-                  placeholder="例如: Asia/Shanghai"
-                  size="md"
-                />
-              </FormControl>
-            </HStack>
-            <HStack spacing={4} w="full">
-              <FormControl flex={1}>
-                <FormLabel fontSize="sm" fontWeight="500">
-                  <HStack spacing={2}>
-                    <Text>账户余额</Text>
-                    <Badge colorScheme="green" fontSize="xs">
-                      积分
-                    </Badge>
-                  </HStack>
-                </FormLabel>
-                <Input
-                  name="balance"
-                  type="number"
-                  value={formData.balance}
-                  onChange={handleChange}
-                  size="md"
-                  placeholder="0"
-                />
-              </FormControl>
-
-              <FormControl flex={1}>
-                <FormLabel fontSize="sm" fontWeight="500">
-                  <HStack spacing={2}>
-                    <Text>分成比例</Text>
-                    <Badge colorScheme="purple" fontSize="xs">
-                      %
-                    </Badge>
-                  </HStack>
-                </FormLabel>
-                <Input
-                  name="promotionRate"
-                  type="number"
-                  value={formData.promotionRate}
-                  onChange={handleChange}
-                  min="0"
-                  max="100"
-                  size="md"
-                  placeholder="0-100"
-                />
-              </FormControl>
+          <MyIcon
+            name="common/closeLight"
+            w="20px"
+            h="20px"
+            cursor="pointer"
+            color="myGray.400"
+            onClick={onClose}
+          />
+        </Flex>
+        <form onSubmit={handleSubmit}>
+          <VStack spacing={4}>
+            <FormControl isRequired>
+              <FormLabel fontSize="sm" fontWeight="500" color="myGray.700">
+                新密码
+              </FormLabel>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError('');
+                }}
+                bg="myGray.50"
+                border="1px"
+                borderColor="borderColor.low"
+              />
+            </FormControl>
+            <FormControl isRequired>
+              <FormLabel fontSize="sm" fontWeight="500" color="myGray.700">
+                确认密码
+              </FormLabel>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setError('');
+                }}
+                bg="myGray.50"
+                border="1px"
+                borderColor="borderColor.low"
+              />
+            </FormControl>
+            {error && (
+              <Text color="red.500" fontSize="sm">
+                {error}
+              </Text>
+            )}
+            <HStack spacing={3} w="full" justify="flex-end">
+              <Button variant="ghost" onClick={onClose}>
+                取消
+              </Button>
+              <Button type="submit" variant="primary">
+                确认修改
+              </Button>
             </HStack>
           </VStack>
-        </Box>
-
-        {/* 提交按钮 */}
-        <Divider />
-        <HStack spacing={3} justify="flex-end">
-          <Button
-            type="submit"
-            colorScheme="blue"
-            size="lg"
-            px={8}
-            leftIcon={user ? <EditIcon /> : <AddIcon />}
-          >
-            {user ? '保存更新' : '创建用户'}
-          </Button>
-        </HStack>
-      </VStack>
-    </form>
+        </form>
+      </Box>
+    </Box>
   );
-}
-
-export async function getServerSideProps(context: any) {
-  try {
-    const token = context.req.cookies?.admin_token;
-
-    if (!token) {
-      return {
-        redirect: {
-          destination: '/login',
-          permanent: false
-        }
-      };
-    }
-
-    return {
-      props: { ssrAuthenticated: true }
-    };
-  } catch (error) {
-    console.error('getServerSideProps error:', error);
-    return {
-      redirect: {
-        destination: '/login',
-        permanent: false
-      }
-    };
-  }
 }

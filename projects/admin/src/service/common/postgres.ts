@@ -28,7 +28,7 @@ export function getPostgresPool(): Pool {
     // 获取最大连接数配置
     const maxConnections = process.env.POSTGRES_MAX_CONNECTIONS
       ? parseInt(process.env.POSTGRES_MAX_CONNECTIONS, 10)
-      : 10;
+      : 20;
 
     addLog.info('创建全局 PostgreSQL 连接池', {
       maxConnections
