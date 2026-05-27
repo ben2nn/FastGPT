@@ -391,15 +391,7 @@ const TrendChart = ({ filters, onError }: TrendChartProps) => {
 
   if (isLoading) {
     return (
-      <Box
-        w="100%"
-        h="400px"
-        bg={bgColor}
-        borderWidth="1px"
-        borderColor={borderColor}
-        borderRadius="lg"
-        p={4}
-      >
+      <Box w="100%" h="400px" bg="white" borderRadius="lg" p={4} boxShadow="sm">
         <Skeleton height="100%" />
       </Box>
     );
@@ -410,15 +402,7 @@ const TrendChart = ({ filters, onError }: TrendChartProps) => {
 
   if (showDebugInfo) {
     return (
-      <Box
-        w="100%"
-        h="400px"
-        bg={bgColor}
-        borderWidth="1px"
-        borderColor={borderColor}
-        borderRadius="lg"
-        p={4}
-      >
+      <Box w="100%" h="400px" bg="white" borderRadius="lg" p={4} boxShadow="sm">
         <div>
           <h3>调试信息</h3>
           <p>数据长度: {chartData.timestamps.length}</p>
@@ -432,18 +416,7 @@ const TrendChart = ({ filters, onError }: TrendChartProps) => {
   }
 
   return (
-    <Box
-      w="100%"
-      h="400px"
-      bg={bgColor}
-      borderWidth="1px"
-      borderColor={borderColor}
-      borderRadius="lg"
-      p={4}
-      boxShadow="sm"
-      _hover={{ boxShadow: 'md' }}
-      transition="all 0.2s"
-    >
+    <Box w="100%" h="400px" bg="white" borderRadius="lg" p={4} boxShadow="sm">
       {/* 标题 */}
       <Text fontSize="16px" fontWeight="bold" textAlign="center" mb={3} color={textColor}>
         调用量时间趋势

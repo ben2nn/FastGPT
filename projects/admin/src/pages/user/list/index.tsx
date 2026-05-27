@@ -109,175 +109,174 @@ export default function UserManagement() {
   return (
     <ProtectedRoute>
       <Layout title="用户管理">
-        <Box bg="white" borderWidth="1px" borderColor="borderColor.low" borderRadius="lg" p={6}>
-          <Flex justify="space-between" align="center" mb={6}>
-            <Text fontSize="xl" fontWeight="600" color="myGray.900">
-              用户列表
-            </Text>
-            <Button
-              variant="primary"
-              leftIcon={<MyIcon name="common/addLight" w="16px" h="16px" />}
-              onClick={() => {
-                setCurrentUser(undefined);
-                onOpen();
-              }}
-            >
-              添加用户
-            </Button>
-          </Flex>
-
-          <Box mb={4}>
-            <Flex
-              align="center"
-              bg="myGray.50"
-              borderRadius="md"
-              border="1px"
-              borderColor="borderColor.low"
-              px={3}
-            >
-              <MyIcon name="common/searchLight" w="16px" h="16px" color="myGray.400" />
-              <Input
-                placeholder="搜索用户名..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                border="none"
-                bg="transparent"
-                _focus={{ boxShadow: 'none' }}
-              />
+        <Box bg="myGray.50" minH="100%" mx={-4} mt={-4} p={4}>
+          <Box bg="white" borderRadius="lg" boxShadow="sm" px={5} py={4}>
+            <Flex justify="space-between" align="center" mb={4}>
+              <Button
+                variant="primary"
+                leftIcon={<MyIcon name="common/addLight" w="16px" h="16px" />}
+                onClick={() => {
+                  setCurrentUser(undefined);
+                  onOpen();
+                }}
+              >
+                添加用户
+              </Button>
             </Flex>
-          </Box>
 
-          <Divider mb={6} borderColor="borderColor.low" />
+            <Box mb={4}>
+              <Flex
+                align="center"
+                bg="myGray.50"
+                borderRadius="md"
+                border="1px"
+                borderColor="borderColor.low"
+                px={3}
+              >
+                <MyIcon name="common/searchLight" w="16px" h="16px" color="myGray.400" />
+                <Input
+                  placeholder="搜索用户名..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  border="none"
+                  bg="transparent"
+                  _focus={{ boxShadow: 'none' }}
+                />
+              </Flex>
+            </Box>
 
-          <Table variant="simple">
-            <Thead>
-              <Tr>
-                <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
-                  用户
-                </Th>
-                <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
-                  状态
-                </Th>
-                <Th
-                  color="myGray.500"
-                  fontSize="xs"
-                  fontWeight="500"
-                  textTransform="none"
-                  isNumeric
-                >
-                  余额
-                </Th>
-                <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
-                  分成比例
-                </Th>
-                <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
-                  时区
-                </Th>
-                <Th
-                  color="myGray.500"
-                  fontSize="xs"
-                  fontWeight="500"
-                  textTransform="none"
-                  textAlign="right"
-                >
-                  操作
-                </Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {filteredUsers.map((user) => (
-                <Tr key={user._id} _hover={{ bg: 'myGray.50' }}>
-                  <Td>
-                    <HStack spacing={3}>
-                      <Avatar name={user.username} src={user.avatar} size="sm" />
-                      <Text fontWeight="500" color="myGray.900">
-                        {user.username}
-                      </Text>
-                    </HStack>
-                  </Td>
-                  <Td>
-                    <HStack spacing={1}>
-                      <Box
-                        w="8px"
-                        h="8px"
-                        borderRadius="full"
-                        bg={user.status === 'active' ? 'green.500' : 'myGray.400'}
-                      />
-                      <Text
-                        fontSize="sm"
-                        color={user.status === 'active' ? 'green.600' : 'myGray.500'}
-                      >
-                        {user.status === 'active' ? '活跃' : '未激活'}
-                      </Text>
-                    </HStack>
-                  </Td>
-                  <Td isNumeric color="myGray.700">
-                    {user.balance ? user.balance.toLocaleString() : '0'}
-                  </Td>
-                  <Td color="myGray.700">{user.promotionRate ?? 0}%</Td>
-                  <Td fontSize="sm" color="myGray.500">
-                    {user.timezone || '-'}
-                  </Td>
-                  <Td textAlign="right">
-                    <HStack spacing={2} justify="flex-end">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        color="primary.600"
-                        leftIcon={<MyIcon name="common/edit" w="14px" h="14px" />}
-                        onClick={() => handleEditUser(user)}
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        color="adora.600"
-                        leftIcon={<MyIcon name="common/lock" w="14px" h="14px" />}
-                        onClick={() => {
-                          setPasswordUserId(user._id!);
-                          setIsPasswordModalOpen(true);
-                        }}
-                      >
-                        密码
-                      </Button>
-                      {user.username !== 'root' && (
+            <Divider mb={4} borderColor="borderColor.low" />
+
+            <Table variant="simple">
+              <Thead>
+                <Tr>
+                  <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                    用户
+                  </Th>
+                  <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                    状态
+                  </Th>
+                  <Th
+                    color="myGray.500"
+                    fontSize="xs"
+                    fontWeight="500"
+                    textTransform="none"
+                    isNumeric
+                  >
+                    余额
+                  </Th>
+                  <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                    分成比例
+                  </Th>
+                  <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                    时区
+                  </Th>
+                  <Th
+                    color="myGray.500"
+                    fontSize="xs"
+                    fontWeight="500"
+                    textTransform="none"
+                    textAlign="right"
+                  >
+                    操作
+                  </Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {filteredUsers.map((user) => (
+                  <Tr key={user._id} _hover={{ bg: 'myGray.50' }}>
+                    <Td>
+                      <HStack spacing={3}>
+                        <Avatar name={user.username} src={user.avatar} size="sm" />
+                        <Text fontWeight="500" color="myGray.900">
+                          {user.username}
+                        </Text>
+                      </HStack>
+                    </Td>
+                    <Td>
+                      <HStack spacing={1}>
+                        <Box
+                          w="8px"
+                          h="8px"
+                          borderRadius="full"
+                          bg={user.status === 'active' ? 'green.500' : 'myGray.400'}
+                        />
+                        <Text
+                          fontSize="sm"
+                          color={user.status === 'active' ? 'green.600' : 'myGray.500'}
+                        >
+                          {user.status === 'active' ? '活跃' : '未激活'}
+                        </Text>
+                      </HStack>
+                    </Td>
+                    <Td isNumeric color="myGray.700">
+                      {user.balance ? user.balance.toLocaleString() : '0'}
+                    </Td>
+                    <Td color="myGray.700">{user.promotionRate ?? 0}%</Td>
+                    <Td fontSize="sm" color="myGray.500">
+                      {user.timezone || '-'}
+                    </Td>
+                    <Td textAlign="right">
+                      <HStack spacing={2} justify="flex-end">
                         <Button
                           size="sm"
                           variant="ghost"
-                          color="red.600"
-                          leftIcon={<MyIcon name="common/trash" w="14px" h="14px" />}
-                          onClick={() => handleDeleteUser(user._id!)}
+                          color="primary.600"
+                          leftIcon={<MyIcon name="common/edit" w="14px" h="14px" />}
+                          onClick={() => handleEditUser(user)}
                         >
-                          删除
+                          编辑
                         </Button>
-                      )}
-                    </HStack>
-                  </Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          color="adora.600"
+                          leftIcon={<MyIcon name="key" w="14px" h="14px" />}
+                          onClick={() => {
+                            setPasswordUserId(user._id!);
+                            setIsPasswordModalOpen(true);
+                          }}
+                        >
+                          密码
+                        </Button>
+                        {user.username !== 'root' && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            color="red.600"
+                            leftIcon={<MyIcon name="common/trash" w="14px" h="14px" />}
+                            onClick={() => handleDeleteUser(user._id!)}
+                          >
+                            删除
+                          </Button>
+                        )}
+                      </HStack>
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </Box>
+
+          {/* 用户模态框 */}
+          {isOpen && (
+            <UserModal
+              user={currentUser}
+              isOpen={isOpen}
+              onClose={onClose}
+              onSubmit={currentUser ? handleUpdateUser : handleAddUser}
+            />
+          )}
+
+          {/* 密码模态框 */}
+          {isPasswordModalOpen && (
+            <PasswordModal
+              isOpen={isPasswordModalOpen}
+              onClose={() => setIsPasswordModalOpen(false)}
+              onSubmit={handleChangePassword}
+            />
+          )}
         </Box>
-
-        {/* 用户模态框 */}
-        {isOpen && (
-          <UserModal
-            user={currentUser}
-            isOpen={isOpen}
-            onClose={onClose}
-            onSubmit={currentUser ? handleUpdateUser : handleAddUser}
-          />
-        )}
-
-        {/* 密码模态框 */}
-        {isPasswordModalOpen && (
-          <PasswordModal
-            isOpen={isPasswordModalOpen}
-            onClose={() => setIsPasswordModalOpen(false)}
-            onSubmit={handleChangePassword}
-          />
-        )}
       </Layout>
     </ProtectedRoute>
   );

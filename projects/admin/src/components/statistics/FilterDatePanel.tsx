@@ -104,7 +104,7 @@ const FilterDatePanel: React.FC<FilterPanelProps> = ({
   );
 
   return (
-    <Box p={4} borderWidth={1} borderRadius="md" borderColor="gray.200" bg="white" shadow="sm">
+    <Box p={4} borderRadius="lg" bg="white" boxShadow="sm">
       <VStack spacing={4} align="stretch">
         {/* 第一行：快捷时间选项 */}
         <FormControl>

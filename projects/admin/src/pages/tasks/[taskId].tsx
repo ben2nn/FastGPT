@@ -200,9 +200,9 @@ const TaskDetailPage = () => {
   return (
     <ProtectedRoute>
       <Layout title={taskDetail.config.name}>
-        <Box>
+        <Box bg="myGray.50" minH="100%" mx={-4} mt={-4} p={4}>
           {/* 页面标题 */}
-          <Flex justify="space-between" align="center" mb={6}>
+          <Flex justify="space-between" align="center" mb={4}>
             <Flex align="center">
               <MyIcon
                 name="common/arrowLeft"
@@ -242,7 +242,7 @@ const TaskDetailPage = () => {
           </Flex>
 
           {/* 任务配置信息 */}
-          <Box bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={6} mb={6}>
+          <Box bg="white" borderRadius="lg" boxShadow="sm" px={5} py={4} mb={4}>
             <Text fontSize="lg" fontWeight="600" color="myGray.900" mb={4}>
               任务配置
             </Text>
@@ -325,12 +325,12 @@ const TaskDetailPage = () => {
           </Box>
 
           {/* 执行统计图表 */}
-          <Box mb={6} bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={6}>
+          <Box mb={4} bg="white" borderRadius="lg" boxShadow="sm" px={5} py={4}>
             <ExecutionCharts executions={executions} loading={executionsLoading} />
           </Box>
 
           {/* 执行历史 */}
-          <Box bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={6}>
+          <Box bg="white" borderRadius="lg" boxShadow="sm" px={5} py={4}>
             <Flex justify="space-between" align="center" mb={4}>
               <Text fontSize="lg" fontWeight="600" color="myGray.900">
                 执行历史
@@ -340,7 +340,9 @@ const TaskDetailPage = () => {
                   as="select"
                   w="150px"
                   value={query.status}
-                  onChange={(e) => setQuery({ ...query, status: e.target.value, page: 1 })}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                    setQuery({ ...query, status: e.target.value, page: 1 })
+                  }
                   p={2}
                   borderRadius="md"
                   border="1px"
@@ -444,7 +446,7 @@ const TaskDetailPage = () => {
                           <Td colSpan={6} p={0}>
                             <Collapse in={expandedExecutionId === execution.id}>
                               <Box bg="myGray.50" p={4}>
-                                <Box spacing={3}>
+                                <Box>
                                   {execution.params && (
                                     <Box mb={3}>
                                       <Text

@@ -118,7 +118,7 @@ const StatisticsList: React.FC<StatisticsListProps> = ({ filters }) => {
 
       {/* 空数据状态 */}
       {!isLoading && !error && (!data || data.list.length === 0) && (
-        <Box textAlign="center" py={10} borderWidth={1} borderRadius="md" borderColor="gray.200">
+        <Box textAlign="center" py={10} bg="white" borderRadius="lg" boxShadow="sm">
           <Text color="gray.500" fontSize="lg">
             暂无数据
           </Text>
@@ -128,7 +128,7 @@ const StatisticsList: React.FC<StatisticsListProps> = ({ filters }) => {
       {/* 有数据时显示表格 */}
       {!isLoading && !error && data && data.list.length > 0 && (
         <>
-          <Box overflowX="auto" borderWidth={1} borderRadius="md" borderColor="gray.200">
+          <Box overflowX="auto" bg="white" borderRadius="lg" boxShadow="sm">
             <Table variant="simple">
               <Thead bg="blue.50">
                 <Tr>

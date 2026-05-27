@@ -187,7 +187,7 @@ const ExportButton = ({ filters, disabled = false }: ExportButtonProps) => {
 
   return (
     <Button
-      leftIcon={<MyIcon name={'common/file/fileLight' as any} h="16px" />}
+      leftIcon={<MyIcon name="common/download" h="16px" />}
       isLoading={isExporting}
       isDisabled={disabled || isExporting}
       colorScheme="blue"

@@ -163,9 +163,9 @@ const TaskListPage = () => {
   return (
     <ProtectedRoute>
       <Layout title="任务管理">
-        <Box>
+        <Box bg="myGray.50" minH="100%" mx={-4} mt={-4} p={4}>
           {/* 页面标题 */}
-          <Flex justify="space-between" align="center" mb={6}>
+          <Flex justify="space-between" align="center" mb={4}>
             <Box>
               <Text fontSize="sm" color="myGray.500" mt={1}>
                 管理和监控系统定时任务
@@ -212,16 +212,9 @@ const TaskListPage = () => {
 
           {/* 任务列表 */}
           {!loading && !error && (
-            <Box
-              bg="white"
-              borderRadius="lg"
-              shadow="sm"
-              overflow="hidden"
-              border="1px"
-              borderColor="borderColor.low"
-            >
+            <Box bg="white" borderRadius="lg" overflow="hidden" boxShadow="sm" px={5} py={4}>
               <Table variant="simple">
-                <Thead bg="myGray.50">
+                <Thead>
                   <Tr>
                     <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
                       任务名称
@@ -319,27 +312,27 @@ const TaskListPage = () => {
                           <Td>
                             <HStack spacing={2}>
                               <Button
-                                size="xs"
+                                size="sm"
                                 variant="ghost"
                                 color="primary.600"
-                                leftIcon={<MyIcon name="common/detail" w="12px" h="12px" />}
+                                leftIcon={<MyIcon name="common/detail" w="14px" h="14px" />}
                                 onClick={() => handleViewDetail(task)}
                               >
                                 详情
                               </Button>
                               <Button
-                                size="xs"
+                                size="sm"
                                 variant="ghost"
                                 color="adora.600"
-                                leftIcon={<MyIcon name="common/logLight" w="12px" h="12px" />}
+                                leftIcon={<MyIcon name="common/logLight" w="14px" h="14px" />}
                                 onClick={() => handleViewHistory(task)}
                               >
                                 历史
                               </Button>
                               <Button
-                                size="xs"
+                                size="sm"
                                 variant="primary"
-                                leftIcon={<MyIcon name="common/playFill" w="12px" h="12px" />}
+                                leftIcon={<MyIcon name="common/playFill" w="14px" h="14px" />}
                                 onClick={() => handleExecuteTask(task)}
                                 isDisabled={task.isRunning}
                               >

@@ -153,71 +153,39 @@ export default function Statistics() {
   return (
     <ProtectedRoute>
       <Layout title="首页">
-        <VStack spacing={6} align="stretch" w="100%">
-          {/* 第一行：筛选面板 */}
-          <Box bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={4}>
+        <Box bg="myGray.50" minH="100%" mx={-4} mt={-4} p={4}>
+          <VStack spacing={4} align="stretch" w="100%">
+            {/* 第一行：筛选面板 */}
             <FilterDatePanel
               onFilterChange={handleFilterChange}
               initialFilters={filters}
               onAutoRefreshChange={handleAutoRefreshChange}
             />
-          </Box>
 
-          {/* 第二行：总览卡片 */}
-          <OverviewCards filters={filters} onError={handleError} />
+            {/* 第二行：总览卡片 */}
+            <OverviewCards filters={filters} onError={handleError} />
 
-          {/* 第三行：趋势图表 + 状态图表 */}
-          <Flex gap={6} direction={{ base: 'column', lg: 'row' }}>
-            <Box
-              flex="2"
-              minW="0"
-              bg="white"
-              borderRadius="lg"
-              border="1px"
-              borderColor="borderColor.low"
-              p={4}
-            >
-              <TrendChart filters={filters} onError={handleError} />
-            </Box>
-            <Box
-              flex="1"
-              minW="0"
-              bg="white"
-              borderRadius="lg"
-              border="1px"
-              borderColor="borderColor.low"
-              p={4}
-            >
-              <StatusChart filters={filters} onError={handleError} />
-            </Box>
-          </Flex>
+            {/* 第三行：趋势图表 + 状态图表 */}
+            <Flex gap={4} direction={{ base: 'column', lg: 'row' }}>
+              <Box flex="2" minW="0">
+                <TrendChart filters={filters} onError={handleError} />
+              </Box>
+              <Box flex="1" minW="0">
+                <StatusChart filters={filters} onError={handleError} />
+              </Box>
+            </Flex>
 
-          {/* 第四行：应用排行图表 + 模型分布图表 */}
-          <Flex gap={6} direction={{ base: 'column', lg: 'row' }}>
-            <Box
-              flex="1"
-              minW="0"
-              bg="white"
-              borderRadius="lg"
-              border="1px"
-              borderColor="borderColor.low"
-              p={4}
-            >
-              <AppRankingChart filters={filters} onError={handleError} />
-            </Box>
-            <Box
-              flex="1"
-              minW="0"
-              bg="white"
-              borderRadius="lg"
-              border="1px"
-              borderColor="borderColor.low"
-              p={4}
-            >
-              <ModelDistChart filters={filters} onError={handleError} />
-            </Box>
-          </Flex>
-        </VStack>
+            {/* 第四行：应用排行图表 + 模型分布图表 */}
+            <Flex gap={4} direction={{ base: 'column', lg: 'row' }}>
+              <Box flex="1" minW="0">
+                <AppRankingChart filters={filters} onError={handleError} />
+              </Box>
+              <Box flex="1" minW="0">
+                <ModelDistChart filters={filters} onError={handleError} />
+              </Box>
+            </Flex>
+          </VStack>
+        </Box>
       </Layout>
     </ProtectedRoute>
   );

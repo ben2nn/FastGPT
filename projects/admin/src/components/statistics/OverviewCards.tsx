@@ -81,16 +81,7 @@ const StatCard = ({ label, value, icon, helpText, color, isLoading }: StatCardPr
   const iconColor = useColorModeValue('blue.500', 'blue.300');
 
   return (
-    <Box
-      p={5}
-      bg={bgColor}
-      borderWidth="1px"
-      borderColor={borderColor}
-      borderRadius="lg"
-      boxShadow="sm"
-      _hover={{ boxShadow: 'md' }}
-      transition="all 0.2s"
-    >
+    <Box p={5} bg="white" borderRadius="lg" boxShadow="sm">
       <Flex align="center" justify="space-between" mb={3}>
         <Box p={2} bg={iconBgColor} borderRadius="md">
           {/* 图标占位 */}

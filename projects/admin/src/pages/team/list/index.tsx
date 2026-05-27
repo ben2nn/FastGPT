@@ -217,316 +217,319 @@ export default function TeamManagement() {
   return (
     <ProtectedRoute>
       <Layout title="团队管理">
-        <Flex gap={4} h="calc(100vh - 200px)">
-          {/* 左侧：团队列表 */}
-          <Box
-            w="300px"
-            bg="white"
-            borderWidth="1px"
-            borderColor="borderColor.low"
-            borderRadius="lg"
-            p={4}
-            overflowY="auto"
-          >
-            <Flex justify="space-between" align="center" mb={4}>
-              <Text fontSize="lg" fontWeight="600" color="myGray.900">
-                团队列表
-              </Text>
-              <Button
-                size="sm"
-                variant="primary"
-                leftIcon={<MyIcon name="common/addLight" w="14px" h="14px" />}
-                onClick={() => {
-                  setCurrentTeam(undefined);
-                  setIsTeamModalOpen(true);
-                }}
-              >
-                新建
-              </Button>
-            </Flex>
-            <Divider mb={4} borderColor="borderColor.low" />
-            <VStack spacing={2} align="stretch">
-              {teams.map((team) => (
-                <Box
-                  key={team._id}
-                  p={3}
-                  borderWidth="1px"
-                  borderRadius="md"
-                  cursor="pointer"
-                  bg={selectedTeam?._id === team._id ? 'primary.50' : 'transparent'}
-                  borderColor={selectedTeam?._id === team._id ? 'primary.600' : 'borderColor.low'}
-                  _hover={{ bg: 'myGray.50' }}
-                  transition="all 0.2s"
-                  onClick={() => setSelectedTeam(team)}
+        <Box bg="myGray.50" minH="100%" mx={-4} mt={-4} p={4}>
+          <Flex gap={4} h="calc(100vh - 200px)">
+            {/* 左侧：团队列表 */}
+            <Box
+              w="300px"
+              bg="white"
+              borderRadius="lg"
+              boxShadow="sm"
+              px={5}
+              py={4}
+              overflowY="auto"
+            >
+              <Flex justify="space-between" align="center" mb={4}>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  leftIcon={<MyIcon name="common/addLight" w="14px" h="14px" />}
+                  onClick={() => {
+                    setCurrentTeam(undefined);
+                    setIsTeamModalOpen(true);
+                  }}
                 >
-                  <Flex justify="space-between" align="center">
-                    <Box flex={1}>
-                      <Text fontWeight="600" mb={1} color="myGray.900">
-                        {team.name}
-                      </Text>
-                      <Text fontSize="xs" color="myGray.500">
-                        所有者: {team.ownerId?.username}
-                      </Text>
-                    </Box>
-                    <HStack spacing={1}>
-                      <MyIcon
-                        name="common/edit"
-                        w="14px"
-                        h="14px"
-                        color="myGray.400"
-                        cursor="pointer"
-                        _hover={{ color: 'primary.600' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCurrentTeam(team);
-                          setIsTeamModalOpen(true);
-                        }}
-                      />
-                      {team.ownerId?.username !== 'root' && (
+                  新建
+                </Button>
+              </Flex>
+              <Divider mb={4} borderColor="borderColor.low" />
+              <VStack spacing={2} align="stretch">
+                {teams.map((team) => (
+                  <Box
+                    key={team._id}
+                    p={3}
+                    borderWidth="1px"
+                    borderRadius="md"
+                    cursor="pointer"
+                    bg={selectedTeam?._id === team._id ? 'primary.50' : 'transparent'}
+                    borderColor={selectedTeam?._id === team._id ? 'primary.600' : 'borderColor.low'}
+                    _hover={{ bg: 'myGray.50' }}
+                    transition="all 0.2s"
+                    onClick={() => setSelectedTeam(team)}
+                  >
+                    <Flex justify="space-between" align="center">
+                      <Box flex={1}>
+                        <Text fontWeight="600" mb={1} color="myGray.900">
+                          {team.name}
+                        </Text>
+                        <Text fontSize="xs" color="myGray.500">
+                          所有者: {team.ownerId?.username}
+                        </Text>
+                      </Box>
+                      <HStack spacing={1}>
                         <MyIcon
-                          name="common/trash"
+                          name="common/edit"
                           w="14px"
                           h="14px"
                           color="myGray.400"
                           cursor="pointer"
-                          _hover={{ color: 'red.600' }}
+                          _hover={{ color: 'primary.600' }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteTeam(team._id);
+                            setCurrentTeam(team);
+                            setIsTeamModalOpen(true);
                           }}
                         />
-                      )}
+                        {team.ownerId?.username !== 'root' && (
+                          <MyIcon
+                            name="common/trash"
+                            w="14px"
+                            h="14px"
+                            color="myGray.400"
+                            cursor="pointer"
+                            _hover={{ color: 'red.600' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTeam(team._id);
+                            }}
+                          />
+                        )}
+                      </HStack>
+                    </Flex>
+                  </Box>
+                ))}
+              </VStack>
+            </Box>
+
+            {/* 右侧：团队成员列表 */}
+            <Box
+              flex={1}
+              bg="white"
+              borderRadius="lg"
+              boxShadow="sm"
+              px={5}
+              py={4}
+              overflowY="auto"
+            >
+              {selectedTeam ? (
+                <>
+                  <Flex justify="space-between" align="center" mb={4}>
+                    <Text fontSize="lg" fontWeight="600" color="myGray.900">
+                      {selectedTeam.name} - 成员管理
+                    </Text>
+                    <HStack>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        leftIcon={<MyIcon name="common/addUser" w="14px" h="14px" />}
+                        onClick={() => setIsAddMemberModalOpen(true)}
+                      >
+                        添加成员
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="primaryOutline"
+                        leftIcon={<MyIcon name="common/refresh" w="14px" h="14px" />}
+                        onClick={() => setIsOwnerModalOpen(true)}
+                      >
+                        更换所有者
+                      </Button>
                     </HStack>
                   </Flex>
-                </Box>
-              ))}
-            </VStack>
-          </Box>
 
-          {/* 右侧：团队成员列表 */}
-          <Box
-            flex={1}
-            bg="white"
-            borderWidth="1px"
-            borderColor="borderColor.low"
-            borderRadius="lg"
-            p={4}
-            overflowY="auto"
-          >
-            {selectedTeam ? (
-              <>
-                <Flex justify="space-between" align="center" mb={4}>
-                  <Text fontSize="lg" fontWeight="600" color="myGray.900">
-                    {selectedTeam.name} - 成员管理
-                  </Text>
-                  <HStack>
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      leftIcon={<MyIcon name="common/addUser" w="14px" h="14px" />}
-                      onClick={() => setIsAddMemberModalOpen(true)}
+                  <Box mb={4}>
+                    <Flex
+                      align="center"
+                      bg="myGray.50"
+                      borderRadius="md"
+                      border="1px"
+                      borderColor="borderColor.low"
+                      px={3}
                     >
-                      添加成员
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="primaryOutline"
-                      leftIcon={<MyIcon name="common/refresh" w="14px" h="14px" />}
-                      onClick={() => setIsOwnerModalOpen(true)}
-                    >
-                      更换所有者
-                    </Button>
-                  </HStack>
-                </Flex>
+                      <MyIcon name="common/searchLight" w="16px" h="16px" color="myGray.400" />
+                      <Input
+                        placeholder="搜索成员用户名..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        border="none"
+                        bg="transparent"
+                        _focus={{ boxShadow: 'none' }}
+                      />
+                    </Flex>
+                  </Box>
 
-                <Box mb={4}>
-                  <Flex
-                    align="center"
-                    bg="myGray.50"
-                    borderRadius="md"
-                    border="1px"
-                    borderColor="borderColor.low"
-                    px={3}
-                  >
-                    <MyIcon name="common/searchLight" w="16px" h="16px" color="myGray.400" />
-                    <Input
-                      placeholder="搜索成员用户名..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      border="none"
-                      bg="transparent"
-                      _focus={{ boxShadow: 'none' }}
-                    />
-                  </Flex>
-                </Box>
+                  <Divider mb={4} borderColor="borderColor.low" />
 
-                <Divider mb={4} borderColor="borderColor.low" />
-
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
-                        用户
-                      </Th>
-                      <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
-                        角色
-                      </Th>
-                      <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
-                        状态
-                      </Th>
-                      <Th
-                        color="myGray.500"
-                        fontSize="xs"
-                        fontWeight="500"
-                        textTransform="none"
-                        isNumeric
-                      >
-                        余额
-                      </Th>
-                      <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
-                        分成比例
-                      </Th>
-                      <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
-                        时区
-                      </Th>
-                      <Th
-                        color="myGray.500"
-                        fontSize="xs"
-                        fontWeight="500"
-                        textTransform="none"
-                        textAlign="right"
-                      >
-                        操作
-                      </Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {filteredMembers.map((member) => {
-                      const user = users.find((u) => u._id === member.userId?._id);
-                      return (
-                        <Tr key={member._id} _hover={{ bg: 'myGray.50' }}>
-                          <Td>
-                            <HStack spacing={3}>
-                              <Avatar name={member.userId?.username} src={user?.avatar} size="sm" />
-                              <Text fontWeight="500" color="myGray.900">
-                                {member.userId?.username || '未知'}
-                              </Text>
-                            </HStack>
-                          </Td>
-                          <Td>
-                            <HStack spacing={1}>
-                              <Box
-                                w="6px"
-                                h="6px"
-                                borderRadius="full"
-                                bg={member.role === 'owner' ? 'adora.600' : 'myGray.400'}
-                              />
-                              <Text
-                                fontSize="sm"
-                                color={member.role === 'owner' ? 'adora.600' : 'myGray.600'}
-                              >
-                                {member.role === 'owner' ? '所有者' : '成员'}
-                              </Text>
-                            </HStack>
-                          </Td>
-                          <Td>
-                            <HStack spacing={1}>
-                              <Box
-                                w="6px"
-                                h="6px"
-                                borderRadius="full"
-                                bg={user?.status === 'active' ? 'green.500' : 'myGray.400'}
-                              />
-                              <Text
-                                fontSize="sm"
-                                color={user?.status === 'active' ? 'green.600' : 'myGray.500'}
-                              >
-                                {user?.status === 'active' ? '活跃' : '未激活'}
-                              </Text>
-                            </HStack>
-                          </Td>
-                          <Td isNumeric color="myGray.700">
-                            {user?.balance ? user.balance.toLocaleString() : '0'}
-                          </Td>
-                          <Td color="myGray.700">{user?.promotionRate ?? 0}%</Td>
-                          <Td fontSize="sm" color="myGray.500">
-                            {user?.timezone || '-'}
-                          </Td>
-                          <Td textAlign="right">
-                            <HStack spacing={2} justify="flex-end">
-                              {member.userId?.username !== 'root' && member.role !== 'owner' && (
-                                <Button
-                                  size="xs"
-                                  variant="ghost"
-                                  color="red.600"
-                                  leftIcon={<MyIcon name="common/closeLight" w="12px" h="12px" />}
-                                  onClick={() =>
-                                    member.userId?._id &&
-                                    handleRemoveMemberFromTeam(member.userId._id)
-                                  }
+                  <Table variant="simple" size="sm">
+                    <Thead>
+                      <Tr>
+                        <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                          用户
+                        </Th>
+                        <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                          角色
+                        </Th>
+                        <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                          状态
+                        </Th>
+                        <Th
+                          color="myGray.500"
+                          fontSize="xs"
+                          fontWeight="500"
+                          textTransform="none"
+                          isNumeric
+                        >
+                          余额
+                        </Th>
+                        <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                          分成比例
+                        </Th>
+                        <Th color="myGray.500" fontSize="xs" fontWeight="500" textTransform="none">
+                          时区
+                        </Th>
+                        <Th
+                          color="myGray.500"
+                          fontSize="xs"
+                          fontWeight="500"
+                          textTransform="none"
+                          textAlign="right"
+                        >
+                          操作
+                        </Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {filteredMembers.map((member) => {
+                        const user = users.find((u) => u._id === member.userId?._id);
+                        return (
+                          <Tr key={member._id} _hover={{ bg: 'myGray.50' }}>
+                            <Td>
+                              <HStack spacing={3}>
+                                <Avatar
+                                  name={member.userId?.username}
+                                  src={user?.avatar}
+                                  size="sm"
+                                />
+                                <Text fontWeight="500" color="myGray.900">
+                                  {member.userId?.username || '未知'}
+                                </Text>
+                              </HStack>
+                            </Td>
+                            <Td>
+                              <HStack spacing={1}>
+                                <Box
+                                  w="6px"
+                                  h="6px"
+                                  borderRadius="full"
+                                  bg={member.role === 'owner' ? 'adora.600' : 'myGray.400'}
+                                />
+                                <Text
+                                  fontSize="sm"
+                                  color={member.role === 'owner' ? 'adora.600' : 'myGray.600'}
                                 >
-                                  移除
-                                </Button>
-                              )}
-                            </HStack>
-                          </Td>
-                        </Tr>
-                      );
-                    })}
-                  </Tbody>
-                </Table>
-              </>
-            ) : (
-              <Flex h="full" align="center" justify="center">
-                <Text color="myGray.400" fontSize="lg">
-                  请选择一个团队查看成员
-                </Text>
-              </Flex>
-            )}
-          </Box>
-        </Flex>
+                                  {member.role === 'owner' ? '所有者' : '成员'}
+                                </Text>
+                              </HStack>
+                            </Td>
+                            <Td>
+                              <HStack spacing={1}>
+                                <Box
+                                  w="6px"
+                                  h="6px"
+                                  borderRadius="full"
+                                  bg={user?.status === 'active' ? 'green.500' : 'myGray.400'}
+                                />
+                                <Text
+                                  fontSize="sm"
+                                  color={user?.status === 'active' ? 'green.600' : 'myGray.500'}
+                                >
+                                  {user?.status === 'active' ? '活跃' : '未激活'}
+                                </Text>
+                              </HStack>
+                            </Td>
+                            <Td isNumeric color="myGray.700">
+                              {user?.balance ? user.balance.toLocaleString() : '0'}
+                            </Td>
+                            <Td color="myGray.700">{user?.promotionRate ?? 0}%</Td>
+                            <Td fontSize="sm" color="myGray.500">
+                              {user?.timezone || '-'}
+                            </Td>
+                            <Td textAlign="right">
+                              <HStack spacing={2} justify="flex-end">
+                                {member.userId?.username !== 'root' && member.role !== 'owner' && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    color="red.600"
+                                    leftIcon={<MyIcon name="common/closeLight" w="14px" h="14px" />}
+                                    onClick={() =>
+                                      member.userId?._id &&
+                                      handleRemoveMemberFromTeam(member.userId._id)
+                                    }
+                                  >
+                                    移除
+                                  </Button>
+                                )}
+                              </HStack>
+                            </Td>
+                          </Tr>
+                        );
+                      })}
+                    </Tbody>
+                  </Table>
+                </>
+              ) : (
+                <Flex h="full" align="center" justify="center">
+                  <Text color="myGray.400" fontSize="lg">
+                    请选择一个团队查看成员
+                  </Text>
+                </Flex>
+              )}
+            </Box>
+          </Flex>
 
-        {/* 团队模态框 */}
-        {isTeamModalOpen && (
-          <Modal onClose={() => setIsTeamModalOpen(false)}>
-            <Text fontSize="lg" fontWeight="600" color="myGray.900" mb={4}>
-              {currentTeam ? '编辑团队' : '创建团队'}
-            </Text>
-            <TeamForm
-              team={currentTeam}
-              users={users}
-              onSubmit={currentTeam ? handleUpdateTeam : handleAddTeam}
-            />
-          </Modal>
-        )}
+          {/* 团队模态框 */}
+          {isTeamModalOpen && (
+            <Modal onClose={() => setIsTeamModalOpen(false)}>
+              <Text fontSize="lg" fontWeight="600" color="myGray.900" mb={4}>
+                {currentTeam ? '编辑团队' : '创建团队'}
+              </Text>
+              <TeamForm
+                team={currentTeam}
+                users={users}
+                onSubmit={currentTeam ? handleUpdateTeam : handleAddTeam}
+              />
+            </Modal>
+          )}
 
-        {/* 添加成员模态框 */}
-        {isAddMemberModalOpen && (
-          <Modal onClose={() => setIsAddMemberModalOpen(false)}>
-            <Text fontSize="lg" fontWeight="600" color="myGray.900" mb={4}>
-              添加团队成员
-            </Text>
-            <AddMemberForm
-              users={users}
-              existingMembers={teamMembers}
-              onSubmit={handleAddMemberToTeam}
-            />
-          </Modal>
-        )}
+          {/* 添加成员模态框 */}
+          {isAddMemberModalOpen && (
+            <Modal onClose={() => setIsAddMemberModalOpen(false)}>
+              <Text fontSize="lg" fontWeight="600" color="myGray.900" mb={4}>
+                添加团队成员
+              </Text>
+              <AddMemberForm
+                users={users}
+                existingMembers={teamMembers}
+                onSubmit={handleAddMemberToTeam}
+              />
+            </Modal>
+          )}
 
-        {/* 更换所有者模态框 */}
-        {isOwnerModalOpen && (
-          <Modal onClose={() => setIsOwnerModalOpen(false)}>
-            <Text fontSize="lg" fontWeight="600" color="myGray.900" mb={4}>
-              更换团队所有者
-            </Text>
-            <ChangeOwnerForm
-              teamMembers={teamMembers}
-              currentOwnerId={selectedTeam?.ownerId._id}
-              onSubmit={handleChangeOwner}
-            />
-          </Modal>
-        )}
+          {/* 更换所有者模态框 */}
+          {isOwnerModalOpen && (
+            <Modal onClose={() => setIsOwnerModalOpen(false)}>
+              <Text fontSize="lg" fontWeight="600" color="myGray.900" mb={4}>
+                更换团队所有者
+              </Text>
+              <ChangeOwnerForm
+                teamMembers={teamMembers}
+                currentOwnerId={selectedTeam?.ownerId._id}
+                onSubmit={handleChangeOwner}
+              />
+            </Modal>
+          )}
+        </Box>
       </Layout>
     </ProtectedRoute>
   );
@@ -687,7 +690,9 @@ function AddMemberForm({
               <Box
                 as="select"
                 value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setSelectedUserId(e.target.value)
+                }
                 w="full"
                 p={2}
                 borderRadius="md"
@@ -743,7 +748,9 @@ function ChangeOwnerForm({
           <Box
             as="select"
             value={selectedUserId}
-            onChange={(e) => setSelectedUserId(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setSelectedUserId(e.target.value)
+            }
             w="full"
             p={2}
             borderRadius="md"

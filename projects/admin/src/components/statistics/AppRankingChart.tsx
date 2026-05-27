@@ -261,33 +261,14 @@ const AppRankingChart = ({ filters, onError, onAppClick }: AppRankingChartProps)
 
   if (isLoading) {
     return (
-      <Box
-        w="100%"
-        h="400px"
-        bg={bgColor}
-        borderWidth="1px"
-        borderColor={borderColor}
-        borderRadius="lg"
-        p={4}
-      >
+      <Box w="100%" h="400px" bg="white" borderRadius="lg" p={4} boxShadow="sm">
         <Skeleton height="100%" />
       </Box>
     );
   }
 
   return (
-    <Box
-      w="100%"
-      h="400px"
-      bg={bgColor}
-      borderWidth="1px"
-      borderColor={borderColor}
-      borderRadius="lg"
-      p={4}
-      boxShadow="sm"
-      _hover={{ boxShadow: 'md' }}
-      transition="all 0.2s"
-    >
+    <Box w="100%" h="400px" bg="white" borderRadius="lg" p={4} boxShadow="sm">
       {/* 标题 */}
       <Text fontSize="16px" fontWeight="bold" textAlign="center" mb={3} color={textColor}>
         应用调用量排行 Top 10

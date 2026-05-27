@@ -119,28 +119,23 @@ export default function Statistics() {
   return (
     <ProtectedRoute>
       <Layout title="数据统计">
-        <VStack spacing={6} align="stretch" w="100%">
-          {/* 筛选面板 */}
-          <Box bg="white" borderRadius="lg" border="1px" borderColor="borderColor.low" p={4}>
-            <FilterPanel
-              onFilterChange={handleFilterChange}
-              initialFilters={filters}
-              onAutoRefreshChange={handleAutoRefreshChange}
-            />
-          </Box>
+        <Box bg="myGray.50" minH="100%" mx={-4} mt={-4} p={4}>
+          <VStack spacing={4} align="stretch" w="100%">
+            {/* 筛选面板 */}
+            <Box bg="white" borderRadius="lg" boxShadow="sm" px={5} py={4}>
+              <FilterPanel
+                onFilterChange={handleFilterChange}
+                initialFilters={filters}
+                onAutoRefreshChange={handleAutoRefreshChange}
+              />
+            </Box>
 
-          {/* 统计列表 */}
-          <Box
-            w="100%"
-            bg="white"
-            borderRadius="lg"
-            border="1px"
-            borderColor="borderColor.low"
-            p={4}
-          >
-            <StatisticsList filters={filters} />
-          </Box>
-        </VStack>
+            {/* 统计列表 */}
+            <Box w="100%" bg="white" borderRadius="lg" boxShadow="sm" px={5} py={4}>
+              <StatisticsList filters={filters} />
+            </Box>
+          </VStack>
+        </Box>
       </Layout>
     </ProtectedRoute>
   );

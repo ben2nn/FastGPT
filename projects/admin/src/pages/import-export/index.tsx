@@ -354,17 +354,9 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
   };
 
   return (
-    <Flex gap={5} direction={{ base: 'column', md: 'row' }}>
+    <Flex gap={4} direction={{ base: 'column', md: 'row' }}>
       {/* ===== 左：导出卡片 ===== */}
-      <Box
-        flex={1}
-        bg="white"
-        borderRadius="lg"
-        border="1px solid"
-        borderColor="borderColor.low"
-        px={5}
-        py={4}
-      >
+      <Box flex={1} bg="white" borderRadius="lg" boxShadow="sm" px={5} py={4}>
         <Flex align="center" gap={2} mb={4}>
           <MyIcon name="common/download" w="15px" h="15px" color="primary.600" />
           <Text fontSize="sm" fontWeight="600" color="myGray.800">
@@ -404,15 +396,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
       </Box>
 
       {/* ===== 右：导入卡片 ===== */}
-      <Box
-        flex={1}
-        bg="white"
-        borderRadius="lg"
-        border="1px solid"
-        borderColor="borderColor.low"
-        px={5}
-        py={4}
-      >
+      <Box flex={1} bg="white" borderRadius="lg" boxShadow="sm" px={5} py={4}>
         <Flex align="center" gap={2} mb={4}>
           <MyIcon name="common/importLight" w="15px" h="15px" color="green.600" />
           <Text fontSize="sm" fontWeight="600" color="myGray.800">
@@ -645,8 +629,8 @@ export default function ImportExportPage() {
   return (
     <ProtectedRoute>
       <Layout title="导入导出">
-        <Box>
-          <Box mb={5}>
+        <Box bg="myGray.50" minH="100%" mx={-4} mt={-4} p={4}>
+          <Box mb={4}>
             <FillRowTabs
               list={tabList}
               value={String(activeTab)}

@@ -241,7 +241,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   }, [startTime, endTime, appName, modelName, callStatus, isTimeRangeValid]);
 
   return (
-    <Box p={4} borderWidth={1} borderRadius="md" borderColor="gray.200" bg="white" shadow="sm">
+    <Box p={0}>
       <VStack spacing={4} align="stretch">
         {/* 第三行：应用和模型筛选 */}
         <Flex gap={6}>
