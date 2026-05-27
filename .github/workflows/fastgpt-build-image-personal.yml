@@ -8,6 +8,12 @@ on:
     branches:
       - 'main'
 
+env:
+  REGISTRY: ghcr.io
+  HARBOR_REGISTRY: harbor.hrids.com
+  HARBOR_PROJECT: ai_project
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   get-vars:
     runs-on: ubuntu-24.04
@@ -56,11 +62,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.archs.arch }}-buildx-
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.HARBOR_REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
       - name: Build and push for ${{ matrix.archs.arch }}
         id: build
         uses: docker/build-push-action@v6
@@ -71,7 +85,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=fastgpt image
-          outputs: type=image,"name=${{ needs.get-vars.outputs.docker_repo }}",push-by-digest=true,push=true
+          outputs: type=image,"name=${{ needs.get-vars.outputs.docker_repo }},harbor.hrids.com/ai_project/fastgpt",push-by-digest=true,push=true
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
       - name: Export digest
@@ -103,6 +117,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.HARBOR_REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
@@ -117,11 +139,13 @@ jobs:
         run: |
           echo "Git_Tag=${{ needs.get-vars.outputs.docker_repo }}:${{ needs.get-vars.outputs.docker_tag }}" >> $GITHUB_ENV
           echo "Git_Latest=${{ needs.get-vars.outputs.docker_repo }}:latest" >> $GITHUB_ENV
-    
+          echo "Harbor_Tag=harbor.hrids.com/ai_project/fastgpt:${{ needs.get-vars.outputs.docker_tag }}" >> $GITHUB_ENV
+          echo "Harbor_Latest=harbor.hrids.com/ai_project/fastgpt:latest" >> $GITHUB_ENV
+
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
-          TAGS="$(echo -e "${Git_Tag}\n${Git_Latest}")"
+          TAGS="$(echo -e "${Git_Tag}\n${Git_Latest}\n${Harbor_Tag}\n${Harbor_Latest}")"
           for TAG in $TAGS; do
             docker buildx imagetools create -t $TAG \
               $(printf '${{ needs.get-vars.outputs.docker_repo }}@sha256:%s ' *)
