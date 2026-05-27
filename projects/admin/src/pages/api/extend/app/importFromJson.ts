@@ -109,7 +109,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       const updated = { ...doc };
       updated._id = updateId(String(doc._id));
       if (updated.parentId) {
-        updated.parentId = updateId(String(updated.parentId));
+        const oldParentId = String(updated.parentId);
+        const newParentId = updateId(oldParentId);
+        if (!keepOriginalId && newParentId === oldParentId) {
+          updated.parentId = null;
+        } else {
+          updated.parentId = newParentId;
+        }
       }
       updated.teamId = teamId;
       updated.tmbId = tmbId;

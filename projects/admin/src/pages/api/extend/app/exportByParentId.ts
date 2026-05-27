@@ -52,7 +52,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 5. 递归查找所有子应用（动态导入避免触发 MQ/Redis 连接）
-    const { findAppAndAllChildren } = await import('@fastgpt/service/core/app/controller');
+    const { findAppAndAllChildren } = await import('@/service/core/app');
     const apps = await findAppAndAllChildren({
       teamId,
       appId: parentId

@@ -4,7 +4,7 @@ import { connectToDatabase } from '@/service/common/mongo';
 import { MongoApp } from '@fastgpt/service/core/app/schema';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
-import { ToolTypeList } from '@fastgpt/global/core/app/constants';
+import { ToolTypeList, AppFolderTypeList } from '@fastgpt/global/core/app/constants';
 
 const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
@@ -54,13 +54,35 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         return res.status(400).json({ success: false, error: 'Invalid parentId format' });
       }
 
-      const { findAppAndAllChildren } = await import('@fastgpt/service/core/app/controller');
+      const { findAppAndAllChildren } = await import('@/service/core/app');
       const allChildren = await findAppAndAllChildren({
         teamId,
         appId: parentId
       });
 
-      apps = allChildren.filter((app) => ToolTypeList.includes(app.type as any));
+      const tools = allChildren.filter((app) => ToolTypeList.includes(app.type as any));
+
+      // 收集工具依赖的文件夹（向上递归到根）
+      const folderIds = new Set<string>();
+      for (const tool of tools) {
+        if (tool.parentId) folderIds.add(String(tool.parentId));
+      }
+      const allChildrenMap = new Map(allChildren.map((a) => [String(a._id), a]));
+      const folders: typeof tools = [];
+      for (const fid of folderIds) {
+        let cur: string | undefined = fid;
+        while (cur && !folders.some((f) => String(f._id) === cur)) {
+          const node = allChildrenMap.get(cur);
+          if (node && AppFolderTypeList.includes(node.type as any)) {
+            folders.push(node);
+            cur = node.parentId ? String(node.parentId) : undefined;
+          } else {
+            break;
+          }
+        }
+      }
+
+      apps = [...folders, ...tools];
     } else {
       // 无 parentId：导出当前团队所有工具类型应用
       apps = await MongoApp.find({

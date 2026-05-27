@@ -4,7 +4,7 @@ import { connectToDatabase } from '@/service/common/mongo';
 import { MongoApp } from '@fastgpt/service/core/app/schema';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
-import { ToolTypeList } from '@fastgpt/global/core/app/constants';
+import { ToolTypeList, AppFolderTypeList } from '@fastgpt/global/core/app/constants';
 import { Types } from 'mongoose';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -72,9 +72,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // 校验 apps 中的 type 均为工具类型
+    // 校验 apps 中的 type 均为工具类型或文件夹类型
+    const allowedTypes = [...ToolTypeList, ...AppFolderTypeList];
     const invalidApps = apps.filter(
-      (app: Record<string, unknown>) => !ToolTypeList.includes(app.type as any)
+      (app: Record<string, unknown>) => !allowedTypes.includes(app.type as any)
     );
     if (invalidApps.length > 0) {
       return res.status(400).json({
@@ -114,7 +115,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       const updated = { ...doc };
       updated._id = updateId(String(doc._id));
       if (updated.parentId) {
-        updated.parentId = updateId(String(updated.parentId));
+        const oldParentId = String(updated.parentId);
+        const newParentId = updateId(oldParentId);
+        if (!keepOriginalId && newParentId === oldParentId) {
+          // parentId 不在导出范围内，清空以避免挂到源系统的文件夹
+          updated.parentId = null;
+        } else {
+          updated.parentId = newParentId;
+        }
       }
       updated.teamId = teamId;
       updated.tmbId = tmbId;

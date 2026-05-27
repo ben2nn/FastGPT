@@ -169,7 +169,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     function updateDoc(doc: Record<string, unknown>) {
       if (!keepOriginalId) {
         doc._id = idMap.get(String(doc._id)) || doc._id;
-        if (doc.parentId) doc.parentId = idMap.get(String(doc.parentId)) || doc.parentId;
+        if (doc.parentId) {
+          const oldParentId = String(doc.parentId);
+          const mapped = idMap.get(oldParentId);
+          doc.parentId = mapped || null;
+        }
         if (doc.datasetId) doc.datasetId = idMap.get(String(doc.datasetId)) || doc.datasetId;
         if (doc.collectionId)
           doc.collectionId = idMap.get(String(doc.collectionId)) || doc.collectionId;
