@@ -338,7 +338,6 @@ const TaskDetailPage = () => {
               <HStack spacing={3}>
                 <Box
                   as="select"
-                  size="sm"
                   w="150px"
                   value={query.status}
                   onChange={(e) => setQuery({ ...query, status: e.target.value, page: 1 })}
