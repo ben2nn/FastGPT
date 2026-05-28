@@ -57,6 +57,13 @@ const menuItems: MenuItem[] = [
     activeIcon: 'common/download',
     path: '/import-export',
     activeLinks: ['/import-export']
+  },
+  {
+    label: '商业版配置',
+    icon: 'common/setting',
+    activeIcon: 'common/setting',
+    path: '/system-config',
+    activeLinks: ['/system-config']
   }
 ];
 

@@ -20,7 +20,8 @@ const PREFETCH_ROUTES = [
   '/tasks',
   '/user/list',
   '/team/list',
-  '/import-export'
+  '/import-export',
+  '/system-config'
 ];
 
 // 初始化在 API 请求时通过中间件自动触发
