@@ -93,8 +93,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 获取表单字段
-    const keepOriginalId = fields.keepOriginalId?.[0] === 'true';
-    const targetParentId = fields.targetParentId?.[0] || undefined;
+    const keepOriginalIdRaw = Array.isArray(fields.keepOriginalId)
+      ? fields.keepOriginalId[0]
+      : fields.keepOriginalId;
+    const keepOriginalId = keepOriginalIdRaw === 'true';
+    const targetParentIdRaw = Array.isArray(fields.targetParentId)
+      ? fields.targetParentId[0]
+      : fields.targetParentId;
+    const targetParentId = targetParentIdRaw || undefined;
 
     // 获取上传的文件
     const fileField = files.file;
