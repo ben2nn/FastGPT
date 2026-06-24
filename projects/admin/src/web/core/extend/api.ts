@@ -121,16 +121,23 @@ export const removeTeamMember = async (teamId: string, userId: string) => {
 // ==================== 导入导出 API ====================
 
 // 知识库导出
-export const exportDataset = async (parentId: string) => {
+export const exportDataset = async (parentId: string, includeFiles?: boolean) => {
   const response = await authFetch(getWebReqUrl('/api/extend/dataset/exportByParentId'), {
     method: 'POST',
-    body: JSON.stringify({ parentId })
+    body: JSON.stringify({ parentId, includeFiles })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.error || '知识库导出失败');
   }
-  return response.json();
+
+  // 根据 Content-Type 判断返回类型
+  const contentType = response.headers.get('Content-Type') || '';
+  if (contentType.includes('application/zip')) {
+    // 返回 Blob 用于下载 ZIP
+    return { blob: await response.blob(), isZip: true };
+  }
+  return { data: await response.json(), isZip: false };
 };
 
 // 知识库导入

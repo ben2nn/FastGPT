@@ -87,6 +87,8 @@ type TabConfig = {
   exportFields: ExportField[];
   importFields?: ExportField[];
   showKeepOriginalId?: boolean;
+  showIncludeFiles?: boolean;
+  showIgnoreFiles?: boolean;
   exportDescription?: string;
   importDescription?: string;
   importResultLabels: Record<string, string>;
@@ -114,12 +116,15 @@ const TAB_CONFIGS: TabConfig[] = [
       { key: 'targetParentId', label: '目标父文件夹 ID', placeholder: '留空则导入到根目录' }
     ],
     showKeepOriginalId: true,
+    showIncludeFiles: true,
+    showIgnoreFiles: true,
     importResultLabels: {
       datasetsCount: '数据集',
       collectionsCount: '集合',
       datasCount: '数据',
       dataTextsCount: '全文索引',
-      collectionTagsCount: '标签'
+      collectionTagsCount: '标签',
+      uploadedFilesCount: '源文件'
     }
   },
   {
@@ -252,6 +257,8 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
   const fileRef = useRef<HTMLInputElement>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [keepOriginalId, setKeepOriginalId] = useState(true);
+  const [includeFiles, setIncludeFiles] = useState(false);
+  const [ignoreFiles, setIgnoreFiles] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -271,33 +278,55 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
 
     setExporting(true);
     try {
-      let data: object;
       const parentId = fieldValues.parentId?.trim();
-      const provider = fieldValues.provider?.trim();
-      const modelType = fieldValues.modelType;
 
       switch (tabIndex) {
-        case 0:
-          data = await exportDataset(parentId!);
+        case 0: {
+          const result = await exportDataset(parentId!, includeFiles);
+          if (result.isZip && result.blob) {
+            // 下载 ZIP 文件
+            const url = URL.createObjectURL(result.blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `dataset-export-${Date.now()}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          } else if (result.data) {
+            // 下载 JSON 文件
+            downloadJSON(result.data, `dataset-export-${Date.now()}.json`);
+          }
           break;
-        case 1:
-          data = await exportApp(parentId!);
+        }
+        case 1: {
+          const provider = fieldValues.provider?.trim();
+          const modelType = fieldValues.modelType;
+          const data = await exportApp(parentId!);
+          downloadJSON(data, `workflow-export-${Date.now()}.json`);
           break;
-        case 2:
-          data = await exportTools(parentId || undefined);
+        }
+        case 2: {
+          const data = await exportTools(parentId || undefined);
+          downloadJSON(data, `tools-export-${Date.now()}.json`);
           break;
-        case 3:
-          data = await exportModels(provider || undefined, modelType || undefined);
+        }
+        case 3: {
+          const provider = fieldValues.provider?.trim();
+          const modelType = fieldValues.modelType;
+          const data = await exportModels(provider || undefined, modelType || undefined);
+          downloadJSON(data, `models-export-${Date.now()}.json`);
           break;
-        case 4:
-          data = await exportChannels();
+        }
+        case 4: {
+          const data = await exportChannels();
+          downloadJSON(data, `channels-export-${Date.now()}.json`);
           break;
+        }
         default:
           throw new Error('未知的导出类型');
       }
 
-      const prefix = config.label.toLowerCase().replace(/\s/g, '-');
-      downloadJSON(data, `${prefix}-export-${Date.now()}.json`);
       toast({ title: '导出成功', status: 'success', duration: 3000 });
     } catch (e) {
       toast({ title: (e as Error).message, status: 'error', duration: 5000 });
@@ -308,7 +337,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
 
   const handleImport = async () => {
     if (!selectedFile) {
-      toast({ title: '请选择 JSON 文件', status: 'warning', duration: 3000 });
+      toast({ title: '请选择文件', status: 'warning', duration: 3000 });
       return;
     }
 
@@ -322,6 +351,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
         const formData = new FormData();
         formData.append('file', selectedFile);
         formData.append('keepOriginalId', String(keepOriginalId));
+        formData.append('ignoreFiles', String(ignoreFiles));
         if (targetParentId) formData.append('targetParentId', targetParentId);
         result = await importDataset(formData);
       } else {
@@ -382,6 +412,23 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
             ))}
           </VStack>
 
+          {/* 关联源文件开关 */}
+          {config.showIncludeFiles && (
+            <Flex align="center" gap={3} mb={4}>
+              <Text fontSize="sm" color="myGray.600" w="120px" flexShrink={0} lineHeight="36px">
+                关联源文件
+              </Text>
+              <Switch
+                isChecked={includeFiles}
+                onChange={(e) => setIncludeFiles(e.target.checked)}
+                size="sm"
+              />
+              <Text fontSize="xs" color="myGray.400">
+                导出时包含原始文件（文件会更大）
+              </Text>
+            </Flex>
+          )}
+
           <Button
             variant="primary"
             size="sm"
@@ -423,6 +470,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
                   fileRef={fileRef}
                   selectedFile={selectedFile}
                   onSelect={setSelectedFile}
+                  accept={tabIndex === 0 ? '.json,.zip' : '.json'}
                 />
               </Box>
             </Flex>
@@ -438,6 +486,23 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
                   onChange={(e) => setKeepOriginalId(e.target.checked)}
                   size="sm"
                 />
+              </Flex>
+            )}
+
+            {/* 忽略源文件开关 */}
+            {config.showIgnoreFiles && (
+              <Flex align="center" gap={3}>
+                <Text fontSize="sm" color="myGray.600" w="120px" flexShrink={0} lineHeight="36px">
+                  忽略源文件
+                </Text>
+                <Switch
+                  isChecked={ignoreFiles}
+                  onChange={(e) => setIgnoreFiles(e.target.checked)}
+                  size="sm"
+                />
+                <Text fontSize="xs" color="myGray.400">
+                  导入后无法查看原始文件，但数据仍可用
+                </Text>
               </Flex>
             )}
 
@@ -481,11 +546,13 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
 function FilePicker({
   fileRef,
   selectedFile,
-  onSelect
+  onSelect,
+  accept = '.json'
 }: {
   fileRef: React.RefObject<HTMLInputElement | null>;
   selectedFile: File | null;
   onSelect: (f: File | null) => void;
+  accept?: string;
 }) {
   const toast = useToast();
 
@@ -504,7 +571,7 @@ function FilePicker({
       <input
         ref={fileRef as React.RefObject<HTMLInputElement>}
         type="file"
-        accept=".json"
+        accept={accept}
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
@@ -560,7 +627,7 @@ function FilePicker({
           <VStack spacing={1}>
             <MyIcon name="common/uploadFileFill" w="20px" h="20px" color="myGray.300" />
             <Text fontSize="sm" color="myGray.500">
-              点击选择 JSON 文件
+              点击选择 {accept.replace(/,/g, ' 或 ')} 文件
             </Text>
             <Text fontSize="xs" color="myGray.400">
               最大 500MB

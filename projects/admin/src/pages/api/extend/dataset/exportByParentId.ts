@@ -7,6 +7,10 @@ import { MongoDatasetData } from '@fastgpt/service/core/dataset/data/schema';
 import { MongoDatasetDataText } from '@fastgpt/service/core/dataset/data/dataTextSchema';
 import { MongoDatasetCollectionTags } from '@fastgpt/service/core/dataset/tag/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
+import JSZip from 'jszip';
+import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
+import path from 'path';
+import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
 
 const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
@@ -49,8 +53,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(401).json({ error: '无法获取团队信息' });
     }
 
-    // 4. 获取并验证 parentId
-    const { parentId } = req.body;
+    // 4. 获取并验证 parentId 和 includeFiles
+    const { parentId, includeFiles } = req.body;
     if (!parentId || !/^[0-9a-fA-F]{24}$/.test(parentId)) {
       return res.status(400).json({ error: 'Invalid parentId format' });
     }
@@ -107,10 +111,62 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       collectionTags
     };
 
-    // 9. 设置响应头并返回
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename=dataset-export-${Date.now()}.json`);
-    res.status(200).json(exportData);
+    // 9. 根据是否包含源文件选择导出格式
+    if (includeFiles) {
+      // 创建 ZIP 文件
+      const zip = new JSZip();
+
+      // 添加 JSON 数据
+      zip.file('dataset-export.json', JSON.stringify(exportData, null, 2));
+
+      // 收集所有需要导出的 fileId
+      const fileCollections = collections.filter(
+        (c) => c.type === DatasetCollectionTypeEnum.file && c.fileId
+      );
+
+      if (fileCollections.length > 0) {
+        const filesFolder = zip.folder('files')!;
+        const s3Source = getS3DatasetSource();
+
+        // 下载源文件并添加到 ZIP
+        for (const collection of fileCollections) {
+          try {
+            const fileId = collection.fileId as string;
+            const fileStream = await s3Source.getFileStream(fileId);
+            if (fileStream) {
+              // 读取 stream 为 buffer
+              const chunks: Buffer[] = [];
+              for await (const chunk of fileStream) {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+              }
+              const buffer = Buffer.concat(chunks);
+
+              // 使用 fileId 的最后一部分作为文件名
+              const filename = path.basename(fileId);
+              filesFolder.file(filename, buffer);
+            }
+          } catch (error) {
+            console.warn(`跳过文件 ${collection.fileId}: ${(error as Error).message}`);
+          }
+        }
+      }
+
+      // 生成 ZIP 文件
+      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+
+      // 设置响应头
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename=dataset-export-${Date.now()}.zip`);
+      res.status(200).send(zipBuffer);
+    } else {
+      // 只返回 JSON
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename=dataset-export-${Date.now()}.json`
+      );
+      res.status(200).json(exportData);
+    }
   } catch (error) {
     console.error('Export dataset error:', error);
     res.status(500).json({ error: 'Export failed' });

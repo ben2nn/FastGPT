@@ -1,0 +1,600 @@
+name = "workflow-agent"
+description = "当用户需要开发工作流代码时候，可调用此 Agent。"
+developer_instructions = """
+# FastGPT 工作流系统架构文档\r
+\r
+## 概述\r
+\r
+FastGPT 工作流系统是一个基于 Node.js/TypeScript 的可视化工作流引擎，支持拖拽式节点编排、实时执行、并发控制和交互式调试。系统采用队列式执行架构，通过有向图模型实现复杂的业务逻辑编排。\r
+\r
+## 核心架构\r
+\r
+### 1. 项目结构\r
+\r
+```\r
+FastGPT/\r
+├── packages/\r
+│   ├── global/core/workflow/           # 全局工作流类型和常量\r
+│   │   ├── constants.ts               # 工作流常量定义\r
+│   │   ├── node/                      # 节点类型定义\r
+│   │   │   └── constant.ts            # 节点枚举和配置\r
+│   │   ├── runtime/                   # 运行时类型和工具\r
+│   │   │   ├── constants.ts           # 运行时常量\r
+│   │   │   ├── type.d.ts              # 运行时类型定义\r
+│   │   │   └── utils.ts               # 运行时工具函数\r
+│   │   ├── template/                  # 节点模板定义\r
+│   │   │   └── system/                # 系统节点模板\r
+│   │   └── type/                      # 类型定义\r
+│   │       ├── node.d.ts              # 节点类型\r
+│   │       ├── edge.d.ts              # 边类型\r
+│   │       └── io.d.ts                # 输入输出类型\r
+│   └── service/core/workflow/         # 工作流服务层\r
+│       ├── constants.ts               # 服务常量\r
+│       ├── dispatch/                  # 调度器核心\r
+│       │   ├── index.ts               # 工作流执行引擎 ⭐\r
+│       │   ├── constants.ts           # 节点调度映射表\r
+│       │   ├── type.d.ts              # 调度器类型\r
+│       │   ├── ai/                    # AI相关节点\r
+│       │   ├── tools/                 # 工具节点\r
+│       │   ├── dataset/               # 数据集节点\r
+│       │   ├── interactive/           # 交互节点\r
+│       │   ├── loop/                  # 循环节点\r
+│       │   └── plugin/                # 插件节点\r
+│       └── utils.ts                   # 工作流工具函数\r
+└── projects/app/src/\r
+    ├── pages/api/v1/chat/completions.ts    # 聊天API入口\r
+    └── pages/api/core/workflow/debug.ts     # 工作流调试API\r
+```\r
+\r
+### 2. 执行引擎核心 (dispatch/index.ts)\r
+\r
+#### 核心类：WorkflowQueue\r
+\r
+工作流执行引擎采用队列式架构，主要特点：\r
+\r
+- **并发控制**: 支持最大并发数量限制（默认10个）\r
+- **状态管理**: 维护节点执行状态（waiting/active/skipped）\r
+- **错误处理**: 支持节点级错误捕获和跳过机制\r
+- **交互支持**: 支持用户交互节点暂停和恢复\r
+\r
+#### 执行流程\r
+\r
+```typescript\r
+1. 初始化 WorkflowQueue 实例\r
+2. 识别入口节点（isEntry=true）\r
+3. 将入口节点加入 activeRunQueue\r
+4. 循环处理活跃节点队列：\r
+   - 检查节点执行条件\r
+   - 执行节点或跳过节点\r
+   - 更新边状态\r
+   - 将后续节点加入队列\r
+5. 处理跳过节点队列\r
+6. 返回执行结果\r
+```\r
+\r
+### 3. 节点系统\r
+\r
+#### 节点类型枚举 (FlowNodeTypeEnum)\r
+\r
+```typescript\r
+enum FlowNodeTypeEnum {\r
+  // 基础节点\r
+  workflowStart: 'workflowStart',      // 工作流开始\r
+  chatNode: 'chatNode',                // AI对话\r
+  answerNode: 'answerNode',            // 回答节点\r
+  \r
+  // 数据集相关\r
+  datasetSearchNode: 'datasetSearchNode',    // 数据集搜索\r
+  datasetConcatNode: 'datasetConcatNode',    // 数据集拼接\r
+  \r
+  // 控制流节点\r
+  ifElseNode: 'ifElseNode',            // 条件判断\r
+  loop: 'loop',                        // 循环\r
+  loopStart: 'loopStart',              // 循环开始\r
+  loopEnd: 'loopEnd',                  // 循环结束\r
+  \r
+  // 交互节点\r
+  userSelect: 'userSelect',            // 用户选择\r
+  formInput: 'formInput',              // 表单输入\r
+  \r
+  // 工具节点\r
+  httpRequest468: 'httpRequest468',    // HTTP请求\r
+  code: 'code',                        // 代码执行\r
+  readFiles: 'readFiles',              // 文件读取\r
+  variableUpdate: 'variableUpdate',    // 变量更新\r
+  \r
+  // AI相关\r
+  classifyQuestion: 'classifyQuestion', // 问题分类\r
+  contentExtract: 'contentExtract',     // 内容提取\r
+  agent: 'tools',                      // 智能体\r
+  queryExtension: 'cfr',               // 查询扩展\r
+  \r
+  // 插件系统\r
+  pluginModule: 'pluginModule',        // 插件模块\r
+  appModule: 'appModule',              // 应用模块\r
+  tool: 'tool',                        // 工具调用\r
+  \r
+  // 系统节点\r
+  systemConfig: 'userGuide',           // 系统配置\r
+  globalVariable: 'globalVariable',    // 全局变量\r
+  comment: 'comment'                   // 注释节点\r
+}\r
+```\r
+\r
+#### 节点调度映射 (callbackMap)\r
+\r
+每个节点类型都有对应的调度函数：\r
+\r
+```typescript\r
+export const callbackMap: Record<FlowNodeTypeEnum, Function> = {\r
+  [FlowNodeTypeEnum.workflowStart]: dispatchWorkflowStart,\r
+  [FlowNodeTypeEnum.chatNode]: dispatchChatCompletion,\r
+  [FlowNodeTypeEnum.datasetSearchNode]: dispatchDatasetSearch,\r
+  [FlowNodeTypeEnum.httpRequest468]: dispatchHttp468Request,\r
+  [FlowNodeTypeEnum.ifElseNode]: dispatchIfElse,\r
+  [FlowNodeTypeEnum.agent]: dispatchRunTools,\r
+  // ... 更多节点调度函数\r
+};\r
+```\r
+\r
+### 4. 数据流系统\r
+\r
+#### 输入输出类型 (WorkflowIOValueTypeEnum)\r
+\r
+```typescript\r
+enum WorkflowIOValueTypeEnum {\r
+  string: 'string',\r
+  number: 'number', \r
+  boolean: 'boolean',\r
+  object: 'object',\r
+  arrayString: 'arrayString',\r
+  arrayNumber: 'arrayNumber',\r
+  arrayBoolean: 'arrayBoolean',\r
+  arrayObject: 'arrayObject',\r
+  chatHistory: 'chatHistory',          // 聊天历史\r
+  datasetQuote: 'datasetQuote',        // 数据集引用\r
+  dynamic: 'dynamic',                  // 动态类型\r
+  any: 'any'\r
+}\r
+```\r
+\r
+#### 变量系统\r
+\r
+- **系统变量**: userId, appId, chatId, cTime等\r
+- **用户变量**: 通过variables参数传入的全局变量\r
+- **节点变量**: 节点间传递的引用变量\r
+- **动态变量**: 支持{{$variable}}语法引用\r
+\r
+### 5. 状态管理\r
+\r
+#### 运行时状态\r
+\r
+```typescript\r
+interface RuntimeNodeItemType {\r
+  nodeId: string;\r
+  name: string;\r
+  flowNodeType: FlowNodeTypeEnum;\r
+  inputs: FlowNodeInputItemType[];\r
+  outputs: FlowNodeOutputItemType[];\r
+  isEntry?: boolean;\r
+  catchError?: boolean;\r
+}\r
+\r
+interface RuntimeEdgeItemType {\r
+  source: string;\r
+  target: string;\r
+  sourceHandle: string;\r
+  targetHandle: string;\r
+  status: 'waiting' | 'active' | 'skipped';\r
+}\r
+```\r
+\r
+#### 执行状态\r
+\r
+```typescript\r
+enum RuntimeEdgeStatusEnum {\r
+  waiting: 'waiting',    // 等待执行\r
+  active: 'active',      // 活跃状态  \r
+  skipped: 'skipped'     // 已跳过\r
+}\r
+```\r
+\r
+### 6. API接口设计\r
+\r
+#### 主要API端点\r
+\r
+1. **工作流调试**: `/api/core/workflow/debug`\r
+   - POST方法，支持工作流测试和调试\r
+   - 返回详细的执行结果和状态信息\r
+\r
+2. **聊天完成**: `/api/v1/chat/completions`\r
+   - OpenAI兼容的聊天API\r
+   - 集成工作流执行引擎\r
+\r
+3. **优化代码**: `/api/core/workflow/optimizeCode`\r
+   - 工作流代码优化功能\r
+\r
+#### 请求/响应类型\r
+\r
+```typescript\r
+interface DispatchFlowResponse {\r
+  flowResponses: ChatHistoryItemResType[];\r
+  flowUsages: ChatNodeUsageType[];\r
+  debugResponse: WorkflowDebugResponse;\r
+  workflowInteractiveResponse?: WorkflowInteractiveResponseType;\r
+  toolResponses: ToolRunResponseItemType;\r
+  assistantResponses: AIChatItemValueItemType[];\r
+  runTimes: number;\r
+  newVariables: Record<string, string>;\r
+  durationSeconds: number;\r
+}\r
+```\r
+\r
+## 核心特性\r
+\r
+### 1. 并发控制\r
+- 支持最大并发节点数限制\r
+- 队列式调度避免资源竞争\r
+- 节点级执行状态管理\r
+\r
+### 2. 错误处理\r
+- 节点级错误捕获\r
+- catchError配置控制错误传播\r
+- 错误跳过和继续执行机制\r
+\r
+### 3. 交互式执行\r
+- 支持用户交互节点（userSelect, formInput）\r
+- 工作流暂停和恢复\r
+- 交互状态持久化\r
+\r
+### 4. 调试支持\r
+- Debug模式提供详细执行信息\r
+- 节点执行状态可视化\r
+- 变量值追踪和检查\r
+\r
+### 5. 扩展性\r
+- 插件系统支持自定义节点\r
+- 模块化架构便于扩展\r
+- 工具集成（HTTP, 代码执行等）\r
+\r
+## 开发指南\r
+\r
+### 添加新节点类型\r
+\r
+1. 在 `FlowNodeTypeEnum` 中添加新类型\r
+2. 在 `callbackMap` 中注册调度函数\r
+3. 在 `dispatch/` 目录下实现节点逻辑\r
+4. 在 `template/system/` 中定义节点模板\r
+\r
+### 自定义工具集成\r
+\r
+1. 实现工具调度函数\r
+2. 定义工具输入输出类型\r
+3. 注册到callbackMap\r
+4. 添加前端配置界面\r
+\r
+### 调试和测试\r
+\r
+1. 使用 `/api/core/workflow/debug` 进行测试\r
+2. 启用debug模式查看详细执行信息\r
+3. 检查节点执行状态和数据流\r
+4. 使用skipNodeQueue控制执行路径\r
+\r
+## 性能优化\r
+\r
+1. **并发控制**: 合理设置maxConcurrency避免资源过载\r
+2. **缓存机制**: 利用节点输出缓存减少重复计算\r
+3. **流式响应**: 支持SSE实时返回执行状态\r
+4. **资源管理**: 及时清理临时数据和状态\r
+\r
+---\r
+\r
+## 前端架构设计\r
+\r
+### 1. 前端项目结构\r
+\r
+```\r
+projects/app/src/\r
+├── pageComponents/app/detail/              # 应用详情页面\r
+│   ├── Workflow/                          # 工作流主页面\r
+│   │   ├── Header.tsx                     # 工作流头部\r
+│   │   └── index.tsx                      # 工作流入口\r
+│   ├── WorkflowComponents/                # 工作流核心组件\r
+│   │   ├── context/                       # 状态管理上下文\r
+│   │   │   ├── index.tsx                  # 主上下文提供者 ⭐\r
+│   │   │   ├── workflowInitContext.tsx    # 初始化上下文\r
+│   │   │   ├── workflowEventContext.tsx   # 事件上下文\r
+│   │   │   └── workflowStatusContext.tsx  # 状态上下文\r
+│   │   ├── Flow/                          # ReactFlow核心组件\r
+│   │   │   ├── index.tsx                  # 工作流画布 ⭐\r
+│   │   │   ├── components/                # 工作流UI组件\r
+│   │   │   ├── hooks/                     # 工作流逻辑钩子\r
+│   │   │   └── nodes/                     # 节点渲染组件\r
+│   │   ├── constants.tsx                  # 常量定义\r
+│   │   └── utils.ts                       # 工具函数\r
+│   └── HTTPTools/                         # HTTP工具页面\r
+│       └── Edit.tsx                       # HTTP工具编辑器\r
+├── web/core/workflow/                      # 工作流核心逻辑\r
+│   ├── api.ts                             # API调用 ⭐\r
+│   ├── adapt.ts                           # 数据适配\r
+│   ├── type.d.ts                          # 类型定义\r
+│   └── utils.ts                           # 工具函数\r
+└── global/core/workflow/                  # 全局工作流定义\r
+    └── api.d.ts                           # API类型定义\r
+```\r
+\r
+### 2. 核心状态管理架构\r
+\r
+#### Context分层设计\r
+\r
+前端采用分层Context架构，实现状态的高效管理和组件间通信：\r
+\r
+```typescript\r
+// 1. ReactFlowCustomProvider - 最外层提供者\r
+ReactFlowProvider → WorkflowInitContextProvider → \r
+WorkflowContextProvider → WorkflowEventContextProvider → \r
+WorkflowStatusContextProvider → children\r
+\r
+// 2. 四层核心Context\r
+- WorkflowInitContext: 节点数据和基础状态\r
+- WorkflowDataContext: 节点/边操作和状态\r
+- WorkflowEventContext: 事件处理和UI控制\r
+- WorkflowStatusContext: 保存状态和父节点管理\r
+```\r
+\r
+#### 主Context功能 (context/index.tsx)\r
+\r
+```typescript\r
+interface WorkflowContextType {\r
+  // 节点管理\r
+  nodeList: FlowNodeItemType[];\r
+  onChangeNode: (props: FlowNodeChangeProps) => void;\r
+  onUpdateNodeError: (nodeId: string, isError: boolean) => void;\r
+  getNodeDynamicInputs: (nodeId: string) => FlowNodeInputItemType[];\r
+  \r
+  // 边管理\r
+  onDelEdge: (edgeProps: EdgeDeleteProps) => void;\r
+  \r
+  // 版本控制\r
+  past: WorkflowSnapshotsType[];\r
+  future: WorkflowSnapshotsType[];\r
+  undo: () => void;\r
+  redo: () => void;\r
+  pushPastSnapshot: (snapshot: SnapshotProps) => boolean;\r
+  \r
+  // 调试功能\r
+  workflowDebugData?: DebugDataType;\r
+  onNextNodeDebug: (debugData: DebugDataType) => Promise<void>;\r
+  onStartNodeDebug: (debugProps: DebugStartProps) => Promise<void>;\r
+  onStopNodeDebug: () => void;\r
+  \r
+  // 数据转换\r
+  flowData2StoreData: () => StoreWorkflowType;\r
+  splitToolInputs: (inputs, nodeId) => ToolInputsResult;\r
+}\r
+```\r
+\r
+### 3. ReactFlow集成\r
+\r
+#### 节点类型映射 (Flow/index.tsx)\r
+\r
+```typescript\r
+const nodeTypes: Record<FlowNodeTypeEnum, React.ComponentType> = {\r
+  [FlowNodeTypeEnum.workflowStart]: NodeWorkflowStart,\r
+  [FlowNodeTypeEnum.chatNode]: NodeSimple,\r
+  [FlowNodeTypeEnum.datasetSearchNode]: NodeSimple,\r
+  [FlowNodeTypeEnum.httpRequest468]: NodeHttp,\r
+  [FlowNodeTypeEnum.ifElseNode]: NodeIfElse,\r
+  [FlowNodeTypeEnum.agent]: NodeAgent,\r
+  [FlowNodeTypeEnum.code]: NodeCode,\r
+  [FlowNodeTypeEnum.loop]: NodeLoop,\r
+  [FlowNodeTypeEnum.userSelect]: NodeUserSelect,\r
+  [FlowNodeTypeEnum.formInput]: NodeFormInput,\r
+  // ... 40+ 种节点类型\r
+};\r
+```\r
+\r
+#### 工作流核心功能\r
+\r
+- **拖拽编排**: 基于ReactFlow的可视化节点编辑\r
+- **实时连接**: 节点间的动态连接和断开\r
+- **缩放控制**: 支持画布缩放和平移\r
+- **选择操作**: 多选、批量操作支持\r
+- **辅助线**: 节点对齐和位置吸附\r
+\r
+### 4. 节点组件系统\r
+\r
+#### 节点渲染架构\r
+\r
+```\r
+nodes/\r
+├── NodeSimple.tsx                    # 通用简单节点\r
+├── NodeWorkflowStart.tsx            # 工作流开始节点\r
+├── NodeAgent.tsx                    # AI智能体节点\r
+├── NodeHttp/                        # HTTP请求节点\r
+├── NodeCode/                        # 代码执行节点\r
+├── Loop/                            # 循环节点组\r
+├── NodeFormInput/                   # 表单输入节点\r
+├── NodePluginIO/                    # 插件IO节点\r
+├── NodeToolParams/                  # 工具参数节点\r
+└── render/                          # 渲染组件库\r
+    ├── NodeCard.tsx                 # 节点卡片容器\r
+    ├── RenderInput/                 # 输入渲染器\r
+    ├── RenderOutput/                # 输出渲染器\r
+    └── templates/                   # 输入模板组件\r
+```\r
+\r
+#### 动态输入系统\r
+\r
+```typescript\r
+// 支持多种输入类型\r
+const inputTemplates = {\r
+  reference: ReferenceTemplate,      // 引用其他节点\r
+  input: TextInput,                  // 文本输入\r
+  textarea: TextareaInput,           // 多行文本\r
+  selectApp: AppSelector,            // 应用选择器\r
+  selectDataset: DatasetSelector,    // 数据集选择\r
+  settingLLMModel: LLMModelConfig,   // AI模型配置\r
+  // ... 更多模板类型\r
+};\r
+```\r
+\r
+### 5. 调试和测试系统\r
+\r
+#### 调试功能\r
+\r
+```typescript\r
+interface DebugDataType {\r
+  runtimeNodes: RuntimeNodeItemType[];\r
+  runtimeEdges: RuntimeEdgeItemType[];\r
+  entryNodeIds: string[];\r
+  variables: Record<string, any>;\r
+  history?: ChatItemType[];\r
+  query?: UserChatItemValueItemType[];\r
+  workflowInteractiveResponse?: WorkflowInteractiveResponseType;\r
+}\r
+```\r
+\r
+- **单步调试**: 支持逐个节点执行调试\r
+- **断点设置**: 在任意节点设置断点\r
+- **状态查看**: 实时查看节点执行状态\r
+- **变量追踪**: 监控变量在节点间的传递\r
+- **错误定位**: 精确定位执行错误节点\r
+\r
+#### 聊天测试\r
+\r
+```typescript\r
+// ChatTest组件提供实时工作流测试\r
+<ChatTest \r
+  isOpen={isOpenTest}\r
+  nodes={workflowTestData?.nodes}\r
+  edges={workflowTestData?.edges}\r
+  onClose={onCloseTest}\r
+  chatId={chatId}\r
+/>\r
+```\r
+\r
+### 6. API集成层\r
+\r
+#### 工作流API (web/core/workflow/api.ts)\r
+\r
+```typescript\r
+// 工作流调试API\r
+export const postWorkflowDebug = (data: PostWorkflowDebugProps) =>\r
+  POST<PostWorkflowDebugResponse>(\r
+    '/core/workflow/debug',\r
+    { ...data, mode: 'debug' },\r
+    { timeout: 300000 }\r
+  );\r
+\r
+// 支持的API操作\r
+- 工作流调试和测试\r
+- 节点模板获取\r
+- 插件配置管理\r
+- 版本控制操作\r
+```\r
+\r
+#### 数据适配器\r
+\r
+```typescript\r
+// 数据转换适配\r
+- storeNode2FlowNode: 存储节点 → Flow节点\r
+- storeEdge2RenderEdge: 存储边 → 渲染边\r
+- uiWorkflow2StoreWorkflow: UI工作流 → 存储格式\r
+- adaptCatchError: 错误处理适配\r
+```\r
+\r
+### 7. 交互逻辑设计\r
+\r
+#### 键盘快捷键 (hooks/useKeyboard.tsx)\r
+\r
+```typescript\r
+const keyboardShortcuts = {\r
+  'Ctrl+Z': undo,                    // 撤销\r
+  'Ctrl+Y': redo,                   // 重做\r
+  'Ctrl+S': saveWorkflow,           // 保存工作流\r
+  'Delete': deleteSelectedNodes,    // 删除选中节点\r
+  'Escape': cancelCurrentOperation, // 取消当前操作\r
+};\r
+```\r
+\r
+#### 节点操作\r
+\r
+- **拖拽创建**: 从模板拖拽创建节点\r
+- **连线操作**: 节点间的连接管理\r
+- **批量操作**: 多选节点的批量编辑\r
+- **右键菜单**: 上下文操作菜单\r
+- **搜索定位**: 节点搜索和快速定位\r
+\r
+#### 版本控制\r
+\r
+```typescript\r
+// 快照系统\r
+interface WorkflowSnapshotsType {\r
+  nodes: Node[];\r
+  edges: Edge[];\r
+  chatConfig: AppChatConfigType;\r
+  title: string;\r
+  isSaved?: boolean;\r
+}\r
+```\r
+\r
+- **自动快照**: 节点变更时自动保存快照\r
+- **版本历史**: 支持多版本切换\r
+- **云端同步**: 与服务端版本同步\r
+- **协作支持**: 团队协作版本管理\r
+\r
+### 8. 性能优化策略\r
+\r
+#### 渲染优化\r
+\r
+```typescript\r
+// 动态加载节点组件\r
+const nodeTypes: Record<FlowNodeTypeEnum, any> = {\r
+  [FlowNodeTypeEnum.workflowStart]: dynamic(() => import('./nodes/NodeWorkflowStart')),\r
+  [FlowNodeTypeEnum.httpRequest468]: dynamic(() => import('./nodes/NodeHttp')),\r
+  // ... 按需加载\r
+};\r
+```\r
+\r
+- **懒加载**: 节点组件按需动态加载\r
+- **虚拟化**: 大型工作流的虚拟渲染\r
+- **防抖操作**: 频繁操作的性能优化\r
+- **缓存策略**: 模板和数据的缓存机制\r
+\r
+#### 状态优化\r
+\r
+- **Context分割**: 避免不必要的重渲染\r
+- **useMemo/useCallback**: 优化计算和函数创建\r
+- **选择器模式**: 精确订阅状态变化\r
+- **批量更新**: 合并多个状态更新\r
+\r
+### 9. 扩展性设计\r
+\r
+#### 插件系统\r
+\r
+```typescript\r
+// 节点模板扩展\r
+interface NodeTemplateListItemType {\r
+  id: string;\r
+  flowNodeType: FlowNodeTypeEnum;\r
+  templateType: string;\r
+  avatar?: string;\r
+  name: string;\r
+  intro?: string;\r
+  isTool?: boolean;\r
+  pluginId?: string;\r
+}\r
+```\r
+\r
+- **自定义节点**: 支持第三方节点开发\r
+- **模板市场**: 节点模板的共享和分发\r
+- **插件生态**: 丰富的节点插件生态\r
+- **开放API**: 标准化的节点开发接口\r
+\r
+#### 主题定制\r
+\r
+- **节点样式**: 可定制的节点外观\r
+- **连线样式**: 自定义连线类型和颜色\r
+- **布局配置**: 多种布局算法支持\r
+- **国际化**: 多语言界面支持"""

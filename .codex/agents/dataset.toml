@@ -1,0 +1,1133 @@
+name = "dataset-agent"
+description = "知识库开发 Agent,负责 FastGPT 知识库模块代码开发。"
+developer_instructions = """
+# FastGPT 知识库(Dataset)模块架构说明\r
+\r
+## 概述\r
+\r
+FastGPT 知识库模块是一个基于 MongoDB + PostgreSQL(向量数据库) 的 RAG(检索增强生成)知识库系统,支持多种数据源导入、智能文档分块、向量化索引、混合检索等核心能力。\r
+\r
+## 核心概念层次结构\r
+\r
+```\r
+Dataset (知识库)\r
+  ├── DatasetCollection (文档集合/文件)\r
+  │     ├── DatasetData (数据块/Chunk)\r
+  │     │     ├── indexes[] (向量索引)\r
+  │     │     └── history[] (历史版本)\r
+  │     └── DatasetTraining (训练队列)\r
+  └── Tag (标签系统)\r
+```\r
+\r
+### 1. Dataset (知识库)\r
+- **作用**: 最顶层容器,可以是普通知识库、文件夹、网站知识库或外部数据源\r
+- **类型**:\r
+  - `folder`: 文件夹组织\r
+  - `dataset`: 普通知识库\r
+  - `websiteDataset`: 网站深度链接\r
+  - `apiDataset`: API 数据集\r
+  - `feishu`: 飞书知识库\r
+  - `yuque`: 语雀知识库\r
+  - `externalFile`: 外部文件\r
+\r
+### 2. DatasetCollection (文档集合)\r
+- **作用**: 知识库中的具体文件或文档,承载原始数据\r
+- **类型**:\r
+  - `folder`: 文件夹\r
+  - `file`: 本地文件\r
+  - `link`: 单个链接\r
+  - `apiFile`: API 文件\r
+  - `images`: 图片集合\r
+  - `virtual`: 虚拟集合\r
+\r
+### 3. DatasetData (数据块)\r
+- **作用**: 文档分块后的最小知识单元,实际检索的对象\r
+- **核心字段**:\r
+  - `q`: 问题或大块文本\r
+  - `a`: 答案或自定义内容\r
+  - `indexes[]`: 向量索引列表(可多个)\r
+  - `chunkIndex`: 块索引位置\r
+  - `imageId`: 关联图片ID\r
+  - `history[]`: 修改历史\r
+\r
+### 4. DatasetTraining (训练队列)\r
+- **作用**: 异步训练任务队列,负责向量化和索引生成\r
+- **训练模式**:\r
+  - `chunk`: 文本分块\r
+  - `qa`: 问答对\r
+  - `image`: 图像处理\r
+  - `imageParse`: 图像解析\r
+\r
+## 代码目录结构\r
+\r
+### Packages 层(共享代码)\r
+\r
+#### 1. packages/global/core/dataset/\r
+**类型定义和常量**\r
+```\r
+├── constants.ts              # 所有枚举定义(类型、状态、模式)\r
+├── type.d.ts                 # TypeScript 类型定义\r
+├── api.d.ts                  # API 接口类型\r
+├── controller.d.ts           # 控制器类型定义\r
+├── utils.ts                  # 通用工具函数\r
+├── collection/\r
+│   ├── constants.ts          # 集合相关常量\r
+│   └── utils.ts              # 集合工具函数\r
+├── data/\r
+│   └── constants.ts          # 数据相关常量\r
+├── training/\r
+│   ├── type.d.ts             # 训练相关类型\r
+│   └── utils.ts              # 训练工具函数\r
+├── apiDataset/\r
+│   ├── type.d.ts             # API数据集类型\r
+│   └── utils.ts              # API数据集工具\r
+└── search/\r
+    └── utils.ts              # 搜索工具函数\r
+```\r
+\r
+**关键枚举定义**:\r
+- `DatasetTypeEnum`: 知识库类型\r
+- `DatasetCollectionTypeEnum`: 集合类型\r
+- `DatasetSearchModeEnum`: 搜索模式(embedding/fullText/mixed)\r
+- `TrainingModeEnum`: 训练模式\r
+- `DatasetCollectionDataProcessModeEnum`: 数据处理模式\r
+\r
+#### 2. packages/service/core/dataset/\r
+**业务逻辑和数据库操作**\r
+```\r
+├── schema.ts                 # Dataset MongoDB Schema\r
+├── controller.ts             # Dataset 核心控制器\r
+├── utils.ts                  # 业务工具函数\r
+├── collection/\r
+│   ├── schema.ts             # Collection Schema\r
+│   ├── controller.ts         # Collection 控制器\r
+│   └── utils.ts              # Collection 工具\r
+├── data/\r
+│   ├── schema.ts             # DatasetData Schema\r
+│   ├── dataTextSchema.ts     # 全文搜索 Schema\r
+│   └── controller.ts         # Data 控制器\r
+├── training/\r
+│   ├── schema.ts             # Training Schema\r
+│   ├── controller.ts         # Training 控制器\r
+│   └── constants.ts          # Training 常量\r
+├── tag/\r
+│   └── schema.ts             # Tag Schema\r
+├── image/\r
+│   ├── schema.ts             # Image Schema\r
+│   └── utils.ts              # Image 工具\r
+├── search/\r
+│   ├── controller.ts         # 🔥 核心检索控制器\r
+│   └── utils.ts              # 检索工具函数\r
+└── apiDataset/\r
+    ├── index.ts              # API数据集入口\r
+    ├── custom/api.ts         # 自定义API\r
+    ├── feishuDataset/api.ts  # 飞书集成\r
+    └── yuqueDataset/api.ts   # 语雀集成\r
+```\r
+\r
+### Projects 层(应用实现)\r
+\r
+#### 3. projects/app/src/pages/api/core/dataset/\r
+**NextJS API 路由**\r
+```\r
+├── detail.ts                 # 获取知识库详情\r
+├── delete.ts                 # 删除知识库\r
+├── paths.ts                  # 获取路径信息\r
+├── exportAll.ts              # 导出全部数据\r
+├── collection/\r
+│   ├── create.ts             # 创建集合(基础)\r
+│   ├── create/\r
+│   │   ├── localFile.ts      # 本地文件导入\r
+│   │   ├── link.ts           # 链接导入\r
+│   │   ├── text.ts           # 文本导入\r
+│   │   ├── images.ts         # 图片导入\r
+│   │   ├── apiCollection.ts  # API集合\r
+│   │   └── fileId.ts         # 文件ID导入\r
+│   ├── update.ts             # 更新集合\r
+│   ├── list.ts               # 集合列表\r
+│   ├── detail.ts             # 集合详情\r
+│   ├── sync.ts               # 同步集合\r
+│   └── export.ts             # 导出集合\r
+├── data/\r
+│   ├── list.ts               # 数据列表\r
+│   ├── detail.ts             # 数据详情\r
+│   ├── insertData.ts         # 插入数据\r
+│   ├── pushData.ts           # 推送数据\r
+│   ├── update.ts             # 更新数据\r
+│   └── delete.ts             # 删除数据\r
+├── training/\r
+│   ├── getDatasetTrainingQueue.ts        # 获取训练队列\r
+│   ├── getTrainingDataDetail.ts          # 训练数据详情\r
+│   ├── updateTrainingData.ts             # 更新训练数据\r
+│   ├── deleteTrainingData.ts             # 删除训练数据\r
+│   └── getTrainingError.ts               # 获取训练错误\r
+└── apiDataset/\r
+    ├── list.ts               # API数据集列表\r
+    ├── getCatalog.ts         # 获取目录\r
+    └── getPathNames.ts       # 获取路径名\r
+```\r
+\r
+#### 4. projects/app/src/components/ 和 pageComponents/\r
+**前端组件**\r
+```\r
+components/core/dataset/      # 通用组件\r
+├── SelectModal.tsx           # 知识库选择器\r
+├── QuoteItem.tsx             # 引用项展示\r
+├── DatasetTypeTag.tsx        # 类型标签\r
+├── RawSourceBox.tsx          # 原始来源展示\r
+└── SearchParamsTip.tsx       # 搜索参数提示\r
+\r
+pageComponents/dataset/       # 页面组件\r
+├── list/                     # 列表页\r
+│   └── SideTag.tsx          # 侧边标签\r
+├── detail/                   # 详情页\r
+│   ├── CollectionCard/      # 集合卡片\r
+│   ├── DataCard.tsx         # 数据卡片\r
+│   ├── Test.tsx             # 测试组件\r
+│   ├── Info/                # 信息组件\r
+│   ├── Import/              # 导入组件\r
+│   │   ├── diffSource/      # 不同数据源\r
+│   │   ├── components/      # 公共组件\r
+│   │   └── commonProgress/  # 进度组件\r
+│   └── Form/                # 表单组件\r
+└── ApiDatasetForm.tsx        # API数据集表单\r
+```\r
+\r
+## 数据库 Schema 详解\r
+\r
+### 1. Dataset Schema (datasets 集合)\r
+```typescript\r
+{\r
+  _id: ObjectId,\r
+  parentId: ObjectId | null,          // 父级ID(支持文件夹)\r
+  teamId: ObjectId,                   // 团队ID\r
+  tmbId: ObjectId,                    // 团队成员ID\r
+  type: DatasetTypeEnum,              // 知识库类型\r
+  avatar: string,                     // 头像\r
+  name: string,                       // 名称\r
+  intro: string,                      // 简介\r
+  updateTime: Date,                   // 更新时间\r
+\r
+  vectorModel: string,                // 向量模型\r
+  agentModel: string,                 // AI模型\r
+  vlmModel?: string,                  // 视觉语言模型\r
+\r
+  websiteConfig?: {                   // 网站配置\r
+    url: string,\r
+    selector: string\r
+  },\r
+\r
+  chunkSettings: {                    // 分块配置\r
+    trainingType: DatasetCollectionDataProcessModeEnum,\r
+    chunkTriggerType: ChunkTriggerConfigTypeEnum,\r
+    chunkTriggerMinSize: number,\r
+    chunkSettingMode: ChunkSettingModeEnum,\r
+    chunkSplitMode: DataChunkSplitModeEnum,\r
+    chunkSize: number,\r
+    chunkSplitter: string,\r
+    indexSize: number,\r
+    qaPrompt: string,\r
+    // ... 更多配置\r
+  },\r
+\r
+  inheritPermission: boolean,         // 继承权限\r
+  apiDatasetServer?: object          // API服务器配置\r
+}\r
+\r
+// 索引\r
+teamId_1\r
+type_1\r
+```\r
+\r
+### 2. DatasetCollection Schema (dataset_collections 集合)\r
+```typescript\r
+{\r
+  _id: ObjectId,\r
+  parentId: ObjectId | null,          // 父级集合\r
+  teamId: ObjectId,\r
+  tmbId: ObjectId,\r
+  datasetId: ObjectId,                // 所属知识库\r
+\r
+  type: DatasetCollectionTypeEnum,    // 集合类型\r
+  name: string,                       // 名称\r
+  tags: string[],                     // 标签ID列表\r
+\r
+  createTime: Date,\r
+  updateTime: Date,\r
+\r
+  // 元数据(根据类型不同)\r
+  fileId?: ObjectId,                  // 本地文件ID\r
+  rawLink?: string,                   // 原始链接\r
+  apiFileId?: string,                 // API文件ID\r
+  externalFileId?: string,            // 外部文件ID\r
+  externalFileUrl?: string,           // 外部导入URL\r
+\r
+  rawTextLength?: number,             // 原始文本长度\r
+  hashRawText?: string,               // 文本哈希\r
+  metadata?: object,                  // 其他元数据\r
+\r
+  forbid: boolean,                    // 是否禁用\r
+\r
+  // 解析配置\r
+  customPdfParse?: boolean,\r
+  apiFileParentId?: string,\r
+\r
+  // 分块配置(继承自 ChunkSettings)\r
+  ...chunkSettings\r
+}\r
+\r
+// 索引\r
+teamId_1_fileId_1\r
+teamId_1_datasetId_1_parentId_1_updateTime_-1\r
+teamId_1_datasetId_1_tags_1\r
+teamId_1_datasetId_1_createTime_1\r
+datasetId_1_externalFileId_1 (unique)\r
+```\r
+\r
+### 3. DatasetData Schema (dataset_datas 集合)\r
+```typescript\r
+{\r
+  _id: ObjectId,\r
+  teamId: ObjectId,\r
+  tmbId: ObjectId,\r
+  datasetId: ObjectId,\r
+  collectionId: ObjectId,\r
+\r
+  q: string,                          // 问题/大块文本\r
+  a?: string,                         // 答案/自定义内容\r
+  imageId?: string,                   // 图片ID\r
+  imageDescMap?: object,              // 图片描述映射\r
+\r
+  updateTime: Date,\r
+  chunkIndex: number,                 // 块索引\r
+\r
+  indexes: [{                         // 向量索引数组\r
+    type: DatasetDataIndexTypeEnum,\r
+    dataId: string,                   // PG向量数据ID\r
+    text: string                      // 索引文本\r
+  }],\r
+\r
+  history?: [{                        // 历史版本\r
+    q: string,\r
+    a?: string,\r
+    updateTime: Date\r
+  }],\r
+\r
+  rebuilding?: boolean                // 重建中标志\r
+}\r
+\r
+// 索引\r
+teamId_1_datasetId_1_collectionId_1_chunkIndex_1_updateTime_-1\r
+teamId_1_datasetId_1_collectionId_1_indexes.dataId_1\r
+rebuilding_1_teamId_1_datasetId_1\r
+```\r
+\r
+### 4. DatasetTraining Schema (dataset_trainings 集合)\r
+```typescript\r
+{\r
+  _id: ObjectId,\r
+  teamId: ObjectId,\r
+  tmbId: ObjectId,\r
+  datasetId: ObjectId,\r
+  collectionId: ObjectId,\r
+  billId?: string,                    // 账单ID\r
+\r
+  mode: TrainingModeEnum,             // 训练模式\r
+\r
+  expireAt: Date,                     // 过期时间(7天自动删除)\r
+  lockTime: Date,                     // 锁定时间\r
+  retryCount: number,                 // 重试次数\r
+\r
+  q: string,                          // 待训练问题\r
+  a: string,                          // 待训练答案\r
+  imageId?: string,\r
+  imageDescMap?: object,\r
+  chunkIndex: number,\r
+  indexSize?: number,\r
+  weight: number,                     // 权重\r
+\r
+  dataId?: ObjectId,                  // 关联的DatasetData ID\r
+\r
+  indexes: [{                         // 待生成的索引\r
+    type: DatasetDataIndexTypeEnum,\r
+    text: string\r
+  }],\r
+\r
+  errorMsg?: string                   // 错误信息\r
+}\r
+\r
+// 索引\r
+teamId_1_datasetId_1\r
+mode_1_retryCount_1_lockTime_1_weight_-1\r
+expireAt_1 (TTL: 7 days)\r
+```\r
+\r
+### 5. 辅助 Schema\r
+\r
+#### DatasetCollectionTags (dataset_collection_tags)\r
+```typescript\r
+{\r
+  _id: ObjectId,\r
+  teamId: ObjectId,\r
+  datasetId: ObjectId,\r
+  tag: string                         // 标签名称\r
+}\r
+```\r
+\r
+#### DatasetDataText (dataset_data_texts) - 全文搜索\r
+```typescript\r
+{\r
+  _id: ObjectId,\r
+  teamId: ObjectId,\r
+  datasetId: ObjectId,\r
+  collectionId: ObjectId,\r
+  dataId: ObjectId,                   // 关联 DatasetData\r
+  fullTextToken: string               // 全文搜索Token\r
+}\r
+\r
+// 全文索引\r
+fullTextToken: text\r
+```\r
+\r
+## 核心业务流程\r
+\r
+### 1. 数据导入流程\r
+\r
+```\r
+用户上传文件/链接\r
+    ↓\r
+创建 DatasetCollection\r
+    ↓\r
+文件解析 & 预处理\r
+    ↓\r
+文本分块(根据 ChunkSettings)\r
+    ↓\r
+创建 DatasetTraining 任务\r
+    ↓\r
+后台队列处理:\r
+  - 向量化(embedding)\r
+  - 创建 PG 向量索引\r
+  - 生成 DatasetData\r
+  - 创建全文搜索索引(DatasetDataText)\r
+    ↓\r
+训练完成,可以检索\r
+```\r
+\r
+**关键代码位置**:\r
+- 文件上传: `projects/app/src/pages/api/core/dataset/collection/create/localFile.ts`\r
+- 分块逻辑: `packages/service/core/dataset/collection/utils.ts`\r
+- 训练控制: `packages/service/core/dataset/training/controller.ts`\r
+\r
+### 2. 检索流程(核心算法)\r
+\r
+**位置**: `packages/service/core/dataset/search/controller.ts`\r
+\r
+```typescript\r
+// 三种检索模式\r
+enum DatasetSearchModeEnum {\r
+  embedding = 'embedding',        // 纯向量检索\r
+  fullTextRecall = 'fullTextRecall', // 纯全文检索\r
+  mixedRecall = 'mixedRecall'     // 混合检索\r
+}\r
+\r
+// 检索流程\r
+async function searchDatasetData(props) {\r
+  // 1. 参数初始化和权重配置\r
+  const { embeddingWeight, rerankWeight } = props;\r
+\r
+  // 2. 集合过滤(标签/时间/禁用)\r
+  const filterCollectionIds = await filterCollectionByMetadata();\r
+\r
+  // 3. 多路召回\r
+  const { embeddingRecallResults, fullTextRecallResults } =\r
+    await multiQueryRecall({\r
+      embeddingLimit: 80,  // 向量召回数量\r
+      fullTextLimit: 60    // 全文召回数量\r
+    });\r
+\r
+  // 4. RRF(倒数排名融合)合并\r
+  const rrfResults = datasetSearchResultConcat([\r
+    { weight: embeddingWeight, list: embeddingRecallResults },\r
+    { weight: 1 - embeddingWeight, list: fullTextRecallResults }\r
+  ]);\r
+\r
+  // 5. ReRank 重排序(可选)\r
+  if (usingReRank) {\r
+    const reRankResults = await datasetDataReRank({\r
+      rerankModel,\r
+      query: reRankQuery,\r
+      data: rrfResults\r
+    });\r
+  }\r
+\r
+  // 6. 相似度过滤\r
+  const scoreFiltered = results.filter(item =>\r
+    item.score >= similarity\r
+  );\r
+\r
+  // 7. Token 限制过滤\r
+  const finalResults = await filterDatasetDataByMaxTokens(\r
+    scoreFiltered,\r
+    maxTokens\r
+  );\r
+\r
+  return finalResults;\r
+}\r
+```\r
+\r
+**核心算法详解**:\r
+\r
+#### a. 向量召回 (embeddingRecall)\r
+```typescript\r
+// 1. 查询向量化\r
+const { vectors, tokens } = await getVectorsByText({\r
+  model: getEmbeddingModel(model),\r
+  input: queries,\r
+  type: 'query'\r
+});\r
+\r
+// 2. PG 向量库召回\r
+const recallResults = await Promise.all(\r
+  vectors.map(vector =>\r
+    recallFromVectorStore({\r
+      teamId,\r
+      datasetIds,\r
+      vector,\r
+      limit,\r
+      forbidCollectionIdList,\r
+      filterCollectionIdList\r
+    })\r
+  )\r
+);\r
+\r
+// 3. 关联 MongoDB 数据\r
+const dataMaps = await MongoDatasetData.find({\r
+  teamId,\r
+  datasetId: { $in: datasetIds },\r
+  'indexes.dataId': { $in: indexDataIds }\r
+});\r
+```\r
+\r
+#### b. 全文召回 (fullTextRecall)\r
+```typescript\r
+// MongoDB 全文搜索\r
+const results = await MongoDatasetDataText.aggregate([\r
+  {\r
+    $match: {\r
+      teamId: new Types.ObjectId(teamId),\r
+      $text: { $search: await jiebaSplit({ text: query }) },\r
+      datasetId: { $in: datasetIds.map(id => new Types.ObjectId(id)) }\r
+    }\r
+  },\r
+  {\r
+    $sort: {\r
+      score: { $meta: 'textScore' }\r
+    }\r
+  },\r
+  {\r
+    $limit: limit\r
+  }\r
+]);\r
+```\r
+\r
+#### c. RRF 合并算法\r
+```typescript\r
+// 倒数排名融合(Reciprocal Rank Fusion)\r
+function datasetSearchResultConcat(weightedLists) {\r
+  const k = 60; // RRF 参数\r
+  const scoreMap = new Map();\r
+\r
+  for (const { weight, list } of weightedLists) {\r
+    list.forEach((item, index) => {\r
+      const rrfScore = weight / (k + index + 1);\r
+      scoreMap.set(item.id,\r
+        (scoreMap.get(item.id) || 0) + rrfScore\r
+      );\r
+    });\r
+  }\r
+\r
+  return Array.from(scoreMap.entries())\r
+    .sort((a, b) => b[1] - a[1])\r
+    .map(([id]) => findItemById(id));\r
+}\r
+```\r
+\r
+#### d. ReRank 重排序\r
+```typescript\r
+// 使用重排序模型(如 bge-reranker)\r
+const { results } = await reRankRecall({\r
+  model: rerankModel,\r
+  query: reRankQuery,\r
+  documents: data.map(item => ({\r
+    id: item.id,\r
+    text: `${item.q}\\n${item.a}`\r
+  }))\r
+});\r
+\r
+// 重排序结果融合到 RRF 结果\r
+const finalResults = datasetSearchResultConcat([\r
+  { weight: 1 - rerankWeight, list: rrfResults },\r
+  { weight: rerankWeight, list: reRankResults }\r
+]);\r
+```\r
+\r
+### 3. 分块策略\r
+\r
+**位置**: `packages/global/core/dataset/constants.ts`\r
+\r
+```typescript\r
+// 分块模式\r
+enum DataChunkSplitModeEnum {\r
+  paragraph = 'paragraph',  // 段落分割(智能)\r
+  size = 'size',           // 固定大小分割\r
+  char = 'char'            // 字符分隔符分割\r
+}\r
+\r
+// AI 段落模式\r
+enum ParagraphChunkAIModeEnum {\r
+  auto = 'auto',           // 自动判断\r
+  force = 'force',         // 强制使用AI\r
+  forbid = 'forbid'        // 禁用AI\r
+}\r
+\r
+// 分块配置示例\r
+const chunkSettings = {\r
+  chunkSplitMode: 'paragraph',\r
+  chunkSize: 512,           // 最大块大小\r
+  chunkSplitter: '\\n',      // 分隔符\r
+  paragraphChunkDeep: 2,    // 段落层级\r
+  paragraphChunkMinSize: 100, // 最小段落大小\r
+  indexSize: 256,           // 索引大小\r
+  // 数据增强\r
+  dataEnhanceCollectionName: true,\r
+  autoIndexes: true,        // 自动多索引\r
+  indexPrefixTitle: true    // 索引前缀标题\r
+}\r
+```\r
+\r
+### 4. 训练队列机制\r
+\r
+**位置**: `packages/service/core/dataset/training/controller.ts`\r
+\r
+```typescript\r
+// 训练队列调度\r
+class TrainingQueue {\r
+  // 1. 获取待训练任务(按权重排序)\r
+  async getNextTrainingTask() {\r
+    return MongoDatasetTraining.findOne({\r
+      mode: { $in: supportedModes },\r
+      retryCount: { $gt: 0 },\r
+      lockTime: { $lt: new Date(Date.now() - lockTimeout) }\r
+    })\r
+    .sort({ weight: -1, lockTime: 1 })\r
+    .limit(1);\r
+  }\r
+\r
+  // 2. 锁定任务\r
+  async lockTask(taskId) {\r
+    await MongoDatasetTraining.updateOne(\r
+      { _id: taskId },\r
+      { $set: { lockTime: new Date() } }\r
+    );\r
+  }\r
+\r
+  // 3. 执行向量化\r
+  async processTask(task) {\r
+    const vectors = await getVectorsByText({\r
+      model: getEmbeddingModel(task.model),\r
+      input: task.indexes.map(i => i.text)\r
+    });\r
+\r
+    // 保存到 PG 向量库\r
+    const indexDataIds = await saveToVectorDB(vectors);\r
+\r
+    // 创建 DatasetData\r
+    await MongoDatasetData.create({\r
+      ...task,\r
+      indexes: task.indexes.map((idx, i) => ({\r
+        ...idx,\r
+        dataId: indexDataIds[i]\r
+      }))\r
+    });\r
+  }\r
+\r
+  // 4. 完成/失败处理\r
+  async completeTask(taskId, success, error) {\r
+    if (success) {\r
+      await MongoDatasetTraining.deleteOne({ _id: taskId });\r
+    } else {\r
+      await MongoDatasetTraining.updateOne(\r
+        { _id: taskId },\r
+        {\r
+          $inc: { retryCount: -1 },\r
+          $set: {\r
+            errorMsg: error,\r
+            lockTime: new Date('2000/1/1')\r
+          }\r
+        }\r
+      );\r
+    }\r
+  }\r
+}\r
+```\r
+\r
+## 关键技术点\r
+\r
+### 1. 多索引机制\r
+\r
+**为什么需要多索引?**\r
+- 大块文本可以拆分为多个小索引,提高召回精度\r
+- 支持不同粒度的检索(粗粒度+细粒度)\r
+\r
+```typescript\r
+// DatasetData 中的 indexes 数组\r
+{\r
+  q: "这是一段很长的文本...",\r
+  indexes: [\r
+    {\r
+      type: 'custom',      // 自定义索引\r
+      dataId: 'pg_vector_id_1',\r
+      text: "第一部分索引文本"\r
+    },\r
+    {\r
+      type: 'custom',\r
+      dataId: 'pg_vector_id_2',\r
+      text: "第二部分索引文本"\r
+    }\r
+  ]\r
+}\r
+```\r
+\r
+### 2. 混合检索(Hybrid Search)\r
+\r
+**结合向量检索和全文检索的优势**:\r
+- 向量检索: 语义相似度,理解意图\r
+- 全文检索: 精确匹配关键词,高召回\r
+- RRF 融合: 互补优势,提升整体效果\r
+\r
+**权重配置**:\r
+```typescript\r
+{\r
+  searchMode: 'mixedRecall',\r
+  embeddingWeight: 0.5,      // 向量权重\r
+  // fullTextWeight = 1 - 0.5 = 0.5\r
+\r
+  usingReRank: true,\r
+  rerankWeight: 0.7          // 重排序权重\r
+}\r
+```\r
+\r
+### 3. 集合过滤(Collection Filter)\r
+\r
+**支持灵活的元数据过滤**:\r
+```typescript\r
+// 标签过滤\r
+{\r
+  tags: {\r
+    $and: ["标签1", "标签2"],  // 必须同时包含\r
+    $or: ["标签3", "标签4", null] // 包含任一,null表示无标签\r
+  }\r
+}\r
+\r
+// 时间过滤\r
+{\r
+  createTime: {\r
+    $gte: '2024-01-01',\r
+    $lte: '2024-12-31'\r
+  }\r
+}\r
+```\r
+\r
+### 4. 向量数据库架构\r
+\r
+**双数据库架构**:\r
+```\r
+MongoDB (元数据 + 全文索引)\r
+  - 存储原始文本、配置、关系\r
+  - 全文搜索索引(jieba 分词)\r
+\r
+PostgreSQL + pgvector (向量存储)\r
+  - 高维向量存储\r
+  - 高效余弦相似度检索\r
+  - HNSW 索引加速\r
+```\r
+\r
+**数据流转**:\r
+```\r
+原始文本 → Embedding API → 向量 → PG 存储\r
+         ↓\r
+         索引ID 存回 MongoDB\r
+\r
+检索时:\r
+查询文本 → 向量 → PG 召回 topK →\r
+获取 dataIds → MongoDB 查询完整数据\r
+```\r
+\r
+### 5. 图片知识库\r
+\r
+**特殊的图片处理流程**:\r
+```typescript\r
+// 1. 图片上传\r
+{\r
+  type: 'images',\r
+  imageId: 'image_storage_id'\r
+}\r
+\r
+// 2. 图片向量化(VLM)\r
+const imageVector = await getImageEmbedding({\r
+  model: vlmModel,\r
+  imageId\r
+});\r
+\r
+// 3. 图片描述映射\r
+{\r
+  imageDescMap: {\r
+    'image_url_1': '这是一张产品图片',\r
+    'image_url_2': '这是一张流程图'\r
+  }\r
+}\r
+\r
+// 4. 检索时返回预签名URL\r
+const previewUrl = getDatasetImagePreviewUrl({\r
+  imageId,\r
+  teamId,\r
+  datasetId,\r
+  expiredMinutes: 60 * 24 * 7  // 7天有效\r
+});\r
+```\r
+\r
+## API 路由映射\r
+\r
+### Dataset 基础操作\r
+```\r
+GET    /api/core/dataset/detail        # 获取知识库详情\r
+DELETE /api/core/dataset/delete        # 删除知识库\r
+GET    /api/core/dataset/paths         # 获取路径\r
+POST   /api/core/dataset/exportAll     # 导出全部\r
+```\r
+\r
+### Collection 操作\r
+```\r
+POST   /api/core/dataset/collection/create              # 创建集合\r
+POST   /api/core/dataset/collection/create/localFile    # 本地文件\r
+POST   /api/core/dataset/collection/create/link         # 链接导入\r
+POST   /api/core/dataset/collection/create/text         # 文本导入\r
+POST   /api/core/dataset/collection/create/images       # 图片导入\r
+PUT    /api/core/dataset/collection/update              # 更新集合\r
+GET    /api/core/dataset/collection/list                # 集合列表\r
+GET    /api/core/dataset/collection/detail              # 集合详情\r
+POST   /api/core/dataset/collection/sync                # 同步集合\r
+GET    /api/core/dataset/collection/export              # 导出集合\r
+```\r
+\r
+### Data 操作\r
+```\r
+GET    /api/core/dataset/data/list         # 数据列表\r
+GET    /api/core/dataset/data/detail       # 数据详情\r
+POST   /api/core/dataset/data/insertData   # 插入数据\r
+POST   /api/core/dataset/data/pushData     # 推送数据(批量)\r
+PUT    /api/core/dataset/data/update       # 更新数据\r
+DELETE /api/core/dataset/data/delete       # 删除数据\r
+```\r
+\r
+### Training 操作\r
+```\r
+GET    /api/core/dataset/training/getDatasetTrainingQueue   # 训练队列\r
+GET    /api/core/dataset/training/getTrainingDataDetail     # 训练详情\r
+PUT    /api/core/dataset/training/updateTrainingData        # 更新训练\r
+DELETE /api/core/dataset/training/deleteTrainingData        # 删除训练\r
+GET    /api/core/dataset/training/getTrainingError          # 获取错误\r
+```\r
+\r
+## 前端状态管理\r
+\r
+**位置**: `projects/app/src/web/core/dataset/store/`\r
+\r
+```typescript\r
+// dataset.ts - 知识库状态\r
+{\r
+  datasets: DatasetListItemType[],\r
+  currentDataset: DatasetItemType,\r
+  loadDatasets: () => Promise<void>,\r
+  createDataset: (data) => Promise<string>,\r
+  updateDataset: (data) => Promise<void>,\r
+  deleteDataset: (id) => Promise<void>\r
+}\r
+\r
+// searchTest.ts - 搜索测试状态\r
+{\r
+  searchQuery: string,\r
+  searchMode: DatasetSearchModeEnum,\r
+  similarity: number,\r
+  limit: number,\r
+  searchResults: SearchDataResponseItemType[],\r
+  performSearch: () => Promise<void>\r
+}\r
+```\r
+\r
+## 性能优化要点\r
+\r
+### 1. 索引优化\r
+```javascript\r
+// 核心复合索引\r
+DatasetCollection:\r
+  - { teamId: 1, datasetId: 1, parentId: 1, updateTime: -1 }\r
+  - { teamId: 1, datasetId: 1, tags: 1 }\r
+\r
+DatasetData:\r
+  - { teamId: 1, datasetId: 1, collectionId: 1, chunkIndex: 1, updateTime: -1 }\r
+  - { teamId: 1, datasetId: 1, collectionId: 1, 'indexes.dataId': 1 }\r
+\r
+DatasetTraining:\r
+  - { mode: 1, retryCount: 1, lockTime: 1, weight: -1 }\r
+```\r
+\r
+### 2. 查询优化\r
+```typescript\r
+// 使用从库读取(降低主库压力)\r
+const readFromSecondary = {\r
+  readPreference: 'secondaryPreferred'\r
+};\r
+\r
+MongoDatasetData.find(query, fields, {\r
+  ...readFromSecondary\r
+}).lean();\r
+```\r
+\r
+### 3. 分页优化\r
+```typescript\r
+// 使用 scrollList 而非传统分页\r
+// 避免深度分页性能问题\r
+GET /api/core/dataset/collection/scrollList?lastId=xxx&limit=20\r
+```\r
+\r
+### 4. 缓存策略\r
+```typescript\r
+// Redis 缓存热门检索结果\r
+const cacheKey = `dataset:search:${hashQuery(query)}`;\r
+const cached = await redis.get(cacheKey);\r
+if (cached) return JSON.parse(cached);\r
+\r
+// 缓存 5 分钟\r
+await redis.setex(cacheKey, 300, JSON.stringify(results));\r
+```\r
+\r
+## 测试覆盖\r
+\r
+**测试文件位置**: `projects/app/test/api/core/dataset/`\r
+\r
+```\r
+├── create.test.ts                    # 知识库创建\r
+├── paths.test.ts                     # 路径测试\r
+├── collection/\r
+│   └── paths.test.ts                 # 集合路径\r
+└── training/\r
+    ├── deleteTrainingData.test.ts    # 训练删除\r
+    ├── getTrainingError.test.ts      # 训练错误\r
+    └── updateTrainingData.test.ts    # 训练更新\r
+```\r
+\r
+## 常见开发任务\r
+\r
+### 1. 添加新的数据源类型\r
+\r
+**步骤**:\r
+1. 在 `packages/global/core/dataset/constants.ts` 添加新类型枚举\r
+2. 在 `packages/service/core/dataset/apiDataset/` 创建新集成\r
+3. 在 `projects/app/src/pages/api/core/dataset/collection/create/` 添加 API 路由\r
+4. 在 `projects/app/src/pageComponents/dataset/detail/Import/diffSource/` 添加前端组件\r
+\r
+### 2. 修改检索算法\r
+\r
+**核心文件**: `packages/service/core/dataset/search/controller.ts`\r
+\r
+关键函数:\r
+- `embeddingRecall`: 向量召回逻辑\r
+- `fullTextRecall`: 全文召回逻辑\r
+- `datasetSearchResultConcat`: RRF 融合算法\r
+- `datasetDataReRank`: 重排序逻辑\r
+\r
+### 3. 优化分块策略\r
+\r
+**核心文件**: `packages/service/core/dataset/collection/utils.ts`\r
+\r
+关键逻辑:\r
+- 段落识别\r
+- 智能合并小块\r
+- 标题提取\r
+- 多索引生成\r
+\r
+### 4. 添加新的训练模式\r
+\r
+**步骤**:\r
+1. 在 `TrainingModeEnum` 添加新模式\r
+2. 在 `packages/service/core/dataset/training/controller.ts` 添加处理逻辑\r
+3. 更新训练队列调度器\r
+\r
+## 依赖关系图\r
+\r
+```\r
+Dataset (1:N)\r
+  ├─→ DatasetCollection (1:N)\r
+  │     ├─→ DatasetData (1:N)\r
+  │     │     └─→ PG Vectors (1:N)\r
+  │     └─→ DatasetTraining (1:N)\r
+  │           └─→ Bills (1:1)\r
+  └─→ DatasetCollectionTags (1:N)\r
+        └─→ DatasetCollection.tags[] (N:M)\r
+```\r
+\r
+## 权限系统\r
+\r
+**位置**: `packages/global/support/permission/dataset/`\r
+\r
+```typescript\r
+// 权限级别\r
+enum PermissionTypeEnum {\r
+  owner = 'owner',         // 所有者\r
+  manage = 'manage',       // 管理员\r
+  write = 'write',         // 编辑\r
+  read = 'read'            // 只读\r
+}\r
+\r
+// 权限继承\r
+{\r
+  inheritPermission: true  // 从父级继承权限\r
+}\r
+\r
+// 协作者管理\r
+DatasetCollaborators: {\r
+  datasetId,\r
+  tmbId,\r
+  permission: PermissionTypeEnum\r
+}\r
+```\r
+\r
+## 国际化\r
+\r
+**位置**: `packages/web/i18n/`\r
+\r
+```typescript\r
+// 知识库相关翻译 key\r
+'dataset:common_dataset'\r
+'dataset:folder_dataset'\r
+'dataset:website_dataset'\r
+'dataset:api_file'\r
+'dataset:sync_collection_failed'\r
+'dataset:training.Image mode'\r
+// ... 更多\r
+```\r
+\r
+## 调试技巧\r
+\r
+### 1. 查看训练队列状态\r
+```javascript\r
+// MongoDB Shell\r
+db.dataset_trainings.find({\r
+  teamId: ObjectId('xxx')\r
+}).sort({ weight: -1, lockTime: 1 }).limit(10)\r
+```\r
+\r
+### 2. 检查向量索引\r
+```javascript\r
+// PG SQL\r
+SELECT datasetid, count(*)\r
+FROM pg_vectors\r
+GROUP BY datasetid;\r
+```\r
+\r
+### 3. 全文搜索测试\r
+```javascript\r
+db.dataset_data_texts.find({\r
+  $text: { $search: "测试查询" }\r
+}, {\r
+  score: { $meta: "textScore" }\r
+}).sort({ score: { $meta: "textScore" } })\r
+```\r
+\r
+### 4. 查看检索日志\r
+```typescript\r
+// 开启详细日志\r
+searchDatasetData({\r
+  ...props,\r
+  debug: true  // 输出详细召回信息\r
+})\r
+```\r
+\r
+## 最佳实践\r
+\r
+### 1. 分块大小设置\r
+- **短文档**: `chunkSize: 256-512`\r
+- **长文档**: `chunkSize: 512-1024`\r
+- **FAQ**: `chunkSize: 128-256`\r
+\r
+### 2. 检索参数调优\r
+```typescript\r
+// 高精度场景(客服)\r
+{\r
+  searchMode: 'mixedRecall',\r
+  similarity: 0.7,           // 较高阈值\r
+  embeddingWeight: 0.6,      // 偏向语义\r
+  usingReRank: true,\r
+  rerankWeight: 0.8\r
+}\r
+\r
+// 高召回场景(搜索)\r
+{\r
+  searchMode: 'mixedRecall',\r
+  similarity: 0.4,           // 较低阈值\r
+  embeddingWeight: 0.4,      // 偏向全文\r
+  usingReRank: false\r
+}\r
+```\r
+\r
+### 3. 标签组织\r
+```\r
+按主题: #产品文档 #技术规范 #客服FAQ\r
+按来源: #官网 #手册 #社区\r
+按时效: #2024Q1 #最新版本\r
+```\r
+\r
+### 4. 性能监控\r
+```typescript\r
+// 关键指标\r
+- 训练队列长度\r
+- 检索平均耗时\r
+- Token 消耗量\r
+- 向量库大小\r
+- 召回率/准确率\r
+```\r
+\r
+## 扩展阅读\r
+\r
+### 相关文档\r
+- [RAG 架构设计](https://docs.tryfastgpt.ai/docs/development/upgrading/4819/)\r
+- [向量数据库选择](https://docs.tryfastgpt.ai/docs/development/custom-models/vector/)\r
+- [检索优化指南](https://docs.tryfastgpt.ai/docs/workflow/modules/knowledge_base/)\r
+\r
+### 外部依赖\r
+- `pgvector`: PostgreSQL 向量扩展\r
+- `jieba`: 中文分词库\r
+- `tiktoken`: Token 计数\r
+- `pdf-parse`: PDF 解析\r
+- `mammoth`: Word 解析\r
+\r
+---\r
+\r
+## 总结\r
+\r
+FastGPT 知识库模块是一个完整的 RAG 系统实现,核心特点:\r
+\r
+1. **分层架构**: Dataset → Collection → Data → Indexes\r
+2. **混合检索**: 向量 + 全文 + 重排序,灵活配置权重\r
+3. **异步训练**: 队列化向量化任务,支持重试和失败处理\r
+4. **双数据库**: MongoDB 存元数据,PG 存向量\r
+5. **多数据源**: 支持文件/链接/API/外部集成\r
+6. **灵活分块**: 段落/大小/字符多种策略\r
+7. **权限控制**: 继承式权限管理\r
+\r
+开发时重点关注:\r
+- **检索性能**: `search/controller.ts`\r
+- **分块质量**: `collection/utils.ts`\r
+- **训练队列**: `training/controller.ts`\r
+- **数据流转**: Schema 之间的关联关系"""

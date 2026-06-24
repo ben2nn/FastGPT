@@ -10,6 +10,9 @@ import { authJWT } from '@fastgpt/service/support/permission/controller';
 import { Types } from 'mongoose';
 import formidable from 'formidable';
 import { readFile } from 'fs/promises';
+import JSZip from 'jszip';
+import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
+import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
 
 // 禁用默认 bodyParser，使用 formidable 处理文件上传
 export const config = {
@@ -101,22 +104,69 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       ? fields.targetParentId[0]
       : fields.targetParentId;
     const targetParentId = targetParentIdRaw || undefined;
+    const ignoreFilesRaw = Array.isArray(fields.ignoreFiles)
+      ? fields.ignoreFiles[0]
+      : fields.ignoreFiles;
+    const ignoreFiles = ignoreFilesRaw === 'true';
 
     // 获取上传的文件
     const fileField = files.file;
     const uploadedFile = Array.isArray(fileField) ? fileField[0] : fileField;
     if (!uploadedFile) {
-      return res.status(400).json({ error: '请上传 JSON 文件' });
+      return res.status(400).json({ error: '请上传 JSON 或 ZIP 文件' });
     }
 
-    // 5. 读取并解析 JSON 文件
-    let importData;
-    try {
-      const fileContent = await readFile(uploadedFile.filepath, 'utf-8');
-      importData = JSON.parse(fileContent);
-    } catch (error) {
-      console.error('Parse JSON error:', error);
-      return res.status(400).json({ error: 'JSON 文件格式错误' });
+    // 5. 读取并解析文件（支持 JSON 和 ZIP）
+    let importData: Record<string, unknown>;
+    let fileMap = new Map<string, Buffer>(); // filename -> fileBuffer
+
+    const filename = uploadedFile.originalFilename || '';
+    const isZip = filename.toLowerCase().endsWith('.zip');
+
+    if (isZip) {
+      // 解析 ZIP 文件
+      try {
+        const fileBuffer = await readFile(uploadedFile.filepath);
+        const zip = await JSZip.loadAsync(fileBuffer);
+
+        // 读取 JSON 数据
+        const jsonFile = zip.file('dataset-export.json');
+        if (!jsonFile) {
+          return res.status(400).json({ error: 'ZIP 文件中缺少 dataset-export.json' });
+        }
+        const jsonContent = await jsonFile.async('string');
+        importData = JSON.parse(jsonContent) as Record<string, unknown>;
+
+        // 读取源文件（如果不需要忽略）
+        if (!ignoreFiles) {
+          const filesFolder = zip.folder('files');
+          if (filesFolder) {
+            const filePromises: Promise<void>[] = [];
+            filesFolder.forEach((relativePath, file) => {
+              if (!file.dir) {
+                filePromises.push(
+                  file.async('nodebuffer').then((buffer) => {
+                    fileMap.set(relativePath, buffer);
+                  })
+                );
+              }
+            });
+            await Promise.all(filePromises);
+          }
+        }
+      } catch (error) {
+        console.error('Parse ZIP error:', error);
+        return res.status(400).json({ error: 'ZIP 文件格式错误' });
+      }
+    } else {
+      // 解析 JSON 文件
+      try {
+        const fileContent = await readFile(uploadedFile.filepath, 'utf-8');
+        importData = JSON.parse(fileContent) as Record<string, unknown>;
+      } catch (error) {
+        console.error('Parse JSON error:', error);
+        return res.status(400).json({ error: 'JSON 文件格式错误' });
+      }
     }
 
     // 5.5 验证导入数据的基本结构
@@ -129,7 +179,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ error: 'Invalid import file format' });
     }
 
-    const { datasets, collections, datas, dataTexts, collectionTags } = importData;
+    const { datasets, collections, datas, dataTexts, collectionTags } = importData as {
+      datasets: Record<string, unknown>[];
+      collections: Record<string, unknown>[];
+      datas: Record<string, unknown>[];
+      dataTexts: Record<string, unknown>[];
+      collectionTags: Record<string, unknown>[];
+    };
 
     // 验证数组字段
     if (
@@ -204,7 +260,51 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       idMap.clear();
     }
 
-    // 10. 分批写入数据库（顺序执行，降低 MongoDB 连接压力）
+    // 10. 处理源文件上传和类型转换
+    const s3Source = getS3DatasetSource();
+    const uploadedFileMap = new Map<string, string>(); // oldFileId -> newFileId
+
+    for (const collection of collections) {
+      if (collection.type === DatasetCollectionTypeEnum.file) {
+        const oldFileId = collection.fileId as string;
+
+        if (ignoreFiles || !oldFileId) {
+          // 忽略源文件或没有 fileId，改为 virtual 类型
+          collection.type = DatasetCollectionTypeEnum.virtual;
+          collection.fileId = null;
+        } else if (fileMap.size > 0) {
+          // 尝试从 ZIP 中找到对应的源文件并上传
+          const filename = oldFileId.split('/').pop() || '';
+          const fileBuffer = fileMap.get(filename);
+
+          if (fileBuffer) {
+            try {
+              // 上传到 S3，获取新的 fileId
+              const datasetId = collection.datasetId as string;
+              const collectionName = collection.name as string;
+              const newFileId = await s3Source.upload({
+                datasetId,
+                filename: collectionName,
+                buffer: fileBuffer
+              });
+              collection.fileId = newFileId;
+              uploadedFileMap.set(oldFileId, newFileId);
+            } catch (error) {
+              console.warn(`上传文件失败 ${oldFileId}: ${(error as Error).message}`);
+              // 上传失败，改为 virtual
+              collection.type = DatasetCollectionTypeEnum.virtual;
+              collection.fileId = null;
+            }
+          } else {
+            // ZIP 中找不到对应文件，改为 virtual
+            collection.type = DatasetCollectionTypeEnum.virtual;
+            collection.fileId = null;
+          }
+        }
+      }
+    }
+
+    // 11. 分批写入数据库（顺序执行，降低 MongoDB 连接压力）
     const BATCH_SIZE = 2000;
     const duplicateWarnings: string[] = [];
 
@@ -245,7 +345,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       'collectionTags'
     );
 
-    // 11. 返回导入结果
+    // 12. 返回导入结果
     res.status(200).json({
       success: true,
       data: {
@@ -254,6 +354,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         datasCount,
         dataTextsCount,
         collectionTagsCount,
+        uploadedFilesCount: uploadedFileMap.size,
         ...(duplicateWarnings.length > 0 ? { warnings: duplicateWarnings } : {})
       }
     });
