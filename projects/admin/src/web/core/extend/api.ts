@@ -121,10 +121,17 @@ export const removeTeamMember = async (teamId: string, userId: string) => {
 // ==================== 导入导出 API ====================
 
 // 知识库导出
-export const exportDataset = async (parentId: string, includeFiles?: boolean) => {
+export const exportDataset = async (
+  parentId: string,
+  options?: { includeFiles?: boolean; includeVectors?: boolean }
+) => {
   const response = await authFetch(getWebReqUrl('/api/extend/dataset/exportByParentId'), {
     method: 'POST',
-    body: JSON.stringify({ parentId, includeFiles })
+    body: JSON.stringify({
+      parentId,
+      includeFiles: options?.includeFiles,
+      includeVectors: options?.includeVectors
+    })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -134,7 +141,6 @@ export const exportDataset = async (parentId: string, includeFiles?: boolean) =>
   // 根据 Content-Type 判断返回类型
   const contentType = response.headers.get('Content-Type') || '';
   if (contentType.includes('application/zip')) {
-    // 返回 Blob 用于下载 ZIP
     return { blob: await response.blob(), isZip: true };
   }
   return { data: await response.json(), isZip: false };

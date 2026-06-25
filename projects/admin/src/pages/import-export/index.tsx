@@ -88,7 +88,9 @@ type TabConfig = {
   importFields?: ExportField[];
   showKeepOriginalId?: boolean;
   showIncludeFiles?: boolean;
+  showIncludeVectors?: boolean;
   showIgnoreFiles?: boolean;
+  showIgnoreVectors?: boolean;
   exportDescription?: string;
   importDescription?: string;
   importResultLabels: Record<string, string>;
@@ -117,14 +119,17 @@ const TAB_CONFIGS: TabConfig[] = [
     ],
     showKeepOriginalId: true,
     showIncludeFiles: true,
+    showIncludeVectors: true,
     showIgnoreFiles: true,
+    showIgnoreVectors: true,
     importResultLabels: {
       datasetsCount: '数据集',
       collectionsCount: '集合',
       datasCount: '数据',
       dataTextsCount: '全文索引',
       collectionTagsCount: '标签',
-      uploadedFilesCount: '源文件'
+      uploadedFilesCount: '源文件',
+      vectorsImported: '向量'
     }
   },
   {
@@ -258,7 +263,9 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [keepOriginalId, setKeepOriginalId] = useState(true);
   const [includeFiles, setIncludeFiles] = useState(false);
+  const [includeVectors, setIncludeVectors] = useState(false);
   const [ignoreFiles, setIgnoreFiles] = useState(false);
+  const [ignoreVectors, setIgnoreVectors] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -282,7 +289,10 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
 
       switch (tabIndex) {
         case 0: {
-          const result = await exportDataset(parentId!, includeFiles);
+          const result = await exportDataset(parentId!, {
+            includeFiles,
+            includeVectors
+          });
           if (result.isZip && result.blob) {
             // 下载 ZIP 文件
             const url = URL.createObjectURL(result.blob);
@@ -352,6 +362,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
         formData.append('file', selectedFile);
         formData.append('keepOriginalId', String(keepOriginalId));
         formData.append('ignoreFiles', String(ignoreFiles));
+        formData.append('ignoreVectors', String(ignoreVectors));
         if (targetParentId) formData.append('targetParentId', targetParentId);
         result = await importDataset(formData);
       } else {
@@ -412,11 +423,11 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
             ))}
           </VStack>
 
-          {/* 关联源文件开关 */}
+          {/* 源文件导出开关 */}
           {config.showIncludeFiles && (
             <Flex align="center" gap={3} mb={4}>
               <Text fontSize="sm" color="myGray.600" w="120px" flexShrink={0} lineHeight="36px">
-                关联源文件
+                源文件导出
               </Text>
               <Switch
                 isChecked={includeFiles}
@@ -425,6 +436,23 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
               />
               <Text fontSize="xs" color="myGray.400">
                 导出时包含原始文件（文件会更大）
+              </Text>
+            </Flex>
+          )}
+
+          {/* 向量导出开关 */}
+          {config.showIncludeVectors && (
+            <Flex align="center" gap={3} mb={4}>
+              <Text fontSize="sm" color="myGray.600" w="120px" flexShrink={0} lineHeight="36px">
+                向量导出
+              </Text>
+              <Switch
+                isChecked={includeVectors}
+                onChange={(e) => setIncludeVectors(e.target.checked)}
+                size="sm"
+              />
+              <Text fontSize="xs" color="myGray.400">
+                导出向量索引数据（导入后无需重新训练）
               </Text>
             </Flex>
           )}
@@ -502,6 +530,23 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
                 />
                 <Text fontSize="xs" color="myGray.400">
                   导入后无法查看原始文件，但数据仍可用
+                </Text>
+              </Flex>
+            )}
+
+            {/* 忽略向量开关 */}
+            {config.showIgnoreVectors && (
+              <Flex align="center" gap={3}>
+                <Text fontSize="sm" color="myGray.600" w="120px" flexShrink={0} lineHeight="36px">
+                  忽略向量
+                </Text>
+                <Switch
+                  isChecked={ignoreVectors}
+                  onChange={(e) => setIgnoreVectors(e.target.checked)}
+                  size="sm"
+                />
+                <Text fontSize="xs" color="myGray.400">
+                  不导入向量索引，导入后需重新训练
                 </Text>
               </Flex>
             )}

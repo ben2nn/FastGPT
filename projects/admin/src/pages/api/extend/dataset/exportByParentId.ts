@@ -12,6 +12,8 @@ import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
 import path from 'path';
 import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
 import { PassThrough } from 'stream';
+import { connectPg } from '@fastgpt/service/common/vectorDB/pg/controller';
+import { DatasetVectorTableName } from '@fastgpt/service/common/vectorDB/constants';
 
 const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
@@ -54,8 +56,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(401).json({ error: '无法获取团队信息' });
     }
 
-    // 4. 获取并验证 parentId 和 includeFiles
-    const { parentId, includeFiles } = req.body;
+    // 4. 获取并验证参数
+    const { parentId, includeFiles, includeVectors } = req.body;
     if (!parentId || !/^[0-9a-fA-F]{24}$/.test(parentId)) {
       return res.status(400).json({ error: 'Invalid parentId format' });
     }
@@ -99,7 +101,35 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         .lean()
     ]);
 
-    // 8. 组装导出数据
+    // 8. 查询向量数据（如果需要）
+    let vectors: Array<{
+      id: string;
+      vector: number[];
+      team_id: string;
+      dataset_id: string;
+      collection_id: string;
+    }> = [];
+
+    if (includeVectors) {
+      try {
+        const pg = await connectPg();
+        const datasetIdList = datasetIds.map((id) => `'${String(id)}'`).join(',');
+
+        const result = await pg.query(`
+          SELECT id, vector, team_id, dataset_id, collection_id
+          FROM ${DatasetVectorTableName}
+          WHERE dataset_id IN (${datasetIdList})
+          LIMIT ${EXPORT_LIMIT}
+        `);
+
+        vectors = result.rows;
+      } catch (error) {
+        console.warn('导出向量数据失败:', (error as Error).message);
+        // 向量导出失败不影响其他数据
+      }
+    }
+
+    // 9. 组装导出数据
     const exportData = {
       version: '1.0',
       type: 'dataset',
@@ -109,40 +139,38 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       collections,
       datas,
       dataTexts,
-      collectionTags
+      collectionTags,
+      vectors: includeVectors ? vectors : undefined
     };
 
-    // 9. 根据是否包含源文件选择导出格式
+    // 10. 根据是否包含源文件选择导出格式
     if (includeFiles) {
-      // 使用 archiver 流式创建 ZIP（避免内存溢出）
+      // 使用 archiver 流式创建 ZIP
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename=dataset-export-${Date.now()}.zip`);
 
       const archive = new ZipArchive({ zlib: { level: 6 } });
 
-      // 处理归档错误
       archive.on('error', (err: Error) => {
         console.error('Archive error:', err);
-        res.status(500).json({ error: 'Archive creation failed' });
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Archive creation failed' });
+        }
       });
 
-      // 管道到响应
       archive.pipe(res);
 
-      // 添加 JSON 数据（使用流式写入，避免内存中保留大字符串）
+      // 添加 JSON 数据
       const jsonStream = new PassThrough();
-      const jsonChunkSize = 1024 * 1024; // 1MB chunks
       const jsonStr = JSON.stringify(exportData, null, 2);
-
-      // 分块写入 JSON 以减少内存峰值
+      const jsonChunkSize = 1024 * 1024;
       for (let i = 0; i < jsonStr.length; i += jsonChunkSize) {
         jsonStream.write(jsonStr.substring(i, i + jsonChunkSize));
       }
       jsonStream.end();
-
       archive.append(jsonStream, { name: 'dataset-export.json' });
 
-      // 收集所有需要导出的 fileId
+      // 添加源文件
       const fileCollections = collections.filter(
         (c) => c.type === DatasetCollectionTypeEnum.file && c.fileId
       );
@@ -150,7 +178,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       if (fileCollections.length > 0) {
         const s3Source = getS3DatasetSource();
 
-        // 逐个下载源文件并添加到 ZIP（流式处理，不占用大量内存）
         for (const collection of fileCollections) {
           try {
             const fileId = collection.fileId as string;
@@ -165,7 +192,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         }
       }
 
-      // 完成归档
       await archive.finalize();
     } else {
       // 只返回 JSON

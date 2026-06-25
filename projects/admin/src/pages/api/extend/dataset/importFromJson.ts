@@ -13,6 +13,8 @@ import { readFile } from 'fs/promises';
 import JSZip from 'jszip';
 import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
 import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
+import { connectPg } from '@fastgpt/service/common/vectorDB/pg/controller';
+import { DatasetVectorTableName } from '@fastgpt/service/common/vectorDB/constants';
 
 // 禁用默认 bodyParser，使用 formidable 处理文件上传
 export const config = {
@@ -108,6 +110,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       ? fields.ignoreFiles[0]
       : fields.ignoreFiles;
     const ignoreFiles = ignoreFilesRaw === 'true';
+    const ignoreVectorsRaw = Array.isArray(fields.ignoreVectors)
+      ? fields.ignoreVectors[0]
+      : fields.ignoreVectors;
+    const ignoreVectors = ignoreVectorsRaw === 'true';
 
     // 获取上传的文件
     const fileField = files.file;
@@ -359,7 +365,50 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       'collectionTags'
     );
 
-    // 12. 返回导入结果
+    // 12. 导入向量数据（如果包含且不忽略）
+    let vectorsImported = 0;
+    const vectors = importData.vectors as
+      | Array<{
+          id: string;
+          vector: number[];
+          team_id: string;
+          dataset_id: string;
+          collection_id: string;
+        }>
+      | undefined;
+
+    if (!ignoreVectors && Array.isArray(vectors) && vectors.length > 0) {
+      try {
+        const pg = await connectPg();
+        const VECTOR_BATCH_SIZE = 500;
+
+        for (let i = 0; i < vectors.length; i += VECTOR_BATCH_SIZE) {
+          const batch = vectors.slice(i, i + VECTOR_BATCH_SIZE);
+          const values = batch
+            .map((v) => {
+              // 如果没有保留原 ID，需要映射 dataset_id 和 collection_id
+              const mappedDatasetId = keepOriginalId
+                ? v.dataset_id
+                : idMap.get(v.dataset_id) || v.dataset_id;
+              const mappedCollectionId = keepOriginalId
+                ? v.collection_id
+                : idMap.get(v.collection_id) || v.collection_id;
+
+              const vectorStr = `[${v.vector.join(',')}]`;
+              return `('${vectorStr}','${teamId}','${mappedDatasetId}','${mappedCollectionId}')`;
+            })
+            .join(',');
+
+          const sql = `INSERT INTO ${DatasetVectorTableName} (vector, team_id, dataset_id, collection_id) VALUES ${values} RETURNING id`;
+          const result = await pg.query(sql);
+          vectorsImported += result.rowCount || 0;
+        }
+      } catch (error) {
+        console.warn('导入向量数据失败:', (error as Error).message);
+      }
+    }
+
+    // 13. 返回导入结果
     res.status(200).json({
       success: true,
       data: {
@@ -369,6 +418,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         dataTextsCount,
         collectionTagsCount,
         uploadedFilesCount: uploadedFileMap.size,
+        vectorsImported,
         ...(duplicateWarnings.length > 0 ? { warnings: duplicateWarnings } : {})
       }
     });
