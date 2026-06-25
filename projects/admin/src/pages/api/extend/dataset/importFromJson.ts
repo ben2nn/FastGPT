@@ -259,16 +259,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     dataTexts.forEach(updateDoc);
     collectionTags.forEach(updateDoc);
 
-    // 9.5 清空 datas 中的 indexes.dataId，使导入后能触发重新训练生成向量
-    // 保留 text 和 type 字段，只清空 dataId（指向向量数据库的 ID）
-    for (const data of datas) {
-      if (Array.isArray(data.indexes)) {
-        data.indexes = data.indexes.map((index: Record<string, unknown>) => ({
-          ...index,
-          dataId: '' // 清空向量 ID，但保留字段（required: true）
-        }));
-      }
-    }
+    // 注意：不修改 datas.indexes，保留原始的 dataId
+    // 如果需要重新生成向量，请在 app 中使用"重新训练"功能
 
     // 释放 idMap，减少内存占用
     if (!keepOriginalId) {
