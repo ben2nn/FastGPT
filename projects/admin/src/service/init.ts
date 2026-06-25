@@ -9,6 +9,7 @@ import { getSchemaStatements } from '@/service/sql';
 import { SystemError, ErrorType } from '@/service/common/errors';
 import { connectToDatabase } from '@/service/common/mongo';
 import { DEFAULT_TIMEZONE } from '@/web/common/constants';
+import { initS3Buckets } from '@fastgpt/service/common/s3/index';
 
 // 初始化状态枚举
 export enum InitializationStatus {
@@ -115,6 +116,30 @@ async function initializeMongoDB(): Promise<void> {
 }
 
 /**
+ * 初始化 S3 存储连接
+ * 如果未配置 S3，则跳过
+ */
+async function initializeS3(): Promise<void> {
+  const s3Endpoint = process.env.STORAGE_S3_ENDPOINT;
+
+  if (!s3Endpoint) {
+    addLog.warn('未配置 S3 存储地址，跳过 S3 初始化');
+    addLog.warn('如需使用文件导入导出功能，请配置环境变量 STORAGE_S3_ENDPOINT');
+    return;
+  }
+
+  try {
+    addLog.info('开始初始化 S3 存储');
+    initS3Buckets();
+    addLog.info('S3 存储初始化成功');
+  } catch (error) {
+    addLog.error('S3 存储初始化失败', error as Error);
+    addLog.warn('文件导入导出功能将不可用（源文件功能）');
+    // 不抛出错误，允许应用继续运行
+  }
+}
+
+/**
  * 初始化数据库
  * 创建表结构并加载初始数据
  */
@@ -168,6 +193,10 @@ export async function initializeDatabase(): Promise<void> {
       // 5. 连接 MongoDB（如果配置了）
       await initializeMongoDB();
       addLog.info('MongoDB初始化完成');
+
+      // 6. 初始化 S3 存储（如果配置了）
+      await initializeS3();
+      addLog.info('S3存储初始化完成');
 
       state.status = InitializationStatus.COMPLETED;
       state.endTime = new Date();
