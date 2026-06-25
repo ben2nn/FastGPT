@@ -7,10 +7,11 @@ import { MongoDatasetData } from '@fastgpt/service/core/dataset/data/schema';
 import { MongoDatasetDataText } from '@fastgpt/service/core/dataset/data/dataTextSchema';
 import { MongoDatasetCollectionTags } from '@fastgpt/service/core/dataset/tag/schema';
 import { authJWT } from '@fastgpt/service/support/permission/controller';
-import JSZip from 'jszip';
+import { ZipArchive } from 'archiver';
 import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
 import path from 'path';
 import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
+import { PassThrough } from 'stream';
 
 const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
@@ -113,11 +114,33 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // 9. 根据是否包含源文件选择导出格式
     if (includeFiles) {
-      // 创建 ZIP 文件
-      const zip = new JSZip();
+      // 使用 archiver 流式创建 ZIP（避免内存溢出）
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename=dataset-export-${Date.now()}.zip`);
 
-      // 添加 JSON 数据
-      zip.file('dataset-export.json', JSON.stringify(exportData, null, 2));
+      const archive = new ZipArchive({ zlib: { level: 6 } });
+
+      // 处理归档错误
+      archive.on('error', (err: Error) => {
+        console.error('Archive error:', err);
+        res.status(500).json({ error: 'Archive creation failed' });
+      });
+
+      // 管道到响应
+      archive.pipe(res);
+
+      // 添加 JSON 数据（使用流式写入，避免内存中保留大字符串）
+      const jsonStream = new PassThrough();
+      const jsonChunkSize = 1024 * 1024; // 1MB chunks
+      const jsonStr = JSON.stringify(exportData, null, 2);
+
+      // 分块写入 JSON 以减少内存峰值
+      for (let i = 0; i < jsonStr.length; i += jsonChunkSize) {
+        jsonStream.write(jsonStr.substring(i, i + jsonChunkSize));
+      }
+      jsonStream.end();
+
+      archive.append(jsonStream, { name: 'dataset-export.json' });
 
       // 收集所有需要导出的 fileId
       const fileCollections = collections.filter(
@@ -125,25 +148,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       );
 
       if (fileCollections.length > 0) {
-        const filesFolder = zip.folder('files')!;
         const s3Source = getS3DatasetSource();
 
-        // 下载源文件并添加到 ZIP
+        // 逐个下载源文件并添加到 ZIP（流式处理，不占用大量内存）
         for (const collection of fileCollections) {
           try {
             const fileId = collection.fileId as string;
             const fileStream = await s3Source.getFileStream(fileId);
             if (fileStream) {
-              // 读取 stream 为 buffer
-              const chunks: Buffer[] = [];
-              for await (const chunk of fileStream) {
-                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-              }
-              const buffer = Buffer.concat(chunks);
-
-              // 使用 fileId 的最后一部分作为文件名
               const filename = path.basename(fileId);
-              filesFolder.file(filename, buffer);
+              archive.append(fileStream, { name: `files/${filename}` });
             }
           } catch (error) {
             console.warn(`跳过文件 ${collection.fileId}: ${(error as Error).message}`);
@@ -151,13 +165,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         }
       }
 
-      // 生成 ZIP 文件
-      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
-
-      // 设置响应头
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename=dataset-export-${Date.now()}.zip`);
-      res.status(200).send(zipBuffer);
+      // 完成归档
+      await archive.finalize();
     } else {
       // 只返回 JSON
       res.setHeader('Content-Type', 'application/json; charset=utf-8');

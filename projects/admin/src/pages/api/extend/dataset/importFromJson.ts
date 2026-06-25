@@ -154,9 +154,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             await Promise.all(filePromises);
           }
         }
+
+        // 清理 ZIP 对象释放内存
+        zip.remove('');
       } catch (error) {
         console.error('Parse ZIP error:', error);
-        return res.status(400).json({ error: 'ZIP 文件格式错误' });
+        const errMsg = error instanceof Error ? error.message : 'ZIP 文件格式错误';
+        return res.status(400).json({ error: errMsg });
       }
     } else {
       // 解析 JSON 文件
@@ -264,45 +268,53 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const s3Source = getS3DatasetSource();
     const uploadedFileMap = new Map<string, string>(); // oldFileId -> newFileId
 
-    for (const collection of collections) {
-      if (collection.type === DatasetCollectionTypeEnum.file) {
-        const oldFileId = collection.fileId as string;
+    // 上传完成后释放 fileMap 内存
+    const processCollections = async () => {
+      for (const collection of collections) {
+        if (collection.type === DatasetCollectionTypeEnum.file) {
+          const oldFileId = collection.fileId as string;
 
-        if (ignoreFiles || !oldFileId) {
-          // 忽略源文件或没有 fileId，改为 virtual 类型
-          collection.type = DatasetCollectionTypeEnum.virtual;
-          collection.fileId = null;
-        } else if (fileMap.size > 0) {
-          // 尝试从 ZIP 中找到对应的源文件并上传
-          const filename = oldFileId.split('/').pop() || '';
-          const fileBuffer = fileMap.get(filename);
+          if (ignoreFiles || !oldFileId) {
+            // 忽略源文件或没有 fileId，改为 virtual 类型
+            collection.type = DatasetCollectionTypeEnum.virtual;
+            collection.fileId = null;
+          } else if (fileMap.size > 0) {
+            // 尝试从 ZIP 中找到对应的源文件并上传
+            const filename = oldFileId.split('/').pop() || '';
+            const fileBuffer = fileMap.get(filename);
 
-          if (fileBuffer) {
-            try {
-              // 上传到 S3，获取新的 fileId
-              const datasetId = collection.datasetId as string;
-              const collectionName = collection.name as string;
-              const newFileId = await s3Source.upload({
-                datasetId,
-                filename: collectionName,
-                buffer: fileBuffer
-              });
-              collection.fileId = newFileId;
-              uploadedFileMap.set(oldFileId, newFileId);
-            } catch (error) {
-              console.warn(`上传文件失败 ${oldFileId}: ${(error as Error).message}`);
-              // 上传失败，改为 virtual
+            if (fileBuffer) {
+              try {
+                // 上传到 S3，获取新的 fileId
+                const datasetId = collection.datasetId as string;
+                const collectionName = collection.name as string;
+                const newFileId = await s3Source.upload({
+                  datasetId,
+                  filename: collectionName,
+                  buffer: fileBuffer
+                });
+                collection.fileId = newFileId;
+                uploadedFileMap.set(oldFileId, newFileId);
+              } catch (error) {
+                console.warn(`上传文件失败 ${oldFileId}: ${(error as Error).message}`);
+                // 上传失败，改为 virtual
+                collection.type = DatasetCollectionTypeEnum.virtual;
+                collection.fileId = null;
+              }
+            } else {
+              // ZIP 中找不到对应文件，改为 virtual
               collection.type = DatasetCollectionTypeEnum.virtual;
               collection.fileId = null;
             }
-          } else {
-            // ZIP 中找不到对应文件，改为 virtual
-            collection.type = DatasetCollectionTypeEnum.virtual;
-            collection.fileId = null;
           }
         }
       }
-    }
+    };
+
+    await processCollections();
+
+    // 释放 fileMap 内存
+    fileMap.clear();
 
     // 11. 分批写入数据库（顺序执行，降低 MongoDB 连接压力）
     const BATCH_SIZE = 2000;
