@@ -259,6 +259,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     dataTexts.forEach(updateDoc);
     collectionTags.forEach(updateDoc);
 
+    // 9.5 清空 datas 中的 indexes.dataId，使导入后能触发重新训练生成向量
+    for (const data of datas) {
+      if (Array.isArray(data.indexes)) {
+        data.indexes = data.indexes.map((index: Record<string, unknown>) => {
+          const { dataId, ...rest } = index;
+          return rest;
+        });
+      }
+    }
+
     // 释放 idMap，减少内存占用
     if (!keepOriginalId) {
       idMap.clear();
@@ -285,12 +295,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
             if (fileBuffer) {
               try {
-                // 上传到 S3，获取新的 fileId
+                // 上传到 S3，使用原始文件名确保一致性
                 const datasetId = collection.datasetId as string;
-                const collectionName = collection.name as string;
                 const newFileId = await s3Source.upload({
                   datasetId,
-                  filename: collectionName,
+                  filename: filename, // 使用原始文件名而非 collection.name
                   buffer: fileBuffer
                 });
                 collection.fileId = newFileId;

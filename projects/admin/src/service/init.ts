@@ -117,24 +117,30 @@ async function initializeMongoDB(): Promise<void> {
 
 /**
  * 初始化 S3 存储连接
- * 如果未配置 S3，则跳过
+ * 如果未配置 S3 或 S3 不可用，则跳过
  */
 async function initializeS3(): Promise<void> {
   const s3Endpoint = process.env.STORAGE_S3_ENDPOINT;
 
   if (!s3Endpoint) {
-    addLog.warn('未配置 S3 存储地址，跳过 S3 初始化');
-    addLog.warn('如需使用文件导入导出功能，请配置环境变量 STORAGE_S3_ENDPOINT');
+    addLog.info('未配置 S3 存储地址，跳过 S3 初始化');
+    addLog.info('如需使用文件导入导出功能（源文件关联），请配置环境变量 STORAGE_S3_ENDPOINT');
     return;
   }
 
   try {
-    addLog.info('开始初始化 S3 存储');
+    addLog.info(`开始初始化 S3 存储: ${s3Endpoint}`);
+
+    // 延迟初始化，避免阻塞应用启动
+    // S3 bucket 的 ensureBucket 是异步的，失败不会阻塞
     initS3Buckets();
-    addLog.info('S3 存储初始化成功');
+
+    addLog.info('S3 存储初始化已启动（bucket 检查在后台进行）');
   } catch (error) {
-    addLog.error('S3 存储初始化失败', error as Error);
-    addLog.warn('文件导入导出功能将不可用（源文件功能）');
+    // S3 初始化失败不影响核心功能，只记录警告
+    const errMsg = error instanceof Error ? error.message : String(error);
+    addLog.warn(`S3 存储初始化失败: ${errMsg}`);
+    addLog.warn('文件导入导出功能（源文件关联）将不可用');
     // 不抛出错误，允许应用继续运行
   }
 }
