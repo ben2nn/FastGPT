@@ -54,7 +54,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Login to Harbor
-        run: echo "${{ secrets.HARBOR_PASSWORD }}" | docker login harbor.hrids.com -u ${{ secrets.HARBOR_USERNAME }} --password-stdin
+        run: echo "${{ secrets.HARBOR_PASSWORD }}" | docker login harbor.52nn.us -u ${{ secrets.HARBOR_USERNAME }} --password-stdin
 
       - name: Build for ${{ matrix.arch }}
         id: build
@@ -68,7 +68,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=fastgpt-admin image
-          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-admin,harbor.hrids.com/ai_project/fastgpt-admin",push-by-digest=true,push=true
+          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-admin,harbor.52nn.us/ai_project/fastgpt-admin",push-by-digest=true,push=true
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -102,7 +102,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Login to Harbor
-        run: echo "${{ secrets.HARBOR_PASSWORD }}" | docker login harbor.hrids.com -u ${{ secrets.HARBOR_USERNAME }} --password-stdin
+        run: echo "${{ secrets.HARBOR_PASSWORD }}" | docker login harbor.52nn.us -u ${{ secrets.HARBOR_USERNAME }} --password-stdin
 
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -119,13 +119,13 @@ jobs:
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:latest" >> $GITHUB_ENV
             echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:latest" >> $GITHUB_ENV
-            echo "Harbor_Tag=harbor.hrids.com/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
-            echo "Harbor_Latest=harbor.hrids.com/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Harbor_Tag=harbor.52nn.us/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Harbor_Latest=harbor.52nn.us/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
           else
             echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:${{ github.ref_name }}" >> $GITHUB_ENV
             echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:latest" >> $GITHUB_ENV
-            echo "Harbor_Tag=harbor.hrids.com/ai_project/fastgpt-admin:${{ github.ref_name }}" >> $GITHUB_ENV
-            echo "Harbor_Latest=harbor.hrids.com/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Harbor_Tag=harbor.52nn.us/ai_project/fastgpt-admin:${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "Harbor_Latest=harbor.52nn.us/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
           fi
 
       - name: Create manifest list and push
