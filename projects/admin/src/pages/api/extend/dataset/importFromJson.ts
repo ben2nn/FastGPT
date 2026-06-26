@@ -13,8 +13,32 @@ import { readFile } from 'fs/promises';
 import JSZip from 'jszip';
 import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
 import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
-import { connectPg } from '@fastgpt/service/common/vectorDB/pg/controller';
-import { DatasetVectorTableName } from '@fastgpt/service/common/vectorDB/constants';
+import { Pool } from 'pg';
+
+const DatasetVectorTableName = 'modeldata';
+
+// 向量数据库连接
+let vectorPgClient: Pool | null = null;
+
+async function connectVectorPg(): Promise<Pool> {
+  if (vectorPgClient) {
+    return vectorPgClient;
+  }
+
+  // 向量库使用 PG_URL（与主应用一致）
+  const pgUrl = process.env.PG_URL;
+  if (!pgUrl) {
+    throw new Error('PG_URL 未配置，无法导入向量数据');
+  }
+
+  vectorPgClient = new Pool({
+    connectionString: pgUrl,
+    max: 5,
+    connectionTimeoutMillis: 10000
+  });
+
+  return vectorPgClient;
+}
 
 // 禁用默认 bodyParser，使用 formidable 处理文件上传
 export const config = {
@@ -379,7 +403,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     if (!ignoreVectors && Array.isArray(vectors) && vectors.length > 0) {
       try {
-        const pg = await connectPg();
+        const pg = await connectVectorPg();
         const VECTOR_BATCH_SIZE = 500;
 
         for (let i = 0; i < vectors.length; i += VECTOR_BATCH_SIZE) {

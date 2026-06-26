@@ -12,10 +12,33 @@ import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
 import path from 'path';
 import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
 import { PassThrough } from 'stream';
-import { connectPg } from '@fastgpt/service/common/vectorDB/pg/controller';
-import { DatasetVectorTableName } from '@fastgpt/service/common/vectorDB/constants';
+import { Pool } from 'pg';
 
 const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
+const DatasetVectorTableName = 'modeldata';
+
+// 向量数据库连接（使用 PG_URL）
+let vectorPgClient: Pool | null = null;
+
+async function connectVectorPg(): Promise<Pool> {
+  if (vectorPgClient) {
+    return vectorPgClient;
+  }
+
+  // 向量库使用 PG_URL（与主应用一致）
+  const pgUrl = process.env.PG_URL;
+  if (!pgUrl) {
+    throw new Error('PG_URL 未配置，无法导出向量数据');
+  }
+
+  vectorPgClient = new Pool({
+    connectionString: pgUrl,
+    max: 5,
+    connectionTimeoutMillis: 10000
+  });
+
+  return vectorPgClient;
+}
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -112,7 +135,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     if (includeVectors) {
       try {
-        const pg = await connectPg();
+        const pg = await connectVectorPg();
         const datasetIdList = datasetIds.map((id) => `'${String(id)}'`).join(',');
 
         const result = await pg.query(`
@@ -123,9 +146,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         `);
 
         vectors = result.rows;
+        console.log(`导出向量数据: ${vectors.length} 条`);
       } catch (error) {
         console.warn('导出向量数据失败:', (error as Error).message);
-        // 向量导出失败不影响其他数据
       }
     }
 

@@ -18,11 +18,11 @@ declare global {
  */
 export function getPostgresPool(): Pool {
   if (!global.__postgresPool) {
-    // 从环境变量获取连接字符串
-    const connectionString = process.env.PG_URL;
+    // 从环境变量获取连接字符串（统计数据用）
+    const connectionString = process.env.PG_STATS_URL || process.env.PG_URL;
 
     if (!connectionString) {
-      throw new SystemError(ErrorType.CONFIGURATION_ERROR, 'PG_URL 环境变量未设置');
+      throw new SystemError(ErrorType.CONFIGURATION_ERROR, 'PG_STATS_URL 或 PG_URL 环境变量未设置');
     }
 
     // 获取最大连接数配置
