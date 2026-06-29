@@ -4,24 +4,14 @@ import type { User } from '@/types/user';
 /**
  * 获取认证 token
  */
-function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('admin_token');
-}
-
-/**
+export /**
  * 创建带认证头的 fetch 请求
  */
 function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = getAuthToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>)
   };
-
-  if (token) {
-    headers['token'] = token;
-  }
 
   return fetch(url, {
     ...options,
@@ -125,7 +115,7 @@ export const exportDataset = async (
   parentId: string,
   options?: { includeFiles?: boolean; includeVectors?: boolean }
 ) => {
-  const response = await authFetch(getWebReqUrl('/api/extend/dataset/exportByParentId'), {
+  const response = await authFetch(getWebReqUrl('/api/core/dataset/exportByParentId'), {
     method: 'POST',
     body: JSON.stringify({
       parentId,
@@ -148,16 +138,8 @@ export const exportDataset = async (
 
 // 知识库导入
 export const importDataset = async (formData: FormData) => {
-  const token = getAuthToken();
-  const headers: Record<string, string> = {};
-
-  if (token) {
-    headers['token'] = token;
-  }
-
-  const response = await fetch(getWebReqUrl('/api/extend/dataset/importFromJson'), {
+  const response = await fetch(getWebReqUrl('/api/core/dataset/importFromJson'), {
     method: 'POST',
-    headers,
     body: formData
   });
   if (!response.ok) {
@@ -274,6 +256,56 @@ export const importTools = async (
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.error || '工具导入失败');
+  }
+  return response.json();
+};
+
+// ==================== 知识库管理 API ====================
+
+// 获取知识库列表（所有团队）
+export const fetchDatasets = async (params?: {
+  search?: string;
+  teamId?: string;
+  type?: string;
+  page?: number;
+  pageSize?: number;
+}) => {
+  const searchParams = new URLSearchParams();
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.teamId) searchParams.set('teamId', params.teamId);
+  if (params?.type) searchParams.set('type', params.type);
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+
+  const qs = searchParams.toString();
+  const url = getWebReqUrl(`/api/core/dataset/list${qs ? `?${qs}` : ''}`);
+
+  const response = await authFetch(url);
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '获取知识库列表失败');
+  }
+  return response.json();
+};
+
+// 删除知识库（软删除）
+export const deleteDatasetById = async (datasetId: string) => {
+  const response = await authFetch(getWebReqUrl(`/api/core/dataset/${datasetId}`), {
+    method: 'DELETE'
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '删除知识库失败');
+  }
+  return response.json();
+};
+
+// 获取知识库详情
+export const fetchDatasetDetail = async (datasetId: string) => {
+  const response = await authFetch(getWebReqUrl(`/api/core/dataset/${datasetId}`));
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '获取知识库详情失败');
   }
   return response.json();
 };

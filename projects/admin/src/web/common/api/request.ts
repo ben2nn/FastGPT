@@ -12,6 +12,7 @@ interface ConfigType {
   onUploadProgress?: (progressEvent: AxiosProgressEvent) => void;
   cancelToken?: AbortController;
   withCredentials?: boolean;
+  maxQuantity?: number;
 }
 
 interface ResponseDataType {
@@ -84,10 +85,7 @@ function responseError(err: any) {
 
 /* 创建请求实例 */
 const instance = axios.create({
-  timeout: 60000, // 超时时间 60 秒
-  headers: {
-    'content-type': 'application/json'
-  }
+  timeout: 60000 // 超时时间 60 秒
 });
 
 /**

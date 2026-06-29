@@ -2,8 +2,8 @@ import React from 'react';
 import { Box, Flex, Heading, Text, useToast } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/web/context/AuthContext';
-import type { LoginFormData } from '../../components/LoginForm';
-import LoginForm from '../../components/LoginForm';
+import type { LoginFormData } from '@/pageComponents/login/LoginForm';
+import LoginForm from '@/pageComponents/login/LoginForm';
 
 const MotionBox = motion(Box);
 
@@ -108,15 +108,29 @@ export default function LoginPage() {
 
 export async function getServerSideProps(context: any) {
   try {
-    const token = context.req.cookies?.admin_token;
+    const token = context.req.cookies?.fastgpt_token;
 
     if (token) {
-      return {
-        redirect: {
-          destination: '/dashboard',
-          permanent: false
-        }
-      };
+      // 验证 token 是否有效，避免无效 token 导致重定向循环
+      try {
+        const { authJWT } = await import('@fastgpt/service/support/permission/controller');
+        const { connectToDatabase } = await import('@/service/common/mongo');
+        await connectToDatabase();
+        await authJWT(token);
+        // token 有效，重定向到 dashboard
+        return {
+          redirect: {
+            destination: '/dashboard',
+            permanent: false
+          }
+        };
+      } catch {
+        // token 无效，清除 cookie 并留在登录页
+        context.res.setHeader(
+          'Set-Cookie',
+          'fastgpt_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax'
+        );
+      }
     }
 
     return {

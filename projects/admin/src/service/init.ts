@@ -10,6 +10,7 @@ import { SystemError, ErrorType } from '@/service/common/errors';
 import { connectToDatabase } from '@/service/common/mongo';
 import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 import { initS3Buckets } from '@fastgpt/service/common/s3/index';
+import { getInitConfig } from '@/service/common/system';
 
 // 初始化状态枚举
 export enum InitializationStatus {
@@ -199,6 +200,18 @@ export async function initializeDatabase(): Promise<void> {
       // 5. 连接 MongoDB（如果配置了）
       await initializeMongoDB();
       addLog.info('MongoDB初始化完成');
+
+      // 5.1 加载系统配置和模型数据（依赖 MongoDB 连接）
+      // 如果 MongoDB 未连接或加载失败，不影响核心功能
+      // 使用动态导入，与 app 项目 instrumentation.ts 保持一致
+      try {
+        const { loadSystemModels } = await import('@fastgpt/service/core/ai/config/utils');
+        await Promise.all([getInitConfig(), loadSystemModels()]);
+        addLog.info('系统配置和模型数据加载完成');
+      } catch (modelInitError) {
+        addLog.warn('系统配置或模型数据加载失败，管理后台模型功能将不可用');
+        addLog.warn(String(modelInitError));
+      }
 
       // 6. 初始化 S3 存储（如果配置了）
       await initializeS3();

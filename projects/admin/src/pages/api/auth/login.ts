@@ -1,11 +1,13 @@
 import { connectToDatabase } from '@/service/common/mongo';
 import { MongoUser } from '@fastgpt/service/support/user/schema';
-import { createJWT } from '@fastgpt/service/support/permission/controller';
+import { createUserSession } from '@fastgpt/service/support/user/session';
+import { setCookie } from '@fastgpt/service/support/permission/auth/common';
 import { getUserDetail } from '@fastgpt/service/support/user/controller';
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { UserStatusEnum } from '@fastgpt/global/support/user/constant';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { NextAPI } from '@/service/middleware/entry';
+import requestIp from 'request-ip';
 
 type LoginRequestBody = {
   username: string;
@@ -14,7 +16,6 @@ type LoginRequestBody = {
 
 type LoginResponse = {
   success: boolean;
-  token?: string;
   user?: {
     _id: string;
     username: string;
@@ -88,16 +89,21 @@ async function handler(
       lastLoginTmbId: userDetail.team.tmbId
     });
 
-    // 生成 JWT Token
-    const token = createJWT({
-      ...userDetail,
-      isRoot: username === 'root'
+    // 生成 Redis Session（与 app 项目统一）
+    const sessionToken = await createUserSession({
+      userId: user._id.toString(),
+      teamId: userDetail.team.teamId,
+      tmbId: userDetail.team.tmbId,
+      isRoot: username === 'root',
+      ip: requestIp.getClientIp(req)
     });
 
-    // 返回成功响应
+    // 通过 HttpOnly Cookie 返回 session token（与 app 项目一致）
+    setCookie(res, sessionToken);
+
+    // 返回成功响应（不再返回 token，前端通过 cookie 携带）
     return res.status(200).json({
       success: true,
-      token,
       user: {
         _id: user._id.toString(),
         username: user.username,

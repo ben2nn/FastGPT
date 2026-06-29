@@ -6,8 +6,8 @@ import { ProtectedRoute } from '@/web/context/ProtectedRoute';
 import Layout from '@/web/context/Layout';
 import { getDefaultTimeRange } from '@/web/common/utils/time';
 
-import FilterPanel from '@/components/statistics/FilterPanel';
-import StatisticsList from '@/components/statistics/StatisticsList';
+import FilterPanel from '@/pageComponents/statistics/FilterPanel';
+import StatisticsList from '@/pageComponents/statistics/StatisticsList';
 
 import type { StatisticsQuery } from '@/service/core/statistics/statistics';
 

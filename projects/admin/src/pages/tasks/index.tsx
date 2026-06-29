@@ -31,9 +31,9 @@ import 'dayjs/locale/zh-cn';
 import MyIcon from '@fastgpt/web/components/common/Icon';
 import { getTaskList, toggleTask } from '@/web/core/task/api';
 import type { TaskListItem } from '@/web/core/task/api';
-import ExecuteTaskDialog from '@/components/tasks/ExecuteTaskDialog';
-import TaskDetailDialog from '@/components/tasks/TaskDetailDialog';
-import TaskHistoryDialog from '@/components/tasks/TaskHistoryDialog';
+import ExecuteTaskDialog from '@/pageComponents/tasks/ExecuteTaskDialog';
+import TaskDetailDialog from '@/pageComponents/tasks/TaskDetailDialog';
+import TaskHistoryDialog from '@/pageComponents/tasks/TaskHistoryDialog';
 import { ProtectedRoute } from '@/web/context/ProtectedRoute';
 import Layout from '@/web/context/Layout';
 

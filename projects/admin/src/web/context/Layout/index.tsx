@@ -51,11 +51,13 @@ export default function Layout({ children, title }: LayoutProps) {
           <Text fontWeight="600" fontSize="lg" color="myGray.900">
             {title}
           </Text>
-          <Avatar size="sm" bg="primary.600" />
         </Flex>
         {/* Content */}
         <Box flex={1} overflow="auto" bg="myGray.50" p={6}>
           <MotionBox
+            display="flex"
+            flexDirection="column"
+            h="100%"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}

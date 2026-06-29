@@ -3,18 +3,16 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useRouter } from 'next/router';
 import { hashStr } from '@fastgpt/global/common/string/tools';
 import { getWebReqUrl } from '@/web/common/utils';
+import { useSystemStore } from '@/web/common/system/useSystemStore';
 
-// 用户信息类型定义
 interface User {
   _id: string;
   username: string;
   status: string;
 }
 
-// 认证上下文值类型定义
 interface AuthContextValue {
   user: User | null;
-  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
@@ -22,177 +20,108 @@ interface AuthContextValue {
   checkAuth: () => Promise<boolean>;
 }
 
-// 创建认证上下文
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// localStorage 键名常量
-const TOKEN_KEY = 'admin_token';
 const USER_KEY = 'admin_user';
 
-// AuthProvider 组件 Props
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-// AuthProvider 组件
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // 从 localStorage 和 Cookie 读取 Token 和用户信息
-  const loadFromStorage = () => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      const storedToken = localStorage.getItem(TOKEN_KEY);
-      const storedUser = localStorage.getItem(USER_KEY);
-
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-
-        // 确保 Cookie 也存在（如果不存在则设置）
-        const cookies = document.cookie.split(';').map((c) => c.trim());
-        const tokenCookie = cookies.find((c) => c.startsWith(`${TOKEN_KEY}=`));
-        if (!tokenCookie) {
-          // Cookie 不存在，重新设置
-          const expires = new Date();
-          expires.setDate(expires.getDate() + 7);
-          document.cookie = `${TOKEN_KEY}=${storedToken}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load auth data from storage:', error);
-      // 清除可能损坏的数据
-      clearStorage();
-    }
-  };
-
-  // 保存 Token 和用户信息到 localStorage 和 Cookie
-  const saveToStorage = (token: string, user: User) => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      // 保存到 localStorage
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-
-      // 同时保存到 Cookie（用于服务端验证）
-      // 设置 7 天过期
-      const expires = new Date();
-      expires.setDate(expires.getDate() + 7);
-      document.cookie = `${TOKEN_KEY}=${token}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
-    } catch (error) {
-      console.error('Failed to save auth data to storage:', error);
-    }
-  };
-
-  // 清除 localStorage 和 Cookie 中的认证数据
-  const clearStorage = () => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      // 清除 localStorage
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-
-      // 清除 Cookie
-      document.cookie = `${TOKEN_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax`;
-    } catch (error) {
-      console.error('Failed to clear auth data from storage:', error);
-    }
-  };
-
-  // 登录方法
+  // 登录方法 — 服务端通过 Set-Cookie 设置 fastgpt_token
   const login = async (username: string, password: string): Promise<void> => {
-    try {
-      // 使用 SHA-256 加密密码
-      const hashedPassword = await hashStr(password);
+    const hashedPassword = await hashStr(password);
 
-      const response = await fetch(getWebReqUrl('/api/auth/login'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username, password: hashedPassword })
-      });
+    const response = await fetch(getWebReqUrl('/api/auth/login'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // 接收 Set-Cookie
+      body: JSON.stringify({ username, password: hashedPassword })
+    });
 
-      const data = await response.json();
+    const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || '登录失败');
-      }
-
-      // 保存 Token 和用户信息
-      const { token: newToken, user: newUser } = data;
-      setToken(newToken);
-      setUser(newUser);
-      saveToStorage(newToken, newUser);
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || '登录失败');
     }
+
+    // 保存用户信息到 localStorage（cookie 由服务端管理）
+    setUser(data.user);
+    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+
+    // 登录成功后加载模型列表
+    useSystemStore.getState().initStaticData();
   };
 
   // 登出方法
   const logout = () => {
-    setToken(null);
     setUser(null);
-    clearStorage();
+    localStorage.removeItem(USER_KEY);
+    // 调用后端清除 session + cookie
+    fetch(getWebReqUrl('/api/auth/logout'), {
+      method: 'POST',
+      credentials: 'include'
+    }).catch(() => {});
     router.push('/login');
   };
 
-  // 验证 Token 有效性
+  // 验证认证状态 — 通过 cookie 自动携带 session
   const checkAuth = useCallback(async (): Promise<boolean> => {
-    if (!token) {
-      return false;
-    }
-
     try {
       const response = await fetch(getWebReqUrl('/api/auth/verify'), {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        credentials: 'include' // 自动携带 fastgpt_token cookie
       });
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        // Token 无效或过期，清除认证数据
-        setToken(null);
         setUser(null);
-        clearStorage();
+        localStorage.removeItem(USER_KEY);
         return false;
       }
 
-      // 更新用户信息
       setUser(data.user);
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
       return true;
     } catch (error) {
-      console.error('Token verification error:', error);
-      // 验证失败，清除认证数据
-      setToken(null);
+      console.error('Auth verification error:', error);
       setUser(null);
-      clearStorage();
+      localStorage.removeItem(USER_KEY);
       return false;
     }
-  }, [token]);
-
-  // 组件挂载时从 localStorage 加载认证数据
-  useEffect(() => {
-    loadFromStorage();
-    setIsLoading(false);
   }, []);
 
-  // 计算是否已认证
-  const isAuthenticated = !!token && !!user;
+  const isAuthenticated = !!user;
+
+  // 组件挂载时验证认证状态
+  useEffect(() => {
+    // 先从 localStorage 恢复用户信息（快速显示 UI）
+    try {
+      const storedUser = localStorage.getItem(USER_KEY);
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+    } catch {}
+
+    // 然后通过 cookie 验证真实状态
+    checkAuth().finally(() => setIsLoading(false));
+  }, []);
+
+  // 认证成功后加载系统数据
+  useEffect(() => {
+    if (isAuthenticated) {
+      useSystemStore.getState().initStaticData();
+    }
+  }, [isAuthenticated]);
 
   const value: AuthContextValue = {
     user,
-    token,
     isAuthenticated,
     isLoading,
     login,
@@ -203,7 +132,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// useAuth Hook - 用于在组件中访问认证上下文
 export const useAuth = (): AuthContextValue => {
   const context = useContext(AuthContext);
   if (context === undefined) {

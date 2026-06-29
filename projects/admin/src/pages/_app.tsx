@@ -6,9 +6,12 @@ import { useState, useEffect } from 'react';
 import type { AppProps } from 'next/app';
 import { useRouter } from 'next/router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { appWithTranslation } from 'next-i18next';
+import nextI18NextConfig from '../../next-i18next.config.js';
 
 import { theme } from '@fastgpt/web/styles/theme';
 import { AuthProvider } from '../web/context/AuthContext';
+import { useSystemStore } from '../web/common/system/useSystemStore';
 
 // 全局样式
 import '../web/styles/global.scss';
@@ -20,6 +23,8 @@ const PREFETCH_ROUTES = [
   '/tasks',
   '/user/list',
   '/team/list',
+  '/dataset/list',
+  '/dataset/detail',
   '/import-export'
 ];
 
@@ -74,4 +79,4 @@ function App({ Component, pageProps }: AppPropsWithLayout) {
   );
 }
 
-export default App;
+export default appWithTranslation(App, nextI18NextConfig);

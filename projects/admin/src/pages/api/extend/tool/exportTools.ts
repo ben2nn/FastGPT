@@ -3,7 +3,7 @@ import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/common/mongo';
 import { MongoApp } from '@fastgpt/service/core/app/schema';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
-import { authJWT } from '@fastgpt/service/support/permission/controller';
+import { authAdmin } from '@/service/common/auth';
 import { ToolTypeList, AppFolderTypeList } from '@fastgpt/global/core/app/constants';
 import { MongoOutLink } from '@fastgpt/service/support/outLink/schema';
 import { MongoOpenApi } from '@fastgpt/service/support/openapi/schema';
@@ -18,29 +18,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    // JWT 认证
-    const authHeader = req.headers.authorization;
-    const token = req.headers.token as string | undefined;
-    let jwtToken: string | undefined;
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      jwtToken = authHeader.substring(7);
-    } else if (token) {
-      jwtToken = token;
-    }
-
-    if (!jwtToken) {
-      return res.status(401).json({ success: false, error: 'Token 不存在' });
-    }
-
-    let decoded;
-    try {
-      decoded = await authJWT(jwtToken);
-    } catch (error) {
-      return res.status(401).json({ success: false, error: 'Token 无效或已过期' });
-    }
-
-    const teamId = decoded?.team?.teamId;
+    const authResult = await authAdmin(req);
+    const teamId = authResult.teamId;
     if (!teamId) {
       return res.status(401).json({ success: false, error: '无法获取团队信息' });
     }

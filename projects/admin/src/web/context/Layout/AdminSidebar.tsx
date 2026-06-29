@@ -52,7 +52,14 @@ const menuItems: MenuItem[] = [
     activeLinks: ['/team']
   },
   {
-    label: '导入导出',
+    label: '知识库',
+    icon: 'navbar/datasetLight',
+    activeIcon: 'navbar/datasetFill',
+    path: '/dataset/list',
+    activeLinks: ['/dataset']
+  },
+  {
+    label: '备份还原',
     icon: 'common/download',
     activeIcon: 'common/download',
     path: '/import-export',

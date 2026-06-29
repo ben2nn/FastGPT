@@ -9,7 +9,7 @@ const Index = () => {
 export async function getServerSideProps(context: any) {
   try {
     // 检查认证状态
-    const token = context.req.cookies?.admin_token;
+    const token = context.req.cookies?.fastgpt_token;
 
     if (!token) {
       // 未登录，重定向到登录页

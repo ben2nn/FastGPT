@@ -3,7 +3,7 @@ import { NextAPI } from '@/service/middleware/entry';
 import { connectToDatabase } from '@/service/common/mongo';
 import { MongoApp } from '@fastgpt/service/core/app/schema';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
-import { authJWT } from '@fastgpt/service/support/permission/controller';
+import { authAdmin } from '@/service/common/auth';
 import { MongoOutLink } from '@fastgpt/service/support/outLink/schema';
 import { MongoOpenApi } from '@fastgpt/service/support/openapi/schema';
 import { getNanoid } from '@fastgpt/global/common/string/tools';
@@ -19,32 +19,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    // 3. 验证 JWT Token
-    const authHeader = req.headers.authorization;
-    const token = req.headers.token as string | undefined;
-
-    let jwtToken: string | undefined;
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      jwtToken = authHeader.substring(7);
-    } else if (token) {
-      jwtToken = token;
-    }
-
-    if (!jwtToken) {
-      return res.status(401).json({ success: false, error: 'Token 不存在' });
-    }
-
-    let decoded;
-    try {
-      decoded = await authJWT(jwtToken);
-    } catch (error) {
-      return res.status(401).json({ success: false, error: 'Token 无效或已过期' });
-    }
-
-    // 从 JWT payload 中获取 teamId 和 tmbId
-    const teamId = decoded?.team?.teamId;
-    const tmbId = decoded?.team?.tmbId;
+    // 3. 验证认证
+    const authResult = await authAdmin(req);
+    const teamId = authResult.teamId;
+    const tmbId = authResult.tmbId;
     if (!teamId || !tmbId) {
       return res.status(401).json({ success: false, error: '无法获取团队信息' });
     }

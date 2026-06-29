@@ -10,19 +10,21 @@ import { getDefaultTimeRange } from '@/web/common/utils/time';
 import type { StatisticsQuery } from '@/service/core/statistics/statistics';
 
 // 延迟加载图表组件
-const FilterDatePanel = dynamic(() => import('@/components/statistics/FilterDatePanel'), {
+const FilterDatePanel = dynamic(() => import('@/pageComponents/statistics/FilterDatePanel'), {
   ssr: false,
   loading: () => <Box h="48px" />
 });
-const OverviewCards = dynamic(() => import('@/components/statistics/OverviewCards'), {
+const OverviewCards = dynamic(() => import('@/pageComponents/statistics/OverviewCards'), {
   ssr: false
 });
-const TrendChart = dynamic(() => import('@/components/statistics/TrendChart'), { ssr: false });
-const StatusChart = dynamic(() => import('@/components/statistics/StatusChart'), { ssr: false });
-const AppRankingChart = dynamic(() => import('@/components/statistics/AppRankingChart'), {
+const TrendChart = dynamic(() => import('@/pageComponents/statistics/TrendChart'), { ssr: false });
+const StatusChart = dynamic(() => import('@/pageComponents/statistics/StatusChart'), {
   ssr: false
 });
-const ModelDistChart = dynamic(() => import('@/components/statistics/ModelDistChart'), {
+const AppRankingChart = dynamic(() => import('@/pageComponents/statistics/AppRankingChart'), {
+  ssr: false
+});
+const ModelDistChart = dynamic(() => import('@/pageComponents/statistics/ModelDistChart'), {
   ssr: false
 });
 

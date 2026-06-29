@@ -7,10 +7,10 @@ import type { GetServerSidePropsContext } from 'next';
 
 /**
  * 检查用户是否已认证
- * 通过检查 cookie 中的 admin_token 来判断
+ * 通过检查 cookie 中的 fastgpt_token 来判断（与 app 项目统一）
  */
 export function isAuthenticated(context: GetServerSidePropsContext): boolean {
-  const token = context.req.cookies?.admin_token;
+  const token = context.req.cookies?.fastgpt_token;
   return !!token;
 }
 

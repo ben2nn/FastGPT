@@ -86,3 +86,18 @@ body select {
   opacity: 1;
   transform: rotate(3deg) translate(0, -4px);
 }
+
+/* 模型选择器 - 禁用鼠标滚轮 */
+.nowheel {
+  /* prevent mouse wheel from changing value */
+}
+.nowheel input::-webkit-outer-spin-button,
+.nowheel input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* 模型选择器中的 span 需要 block 显示 */
+.model-select-wrapper span {
+  display: block;
+}

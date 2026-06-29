@@ -109,8 +109,8 @@ const TAB_CONFIGS: TabConfig[] = [
   {
     label: '知识库',
     icon: 'navbar/datasetLight',
-    exportTitle: '导出知识库',
-    importTitle: '导入知识库',
+    exportTitle: '备份知识库',
+    importTitle: '还原知识库',
     exportFields: [
       { key: 'parentId', label: 'parentId', placeholder: '输入知识库或文件夹 ID', required: true }
     ],
@@ -135,8 +135,8 @@ const TAB_CONFIGS: TabConfig[] = [
   {
     label: '工作流',
     icon: 'core/app/type/workflow',
-    exportTitle: '导出工作流',
-    importTitle: '导入工作流',
+    exportTitle: '备份工作流',
+    importTitle: '还原工作流',
     exportFields: [
       { key: 'parentId', label: 'parentId', placeholder: '输入工作流或文件夹 ID', required: true }
     ],
@@ -149,8 +149,8 @@ const TAB_CONFIGS: TabConfig[] = [
   {
     label: '工具',
     icon: 'common/toolkit',
-    exportTitle: '导出工具',
-    importTitle: '导入工具',
+    exportTitle: '备份工具',
+    importTitle: '还原工具',
     exportFields: [{ key: 'parentId', label: 'parentId', placeholder: '留空导出全部工具' }],
     importFields: [
       { key: 'targetParentId', label: '目标父文件夹 ID', placeholder: '留空则导入到根目录' }
@@ -161,8 +161,8 @@ const TAB_CONFIGS: TabConfig[] = [
   {
     label: '模型配置',
     icon: 'common/model',
-    exportTitle: '导出模型配置',
-    importTitle: '导入模型配置',
+    exportTitle: '备份模型配置',
+    importTitle: '还原模型配置',
     exportFields: [
       { key: 'provider', label: '提供商', placeholder: '如 openai、anthropic' },
       {
@@ -179,8 +179,8 @@ const TAB_CONFIGS: TabConfig[] = [
   {
     label: '渠道',
     icon: 'common/link',
-    exportTitle: '导出渠道',
-    importTitle: '导入渠道',
+    exportTitle: '备份渠道',
+    importTitle: '还原渠道',
     exportFields: [],
     exportDescription: '导出所有渠道配置（不含 API Key）',
     showKeepOriginalId: true,
@@ -423,11 +423,11 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
             ))}
           </VStack>
 
-          {/* 源文件导出开关 */}
+          {/* 导出源文件开关 */}
           {config.showIncludeFiles && (
             <Flex align="center" gap={3} mb={4}>
               <Text fontSize="sm" color="myGray.600" w="120px" flexShrink={0} lineHeight="36px">
-                源文件导出
+                导出源文件
               </Text>
               <Switch
                 isChecked={includeFiles}
@@ -440,11 +440,11 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
             </Flex>
           )}
 
-          {/* 向量导出开关 */}
+          {/* 导出向量开关 */}
           {config.showIncludeVectors && (
             <Flex align="center" gap={3} mb={4}>
               <Text fontSize="sm" color="myGray.600" w="120px" flexShrink={0} lineHeight="36px">
-                向量导出
+                导出向量
               </Text>
               <Switch
                 isChecked={includeVectors}

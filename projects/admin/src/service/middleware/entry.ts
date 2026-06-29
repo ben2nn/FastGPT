@@ -1,9 +1,10 @@
 import { NextEntry } from '@fastgpt/service/common/middle/entry';
+import { ensureInitialized } from '@/service/init';
 
 /**
  * Admin 项目的 API 中间件入口
- * 初始化在服务器启动时自动执行（见 src/service/init.ts）
+ * 确保每次 API 请求前已完成初始化（MongoDB 连接、global.feConfigs 等）
  */
 export const NextAPI = NextEntry({
-  beforeCallback: []
+  beforeCallback: [ensureInitialized]
 });
