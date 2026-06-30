@@ -7,10 +7,10 @@
  */
 
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
-import { authCert } from '@fastgpt/service/support/permission/auth/common';
 import { addLog } from '@fastgpt/service/common/system/log';
 
 import { NextAPI } from '@/service/middleware/entry';
+import { authAdmin } from '@/service/support/permission/auth';
 import { statisticsService } from '@/service/core/statistics/statisticsService';
 import { validateAndCleanQuery } from '@/service/core/statistics/validation';
 import type { ModelStatisticsResponse } from '@/service/core/statistics/statistics';
@@ -47,34 +47,10 @@ async function handler(
       } as any);
     }
 
-    // 2. 身份认证
-    /* let tmbId: string;
-        try {
-            const authResult = await authCert({ req, authToken: true });
-            tmbId = authResult.tmbId;
-            addLog.debug('[ModelStatisticsAPI] 用户身份验证成功', { tmbId });
-        } catch (error) {
-            addLog.warn('[ModelStatisticsAPI] 身份验证失败', {
-                error: error instanceof Error ? error.message : String(error)
-            });
-            return res.status(401).json({
-                code: StatisticsErrorCode.UNAUTHORIZED,
-                message: '身份验证失败，请先登录'
-            } as any);
-        }
- */
-    // 3. 验证管理员权限
-    // TODO: 实现管理员权限验证
-    // 目前暂时跳过，后续根据项目的权限系统实现
-    // const user = await getUserById(tmbId);
-    // if (user.role !== 'admin') {
-    //   return res.status(403).json({
-    //     code: StatisticsErrorCode.UNAUTHORIZED,
-    //     message: '需要管理员权限'
-    //   } as any);
-    // }
+    // 2. 管理员认证
+    await authAdmin(req);
 
-    // 4. 解析和验证查询参数
+    // 3. 解析和验证查询参数
     addLog.debug('[ModelStatisticsAPI] 原始查询参数', { query: req.query });
 
     let validatedQuery;

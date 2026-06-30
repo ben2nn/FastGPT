@@ -82,7 +82,7 @@ async function handler(
     });
 
     // 更新最后登录的团队成员 ID
-    MongoUser.findByIdAndUpdate(user._id, {
+    await MongoUser.findByIdAndUpdate(user._id, {
       lastLoginTmbId: userDetail.team.tmbId
     });
 

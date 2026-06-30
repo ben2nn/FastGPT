@@ -35,7 +35,7 @@ export async function findAppAndAllChildren({
   const [app, childDatasets] = await Promise.all([MongoApp.findById(appId, fields), find(appId)]);
 
   if (!app) {
-    return Promise.reject('App not found');
+    return Promise.reject(new Error('App not found'));
   }
 
   return [app, ...childDatasets];

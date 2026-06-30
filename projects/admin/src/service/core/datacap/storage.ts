@@ -1,3 +1,5 @@
+import type { PoolClient } from 'pg';
+
 /**
  * 数据采集存储服务
  * 负责将模型调用日志存储到 PostgreSQL
@@ -123,7 +125,10 @@ export async function batchInsertLogs(logs: ModelCallLog[]): Promise<InsertResul
  * 降级方案：逐条插入记录
  * 当批量插入失败时使用，可以获取每条记录的详细错误信息
  */
-async function fallbackInsertOneByOne(logs: ModelCallLog[], client: any): Promise<InsertResult> {
+async function fallbackInsertOneByOne(
+  logs: ModelCallLog[],
+  client: PoolClient
+): Promise<InsertResult> {
   const result: InsertResult = {
     successCount: 0,
     failedCount: 0,
@@ -140,8 +145,8 @@ async function fallbackInsertOneByOne(logs: ModelCallLog[], client: any): Promis
         call_id, app_id, app_name, model_id, model_name,
         call_timestamp, call_status, chat_id, data_id,
         input_tokens, output_tokens, total_tokens, total_points,
-        source, source_name, model_category, usage_scenario, running_time
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        source, source_name, model_category, usage_scenario, running_time, error_text
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       ON CONFLICT (call_id) DO NOTHING
       RETURNING id
     `;
@@ -167,7 +172,8 @@ async function fallbackInsertOneByOne(logs: ModelCallLog[], client: any): Promis
           log.sourceName || null,
           log.modelCategory || 'chat',
           log.usageScenario || null,
-          log.runningTime || null
+          log.runningTime || null,
+          log.errorText || null
         ];
 
         const insertResult = await client.query(insertSql, values);

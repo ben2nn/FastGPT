@@ -10,8 +10,8 @@ import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/nex
 import { addLog } from '@fastgpt/service/common/system/log';
 
 import { NextAPI } from '@/service/middleware/entry';
+import { authAdmin } from '@/service/support/permission/auth';
 import { getTaskManager } from '@/service/core/task/instance';
-import type { TaskConfig, TaskExecution } from '@/types/task';
 
 /**
  * 任务列表项类型
@@ -64,14 +64,8 @@ async function handler(req: ApiRequestProps, res: ApiResponseType<TaskListRespon
       } as any);
     }
 
-    // 2. 权限验证（TODO: 添加管理员权限验证）
-    // const { userId } = await authCert({ req, authToken: true });
-    // if (!isAdmin(userId)) {
-    //   return res.status(403).json({
-    //     code: 'FORBIDDEN',
-    //     message: '无权访问，需要管理员权限'
-    //   } as any);
-    // }
+    // 2. 管理员认证
+    await authAdmin(req);
 
     // 3. 获取 TaskManager 实例
     let taskManager;

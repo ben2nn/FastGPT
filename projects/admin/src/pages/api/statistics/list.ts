@@ -11,6 +11,7 @@ import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/nex
 import { addLog } from '@fastgpt/service/common/system/log';
 
 import { NextAPI } from '@/service/middleware/entry';
+import { authAdmin } from '@/service/support/permission/auth';
 import { statisticsService } from '@/service/core/statistics/statisticsService';
 import { validateAndCleanQuery } from '@/service/core/statistics/validation';
 import type { StatisticsListResponse } from '@/service/core/statistics/statistics';
@@ -48,7 +49,10 @@ async function handler(
       } as any);
     }
 
-    // 2. 解析和验证查询参数
+    // 2. 管理员认证
+    await authAdmin(req);
+
+    // 3. 解析和验证查询参数
     addLog.debug('[StatisticsListAPI] 原始查询参数', { query: req.query });
 
     let validatedQuery;

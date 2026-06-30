@@ -26,7 +26,7 @@ export class SystemError extends Error {
 
   constructor(type: ErrorType, message: string, originalError?: Error) {
     super(message);
-    this.name = 'DataCapError';
+    this.name = 'SystemError';
     this.type = type;
     this.originalError = originalError;
 

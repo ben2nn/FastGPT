@@ -198,5 +198,7 @@ export class StatisticsError extends Error {
     this.name = 'StatisticsError';
     this.code = code;
     this.details = details;
+
+    Object.setPrototypeOf(this, StatisticsError.prototype);
   }
 }

@@ -7,10 +7,10 @@
  */
 
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
-import { authCert } from '@fastgpt/service/support/permission/auth/common';
 import { addLog } from '@fastgpt/service/common/system/log';
 
 import { NextAPI } from '@/service/middleware/entry';
+import { authAdmin } from '@/service/support/permission/auth';
 import { statisticsService } from '@/service/core/statistics/statisticsService';
 import { validateAndCleanQuery } from '@/service/core/statistics/validation';
 import type {
@@ -155,27 +155,10 @@ async function handler(req: ApiRequestProps<{}, ExportQueryParams>, res: ApiResp
       });
     }
 
-    // 2. 身份认证
-    let tmbId: string;
-    try {
-      const authResult = await authCert({ req, authToken: true });
-      tmbId = authResult.tmbId;
-      addLog.debug('[ExportAPI] 用户身份验证成功', { tmbId });
-    } catch (error) {
-      addLog.warn('[ExportAPI] 身份验证失败', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return res.status(401).json({
-        code: StatisticsErrorCode.UNAUTHORIZED,
-        message: '身份验证失败，请先登录'
-      });
-    }
+    // 2. 管理员认证
+    await authAdmin(req);
 
-    // 3. 验证管理员权限
-    // TODO: 实现管理员权限验证
-    // 目前暂时跳过，后续根据项目的权限系统实现
-
-    // 4. 解析和验证查询参数
+    // 3. 解析和验证查询参数
     const { format, exportType, ...queryParams } = req.query;
 
     // 验证导出格式
@@ -301,7 +284,6 @@ async function handler(req: ApiRequestProps<{}, ExportQueryParams>, res: ApiResp
       exportData = result;
 
       addLog.info('[ExportAPI] 数据查询成功', {
-        tmbId,
         exportType,
         format,
         duration: `${Date.now() - startTime}ms`
@@ -371,7 +353,6 @@ async function handler(req: ApiRequestProps<{}, ExportQueryParams>, res: ApiResp
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}.csv"`);
 
         addLog.info('[ExportAPI] CSV 导出成功', {
-          tmbId,
           exportType,
           fileName: `${fileName}.csv`,
           size: csvData.length
@@ -447,7 +428,6 @@ async function handler(req: ApiRequestProps<{}, ExportQueryParams>, res: ApiResp
         const jsonString = JSON.stringify(jsonData, null, 2);
 
         addLog.info('[ExportAPI] JSON 导出成功', {
-          tmbId,
           exportType,
           fileName: `${fileName}.json`,
           size: jsonString.length

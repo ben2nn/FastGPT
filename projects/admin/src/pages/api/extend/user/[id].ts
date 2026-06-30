@@ -2,6 +2,7 @@ import { hashStr } from '@fastgpt/global/common/string/tools';
 import { MongoUser } from '@fastgpt/service/support/user/schema';
 import { MongoTeam } from '@fastgpt/service/support/user/team/teamSchema';
 import { MongoTeamMember } from '@fastgpt/service/support/user/team/teamMemberSchema';
+import { authAdmin } from '@/service/support/permission/auth';
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { NextAPI } from '@/service/middleware/entry';
 
@@ -10,6 +11,8 @@ async function handler(req: ApiRequestProps, res: ApiResponseType<any>) {
     query: { id },
     method
   } = req;
+
+  await authAdmin(req);
 
   switch (method) {
     case 'GET':

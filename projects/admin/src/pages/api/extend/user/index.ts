@@ -1,25 +1,15 @@
-// pages/api/support/user/index.js
-
 import { MongoUser } from '@fastgpt/service/support/user/schema';
 import { MongoTeam } from '@fastgpt/service/support/user/team/teamSchema';
 import { MongoTeamMember } from '@fastgpt/service/support/user/team/teamMemberSchema';
 import { hashStr } from '@fastgpt/global/common/string/tools';
-import { authCert } from '@fastgpt/service/support/permission/auth/common';
+import { authAdmin } from '@/service/support/permission/auth';
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { NextAPI } from '@/service/middleware/entry';
 
 async function handler(req: ApiRequestProps, res: ApiResponseType<any>) {
   const { method } = req;
-
-  /**
-  const { userId } = await authCert({ req, authToken: true });
-
-  const curUser = await MongoUser.findById(userId).select('-password');
-  if (curUser.username !== 'root') {
-    return res.status(200).json([]);
-  }
-   **/
+  await authAdmin(req);
 
   switch (method) {
     case 'GET':
