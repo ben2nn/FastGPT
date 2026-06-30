@@ -4,7 +4,7 @@ import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/nex
 import type { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type';
 import { parsePaginationRequest } from '@fastgpt/service/common/api/pagination';
 import { NextAPI } from '@/service/middleware/entry';
-import { connectToDatabase } from '@/service/common/mongo';
+
 import { MongoApp } from '@fastgpt/service/core/app/schema';
 import { ChatItemValueTypeEnum } from '@fastgpt/global/core/chat/constants';
 import format from 'date-fns/format';
@@ -24,8 +24,6 @@ async function handler(
   req: ApiRequestProps<getChatHistoriesBody>,
   res: ApiResponseType<any>
 ): Promise<getChatHistoriesResponse> {
-  await connectToDatabase();
-
   const dceHappy = req.headers['dce-happy'];
 
   if (!dceHappy || dceHappy != process.env.DCE_HAPPY) {

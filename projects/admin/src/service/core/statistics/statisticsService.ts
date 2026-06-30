@@ -4,7 +4,6 @@
  */
 
 import type { Pool, QueryResult, QueryResultRow } from 'pg';
-import { PoolClient } from 'pg';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { getPostgresPool } from '@/service/common/postgres';
 import type { SqlQuery } from './queryBuilder';
@@ -401,16 +400,13 @@ export class StatisticsService {
   }
 
   /**
-   * 关闭数据库连接
+   * 重置服务状态
+   * 注意：不会关闭共享的全局连接池，因为其他模块（如任务系统）也在使用
    */
-  async close(): Promise<void> {
-    if (this.pool) {
-      addLog.info('关闭统计服务连接池...');
-      await this.pool.end();
-      this.pool = null;
-      this.isInitialized = false;
-      addLog.info('统计服务连接池已关闭');
-    }
+  reset(): void {
+    this.pool = null;
+    this.isInitialized = false;
+    addLog.info('统计服务已重置');
   }
 }
 

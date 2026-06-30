@@ -1,9 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
-import { connectToDatabase } from '@/service/common/mongo';
+
 import { MongoApp } from '@fastgpt/service/core/app/schema';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
-import { authAdmin } from '@/service/common/auth';
+import { authAdmin } from '@/service/support/permission/auth';
 import { ToolTypeList, AppFolderTypeList } from '@fastgpt/global/core/app/constants';
 import { MongoOutLink } from '@fastgpt/service/support/outLink/schema';
 import { MongoOpenApi } from '@fastgpt/service/support/openapi/schema';
@@ -12,8 +12,6 @@ const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await connectToDatabase();
-
     if (req.method !== 'POST') {
       return res.status(405).json({ success: false, error: 'Method not allowed' });
     }

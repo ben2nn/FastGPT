@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { testConnection } from '@/service/common/postgres';
-import { getInitializationStatus, InitializationStatus } from '@/service/init';
+import { getInitializationStatus, InitializationStatus } from '@/service/common/task';
 
 /**
  * 健康检查 API

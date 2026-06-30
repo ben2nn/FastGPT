@@ -3,7 +3,7 @@ import { type ApiRequestProps } from '@fastgpt/service/type/next';
 import { NextAPI } from '@/service/middleware/entry';
 import { clearCookie } from '@fastgpt/service/support/permission/auth/common';
 import { delUserAllSession } from '@fastgpt/service/support/user/session';
-import { authAdmin } from '@/service/common/auth';
+import { authAdmin } from '@/service/support/permission/auth';
 
 async function handler(req: ApiRequestProps, res: NextApiResponse) {
   if (req.method !== 'POST') {

@@ -1,6 +1,5 @@
-import { connectToDatabase } from '@/service/common/mongo';
 import { MongoUser } from '@fastgpt/service/support/user/schema';
-import { authAdmin } from '@/service/common/auth';
+import { authAdmin } from '@/service/support/permission/auth';
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { NextAPI } from '@/service/middleware/entry';
@@ -22,8 +21,6 @@ async function handler(req: ApiRequestProps, res: ApiResponseType<VerifyResponse
   }
 
   try {
-    await connectToDatabase();
-
     // 使用 Redis Session 认证（与 app 项目统一）
     const { userId } = await authAdmin(req);
 

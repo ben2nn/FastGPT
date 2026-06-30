@@ -1,5 +1,5 @@
 import { NextEntry } from '@fastgpt/service/common/middle/entry';
-import { ensureInitialized } from '@/service/init';
+import { ensureInitialized } from '@/service/common/task';
 
 /**
  * Admin 项目的 API 中间件入口

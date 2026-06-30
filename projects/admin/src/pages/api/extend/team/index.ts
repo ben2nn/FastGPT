@@ -1,4 +1,3 @@
-import { connectToDatabase } from '@/service/common/mongo';
 import { MongoTeam } from '@fastgpt/service/support/user/team/teamSchema';
 import { MongoTeamMember } from '@fastgpt/service/support/user/team/teamMemberSchema';
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
@@ -7,7 +6,6 @@ import { NextAPI } from '@/service/middleware/entry';
 
 async function handler(req: ApiRequestProps, res: ApiResponseType<any>) {
   const { method } = req;
-  await connectToDatabase();
 
   switch (method) {
     case 'GET':

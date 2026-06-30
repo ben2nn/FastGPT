@@ -11,7 +11,7 @@
 
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { jsonRes } from '@fastgpt/service/common/response';
-import { connectToDatabase } from '@/service/common/mongo';
+import { connectToMongo } from '@/service/common/mongo';
 import { connectionMongo } from '@fastgpt/service/common/mongo';
 import { checkPostgresHealth } from '@/service/common/postgres';
 import type { HealthResponse } from '@/types/index';
@@ -25,7 +25,7 @@ async function checkMongoDBHealth(): Promise<{ connected: boolean; latency: numb
     const startTime = Date.now();
 
     // 确保已连接
-    await connectToDatabase();
+    await connectToMongo();
 
     // 使用 @fastgpt/service 的 MongoDB 连接
     const db = connectionMongo;

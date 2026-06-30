@@ -1,9 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
-import { connectToDatabase } from '@/service/common/mongo';
+
 import { MongoApp } from '@fastgpt/service/core/app/schema';
 import { MongoAppVersion } from '@fastgpt/service/core/app/version/schema';
-import { authAdmin } from '@/service/common/auth';
+import { authAdmin } from '@/service/support/permission/auth';
 import { MongoOutLink } from '@fastgpt/service/support/outLink/schema';
 import { MongoOpenApi } from '@fastgpt/service/support/openapi/schema';
 import { getNanoid } from '@fastgpt/global/common/string/tools';
@@ -12,7 +12,6 @@ import { Types } from 'mongoose';
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     // 1. 连接数据库
-    await connectToDatabase();
 
     // 2. 验证请求方法
     if (req.method !== 'POST') {

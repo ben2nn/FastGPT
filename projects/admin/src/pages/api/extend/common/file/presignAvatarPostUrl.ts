@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
-import { connectToDatabase } from '@/service/common/mongo';
-import { authAdmin } from '@/service/common/auth';
+
+import { authAdmin } from '@/service/support/permission/auth';
 import { type CreatePostPresignedUrlResult } from '@fastgpt/service/common/s3/type';
 import { getS3AvatarSource } from '@fastgpt/service/common/s3/sources/avatar';
 
@@ -10,7 +10,6 @@ async function handler(
   res: NextApiResponse<CreatePostPresignedUrlResult | { error: string }>
 ) {
   try {
-    await connectToDatabase();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     const authResult = await authAdmin(req);

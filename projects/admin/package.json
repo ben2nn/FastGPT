@@ -3,7 +3,7 @@
   "version": "4.14.6",
   "private": false,
   "scripts": {
-    "dev": "npm run build:workers && next dev",
+    "dev": "next dev",
     "dev:init": "npm run build:workers && next dev & node scripts/init-system.js",
     "build": "npm run build:workers && next build && node scripts/copy-sql-files.js",
     "start": "next start",
@@ -82,6 +82,7 @@
     "zustand": "^4.3.5"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^15.5.6",
     "@babel/plugin-transform-private-methods": "^8.0.1",
     "@faker-js/faker": "^9.0.3",
     "@shelf/jest-mongodb": "^4.3.2",

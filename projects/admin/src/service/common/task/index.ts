@@ -1,16 +1,18 @@
 /**
- * 应用初始化服务
- * 负责初始化数据库表结构和加载初始数据
+ * 任务系统初始化编排
+ * 负责管理初始化状态，协调各子模块的初始化流程
+ *
+ * 包含：PostgreSQL 表结构创建、任务配置加载、任务管理器启动、初始化状态管理
  */
 
 import { addLog } from '@fastgpt/service/common/system/log';
-import { getPostgresPool, testConnection } from '@/service/common/postgres';
+import { testConnection } from '@/service/common/postgres';
+import { getPostgresPool } from '@/service/common/postgres';
 import { getSchemaStatements } from '@/service/sql';
 import { SystemError, ErrorType } from '@/service/common/errors';
-import { connectToDatabase } from '@/service/common/mongo';
 import { DEFAULT_TIMEZONE } from '@/web/common/constants';
-import { initS3Buckets } from '@fastgpt/service/common/s3/index';
-import { getInitConfig } from '@/service/common/system';
+
+// ==================== 初始化状态管理 ====================
 
 // 初始化状态枚举
 export enum InitializationStatus {
@@ -33,21 +35,11 @@ declare global {
   var __initializationState: InitializationState | undefined;
 }
 
-// 初始化全局状态
+// 初始化全局状态（惰性初始化，确保首次访问时已存在）
 if (typeof window === 'undefined' && !global.__initializationState) {
   global.__initializationState = {
     status: InitializationStatus.PENDING
   };
-
-  // 在服务器启动时立即开始初始化
-  // 使用 setImmediate 确保在事件循环的下一个周期执行，避免阻塞模块加载
-  // 这样可以在第一个请求到达前完成初始化
-  setImmediate(() => {
-    addLog.info('服务器启动，开始自动初始化...');
-    initializeDatabase().catch((error) => {
-      addLog.error('服务器启动时初始化失败', error as Error);
-    });
-  });
 }
 
 /**
@@ -62,185 +54,23 @@ export function getInitializationStatus(): InitializationState {
 
 /**
  * 等待初始化完成
- * 如果初始化尚未开始，则启动初始化
+ * 如果初始化尚未开始，则启动初始化；如果已失败则抛出错误
  */
 export async function ensureInitialized(): Promise<void> {
   if (typeof window !== 'undefined') {
     return;
   }
-
-  const state = global.__initializationState!;
-
-  // 如果已完成，直接返回
-  if (state.status === InitializationStatus.COMPLETED) {
-    return;
-  }
-
-  // 如果失败，抛出错误
-  if (state.status === InitializationStatus.FAILED) {
-    throw state.error || new Error('初始化失败');
-  }
-
-  // 如果正在进行中，等待完成
-  if (state.status === InitializationStatus.IN_PROGRESS && state.initPromise) {
-    return state.initPromise;
-  }
-
-  // 如果是待初始化状态，开始初始化
-  if (state.status === InitializationStatus.PENDING) {
-    return initializeDatabase();
-  }
+  // initializeDatabase() 内部已有完整的状态守卫（COMPLETED/IN_PROGRESS/FAILED）
+  // 不需要外层重复检查，避免 TOCTOU 竞态
+  await initializeDatabase();
 }
 
-/**
- * 初始化 MongoDB 连接
- * 如果未配置 MongoDB，则跳过
- */
-async function initializeMongoDB(): Promise<void> {
-  const mongoUrl = process.env.MONGODB || process.env.MONGODB_URI;
-
-  if (!mongoUrl) {
-    addLog.warn('未配置 MongoDB 连接地址，跳过 MongoDB 初始化');
-    addLog.warn('如需使用数据采集功能，请配置环境变量 MONGODB 或 MONGODB_URI');
-    return;
-  }
-
-  try {
-    addLog.info('开始连接 MongoDB');
-    await connectToDatabase();
-    addLog.info('MongoDB 连接成功');
-  } catch (error) {
-    addLog.error('MongoDB 初始化失败', error as Error);
-    addLog.warn('数据采集功能将不可用');
-    // 不抛出错误，允许应用继续运行（只是数据采集功能不可用）
-  }
-}
-
-/**
- * 初始化 S3 存储连接
- * 如果未配置 S3 或 S3 不可用，则跳过
- */
-async function initializeS3(): Promise<void> {
-  const s3Endpoint = process.env.STORAGE_S3_ENDPOINT;
-
-  if (!s3Endpoint) {
-    addLog.info('未配置 S3 存储地址，跳过 S3 初始化');
-    addLog.info('如需使用文件导入导出功能（源文件关联），请配置环境变量 STORAGE_S3_ENDPOINT');
-    return;
-  }
-
-  try {
-    addLog.info(`开始初始化 S3 存储: ${s3Endpoint}`);
-
-    // 延迟初始化，避免阻塞应用启动
-    // S3 bucket 的 ensureBucket 是异步的，失败不会阻塞
-    initS3Buckets();
-
-    addLog.info('S3 存储初始化已启动（bucket 检查在后台进行）');
-  } catch (error) {
-    // S3 初始化失败不影响核心功能，只记录警告
-    const errMsg = error instanceof Error ? error.message : String(error);
-    addLog.warn(`S3 存储初始化失败: ${errMsg}`);
-    addLog.warn('文件导入导出功能（源文件关联）将不可用');
-    // 不抛出错误，允许应用继续运行
-  }
-}
-
-/**
- * 初始化数据库
- * 创建表结构并加载初始数据
- */
-export async function initializeDatabase(): Promise<void> {
-  if (typeof window !== 'undefined') {
-    return;
-  }
-
-  const state = global.__initializationState!;
-
-  // 防止并发初始化
-  if (state.status === InitializationStatus.IN_PROGRESS) {
-    if (state.initPromise) {
-      return state.initPromise;
-    }
-  }
-
-  // 如果已完成，直接返回
-  if (state.status === InitializationStatus.COMPLETED) {
-    addLog.info('数据库已初始化，跳过');
-    return;
-  }
-
-  // 创建初始化 Promise
-  const initPromise = (async () => {
-    state.status = InitializationStatus.IN_PROGRESS;
-    state.startTime = new Date();
-    state.error = undefined;
-
-    try {
-      addLog.info('开始初始化PG数据库');
-
-      // 1. 测试 PostgreSQL 连接
-      const connected = await testConnection();
-      if (!connected) {
-        throw new SystemError(ErrorType.POSTGRES_CONNECTION_ERROR, 'PostgreSQL 连接失败');
-      }
-
-      // 2. 创建表结构（必须先完成）
-      await createTables();
-      addLog.info('初始化数据库表结构完成');
-
-      // 3. 加载初始任务配置（依赖表结构）
-      await loadInitialTaskConfigs();
-      addLog.info('初始任务配置加载完成');
-
-      // 4. 初始化并启动任务管理器
-      await initializeTaskManager();
-      addLog.info('任务管理器初始化完成');
-
-      // 5. 连接 MongoDB（如果配置了）
-      await initializeMongoDB();
-      addLog.info('MongoDB初始化完成');
-
-      // 5.1 加载系统配置和模型数据（依赖 MongoDB 连接）
-      // 如果 MongoDB 未连接或加载失败，不影响核心功能
-      // 使用动态导入，与 app 项目 instrumentation.ts 保持一致
-      try {
-        const { loadSystemModels } = await import('@fastgpt/service/core/ai/config/utils');
-        await Promise.all([getInitConfig(), loadSystemModels()]);
-        addLog.info('系统配置和模型数据加载完成');
-      } catch (modelInitError) {
-        addLog.warn('系统配置或模型数据加载失败，管理后台模型功能将不可用');
-        addLog.warn(String(modelInitError));
-      }
-
-      // 6. 初始化 S3 存储（如果配置了）
-      await initializeS3();
-      addLog.info('S3存储初始化完成');
-
-      state.status = InitializationStatus.COMPLETED;
-      state.endTime = new Date();
-      addLog.info(
-        `PG数据库初始化完成，耗时 ${state.endTime.getTime() - state.startTime!.getTime()}ms`
-      );
-    } catch (error) {
-      state.status = InitializationStatus.FAILED;
-      state.error = error as Error;
-      state.endTime = new Date();
-      addLog.error('数据库初始化失败', error as Error);
-      throw error;
-    } finally {
-      state.initPromise = undefined;
-    }
-  })();
-
-  state.initPromise = initPromise;
-  return initPromise;
-}
+// ==================== 数据库表结构创建 ====================
 
 /**
  * 创建数据库表和索引
  */
-async function createTables(): Promise<void> {
+export async function createTables(): Promise<void> {
   const pool = getPostgresPool();
   const client = await pool.connect();
 
@@ -254,8 +84,8 @@ async function createTables(): Promise<void> {
     for (const tableName of requiredTables) {
       const result = await client.query(
         `SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_schema = 'public' 
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public'
           AND table_name = $1
         )`,
         [tableName]
@@ -302,9 +132,14 @@ async function createTables(): Promise<void> {
     await client.query('COMMIT');
     addLog.info('数据库表结构创建成功，事务已提交');
   } catch (error) {
-    // 回滚事务
-    await client.query('ROLLBACK');
-    addLog.error('创建表失败，事务已回滚', error as Error);
+    // 回滚事务（连接丢失时 ROLLBACK 也可能失败，需独立捕获）
+    try {
+      await client.query('ROLLBACK');
+      addLog.info('创建表失败，事务已回滚');
+    } catch (rollbackError) {
+      addLog.error('创建表事务回滚失败', rollbackError as Error);
+    }
+    addLog.error('创建表失败', error as Error);
     throw new SystemError(
       ErrorType.DATABASE_ERROR,
       `创建表失败: ${error instanceof Error ? error.message : String(error)}`,
@@ -315,10 +150,12 @@ async function createTables(): Promise<void> {
   }
 }
 
+// ==================== 任务配置加载 ====================
+
 /**
  * 加载初始任务配置到数据库
  */
-async function loadInitialTaskConfigs(): Promise<void> {
+export async function loadInitialTaskConfigs(): Promise<void> {
   const pool = getPostgresPool();
   const client = await pool.connect();
 
@@ -328,8 +165,8 @@ async function loadInitialTaskConfigs(): Promise<void> {
     // 检查任务配置表是否存在
     const tableExistsResult = await client.query(`
       SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public'
         AND table_name = 'task_configs'
       )
     `);
@@ -419,11 +256,13 @@ async function loadInitialTaskConfigs(): Promise<void> {
   }
 }
 
+// ==================== 任务管理器启动 ====================
+
 /**
  * 初始化任务管理器
- * 在数据库初始化完成后调用
+ * 在数据库表结构和任务配置加载完成后调用
  */
-async function initializeTaskManager(): Promise<void> {
+export async function initializeTaskManager(): Promise<void> {
   try {
     addLog.info('开始初始化任务管理器');
 
@@ -447,8 +286,90 @@ async function initializeTaskManager(): Promise<void> {
   }
 }
 
+// ==================== 初始化编排入口 ====================
+
 /**
- * 重置数据库初始化状态
+ * 初始化任务系统及配置
+ * 创建表结构 → 加载任务配置 → 启动任务管理器
+ *
+ * 注意：MongoDB、S3、系统配置由 instrumentation.ts 负责，在此之前已就绪
+ */
+export async function initializeDatabase(): Promise<void> {
+  if (typeof window !== 'undefined') {
+    return;
+  }
+
+  // 惰性初始化全局状态（防止浏览器端先加载模块导致 undefined）
+  if (!global.__initializationState) {
+    global.__initializationState = { status: InitializationStatus.PENDING };
+  }
+
+  const state = global.__initializationState;
+
+  // 已完成，直接返回
+  if (state.status === InitializationStatus.COMPLETED) {
+    return;
+  }
+
+  // 已失败，抛出错误供调用方处理
+  if (state.status === InitializationStatus.FAILED) {
+    throw state.error || new Error('初始化失败');
+  }
+
+  // 正在进行中，等待同一份 Promise（不存在 TOCTOU：单线程下 status 不会在检查后突变）
+  if (state.initPromise) {
+    return state.initPromise;
+  }
+
+  // 先赋值再创建 IIFE，确保 IIFE 同步执行时并发调用者已能通过 initPromise 等待
+  const initPromise = (async () => {
+    state.status = InitializationStatus.IN_PROGRESS;
+    state.startTime = new Date();
+    state.error = undefined;
+
+    try {
+      addLog.info('开始初始化系统');
+
+      // 1. PostgreSQL 连接测试
+      const connected = await testConnection();
+      if (!connected) {
+        throw new SystemError(ErrorType.POSTGRES_CONNECTION_ERROR, 'PostgreSQL 连接失败');
+      }
+
+      // 2. 创建表结构
+      await createTables();
+      addLog.info('PostgreSQL 初始化完成');
+
+      // 3. 加载初始任务配置（依赖表结构）
+      await loadInitialTaskConfigs();
+      addLog.info('初始任务配置加载完成');
+
+      // 4. 启动任务管理器（依赖任务配置）
+      await initializeTaskManager();
+      addLog.info('任务管理器初始化完成');
+
+      state.status = InitializationStatus.COMPLETED;
+      state.endTime = new Date();
+      addLog.info(`系统初始化完成，耗时 ${state.endTime.getTime() - state.startTime!.getTime()}ms`);
+    } catch (error) {
+      state.status = InitializationStatus.FAILED;
+      state.error = error as Error;
+      state.endTime = new Date();
+      addLog.error('系统初始化失败', error as Error);
+      throw error;
+    } finally {
+      // 成功/失败后清除引用，释放内存（失败的等待者已通过 Promise rejection 收到错误）
+      state.initPromise = undefined;
+    }
+  })();
+
+  // 先赋值再返回，确保并发调用者能立即拿到同一个 Promise
+  state.initPromise = initPromise;
+  return initPromise;
+}
+
+/**
+ * 重置初始化状态
  * 用于测试或强制重新初始化
  */
 export function resetInitializationState(): void {
@@ -456,6 +377,6 @@ export function resetInitializationState(): void {
     global.__initializationState = {
       status: InitializationStatus.PENDING
     };
-    addLog.info('数据库初始化状态已重置');
+    addLog.info('系统初始化状态已重置');
   }
 }

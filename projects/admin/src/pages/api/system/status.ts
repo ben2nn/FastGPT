@@ -1,6 +1,6 @@
 import type { ApiRequestProps, ApiResponseType } from '@fastgpt/service/type/next';
 import { NextAPI } from '@/service/middleware/entry';
-import { getInitializationStatus } from '@/service/init';
+import { getInitializationStatus } from '@/service/common/task';
 import { testConnection } from '@/service/common/postgres';
 
 /**

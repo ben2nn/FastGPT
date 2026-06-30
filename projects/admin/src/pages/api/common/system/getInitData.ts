@@ -1,7 +1,7 @@
 import type { NextApiResponse } from 'next';
 import { type ApiRequestProps } from '@fastgpt/service/type/next';
 import { NextAPI } from '@/service/middleware/entry';
-import { authAdmin } from '@/service/common/auth';
+import { authAdmin } from '@/service/support/permission/auth';
 import type { SystemDefaultModelType, SystemModelItemType } from '@fastgpt/service/core/ai/type';
 import type { FastGPTFeConfigsType } from '@fastgpt/global/common/system/types';
 import type { SubPlanType } from '@fastgpt/global/support/wallet/sub/type';

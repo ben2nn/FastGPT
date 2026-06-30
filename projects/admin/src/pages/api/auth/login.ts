@@ -1,4 +1,3 @@
-import { connectToDatabase } from '@/service/common/mongo';
 import { MongoUser } from '@fastgpt/service/support/user/schema';
 import { createUserSession } from '@fastgpt/service/support/user/session';
 import { setCookie } from '@fastgpt/service/support/permission/auth/common';
@@ -35,8 +34,6 @@ async function handler(
   }
 
   try {
-    await connectToDatabase();
-
     const { username, password } = req.body;
 
     // 验证请求参数

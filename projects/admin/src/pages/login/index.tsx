@@ -114,8 +114,8 @@ export async function getServerSideProps(context: any) {
       // 验证 token 是否有效，避免无效 token 导致重定向循环
       try {
         const { authJWT } = await import('@fastgpt/service/support/permission/controller');
-        const { connectToDatabase } = await import('@/service/common/mongo');
-        await connectToDatabase();
+        const { connectToMongo } = await import('@/service/common/mongo');
+        await connectToMongo();
         await authJWT(token);
         // token 有效，重定向到 dashboard
         return {

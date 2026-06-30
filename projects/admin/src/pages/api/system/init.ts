@@ -3,7 +3,7 @@ import {
   initializeDatabase,
   resetInitializationState,
   getInitializationStatus
-} from '@/service/init';
+} from '@/service/common/task';
 import { addLog } from '@fastgpt/service/common/system/log';
 
 /**

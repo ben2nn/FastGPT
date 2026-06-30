@@ -1,4 +1,3 @@
-import { connectToDatabase } from '@/service/common/mongo';
 import { hashStr } from '@fastgpt/global/common/string/tools';
 import { MongoUser } from '@fastgpt/service/support/user/schema';
 import { MongoTeam } from '@fastgpt/service/support/user/team/teamSchema';
@@ -11,8 +10,6 @@ async function handler(req: ApiRequestProps, res: ApiResponseType<any>) {
     query: { id },
     method
   } = req;
-
-  await connectToDatabase();
 
   switch (method) {
     case 'GET':

@@ -1,15 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
-import { connectToDatabase } from '@/service/common/mongo';
+
 import { MongoSystemModel } from '@fastgpt/service/core/ai/config/schema';
-import { authAdmin } from '@/service/common/auth';
+import { authAdmin } from '@/service/support/permission/auth';
 
 const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     // 1. 连接数据库
-    await connectToDatabase();
 
     // 2. 验证请求方法
     if (req.method !== 'POST') {

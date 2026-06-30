@@ -1,5 +1,5 @@
 // pages/api/support/user/index.js
-import { connectToDatabase } from '@/service/common/mongo';
+
 import { MongoUser } from '@fastgpt/service/support/user/schema';
 import { MongoTeam } from '@fastgpt/service/support/user/team/teamSchema';
 import { MongoTeamMember } from '@fastgpt/service/support/user/team/teamMemberSchema';
@@ -11,7 +11,6 @@ import { NextAPI } from '@/service/middleware/entry';
 
 async function handler(req: ApiRequestProps, res: ApiResponseType<any>) {
   const { method } = req;
-  await connectToDatabase();
 
   /**
   const { userId } = await authCert({ req, authToken: true });
