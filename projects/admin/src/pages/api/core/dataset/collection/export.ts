@@ -1,12 +1,9 @@
 import { NextAPI } from '@/service/middleware/entry';
-import { authChatCrud, authCollectionInChat } from '@/service/support/permission/auth/chat';
-import { DatasetErrEnum } from '@fastgpt/global/common/error/code/dataset';
 import { ReadPermissionVal } from '@fastgpt/global/support/permission/constant';
 import { useIPFrequencyLimit } from '@fastgpt/service/common/middle/reqFrequencyLimit';
 import { readFromSecondary } from '@fastgpt/service/common/mongo/utils';
 import { responseWriteController } from '@fastgpt/service/common/response';
 import { addLog } from '@fastgpt/service/common/system/log';
-import { getCollectionWithDataset } from '@fastgpt/service/core/dataset/controller';
 import { MongoDatasetData } from '@fastgpt/service/core/dataset/data/schema';
 import { authDatasetCollection } from '@fastgpt/service/support/permission/dataset/auth';
 import { type ApiRequestProps } from '@fastgpt/service/type/next';
@@ -20,70 +17,18 @@ async function handler(req: ApiRequestProps, res: NextApiResponse) {
   const parseBody = ExportCollectionBodySchema.parse(req.body);
   const collectionId = parseBody.collectionId;
 
-  const {
-    collection,
-    teamId: userTeamId,
-    chatTime
-  } = await (async () => {
-    if (!('chatItemDataId' in parseBody)) {
-      const result = await authDatasetCollection({
-        req,
-        authToken: true,
-        authApiKey: true,
-        collectionId,
-        per: ReadPermissionVal
-      });
-      return {
-        ...result,
-        chatTime: undefined
-      };
-    }
-
-    const { appId, chatId, chatItemDataId, shareId, outLinkUid, teamId, teamToken, chatTime } =
-      parseBody;
-    /*
-      1. auth chat read permission
-      2. auth collection quote in chat
-      3. auth outlink open show quote
-    */
-    const [authRes, collection] = await Promise.all([
-      authChatCrud({
-        req,
-        authToken: true,
-        appId,
-        chatId,
-        shareId,
-        outLinkUid,
-        teamId,
-        teamToken
-      }),
-      getCollectionWithDataset(collectionId),
-      authCollectionInChat({ appId, chatId, chatItemDataId, collectionIds: [collectionId] })
-    ]);
-
-    if (!authRes.canDownloadSource) {
-      return Promise.reject(DatasetErrEnum.unAuthDatasetFile);
-    }
-
-    return {
-      ...authRes,
-      collection,
-      chatTime
-    };
-  })();
+  const { collection, teamId: userTeamId } = await authDatasetCollection({
+    req,
+    authToken: true,
+    authApiKey: true,
+    collectionId,
+    per: ReadPermissionVal
+  });
 
   const where = {
     teamId: userTeamId,
     datasetId: collection.datasetId,
-    collectionId,
-    ...(chatTime
-      ? {
-          $or: [
-            { updateTime: { $lt: new Date(chatTime) } },
-            { history: { $elemMatch: { updateTime: { $lt: new Date(chatTime) } } } }
-          ]
-        }
-      : {})
+    collectionId
   };
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8;');
