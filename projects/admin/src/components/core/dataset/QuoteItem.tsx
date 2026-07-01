@@ -13,7 +13,7 @@ import {
   SearchScoreTypeEnum,
   SearchScoreTypeMap
 } from '@fastgpt/global/core/dataset/constants';
-import type { readCollectionSourceBody } from '@/pages/api/extend/dataset/collection/read';
+import type { readCollectionSourceBody } from '@/pages/api/core/dataset/collection/read';
 import Markdown from '@/components/Markdown';
 
 const InputDataModal = dynamic(() => import('@/pageComponents/dataset/detail/InputDataModal'));

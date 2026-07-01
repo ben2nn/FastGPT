@@ -30,22 +30,30 @@ export const getWebDefaultEmbeddingModel = (embeddingList: EmbeddingModelItemTyp
 
 export const downloadFetch = async ({
   url,
-  fileName,
-  type = 'application/octet-stream'
+  filename,
+  body
 }: {
   url: string;
-  fileName: string;
-  type?: string;
+  filename: string;
+  body?: Record<string, any>;
 }) => {
-  const response = await fetch(url, {
-    credentials: 'include' // 通过 fastgpt_token cookie 认证
-  });
+  const fetchOptions: RequestInit = {
+    credentials: 'include'
+  };
+
+  if (body) {
+    fetchOptions.method = 'POST';
+    fetchOptions.headers = { 'Content-Type': 'application/json' };
+    fetchOptions.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, fetchOptions);
   if (!response.ok) throw new Error('下载失败');
   const blob = await response.blob();
   const downloadUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = downloadUrl;
-  a.download = fileName;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(downloadUrl);
 };

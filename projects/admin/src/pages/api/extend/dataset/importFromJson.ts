@@ -12,9 +12,13 @@ import formidable from 'formidable';
 import { readFile } from 'fs/promises';
 import JSZip from 'jszip';
 import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
-import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
-import { connectPg } from '@fastgpt/service/common/vectorDB/pg/controller';
-import { DatasetVectorTableName } from '@fastgpt/service/common/vectorDB/constants';
+import {
+  DatasetCollectionTypeEnum,
+  TrainingModeEnum
+} from '@fastgpt/global/core/dataset/constants';
+import { MongoDatasetTraining } from '@fastgpt/service/core/dataset/training/schema';
+import { createTrainingUsage } from '@fastgpt/service/support/wallet/usage/controller';
+import { UsageSourceEnum } from '@fastgpt/global/support/wallet/usage/constants';
 
 // 禁用默认 bodyParser，使用 formidable 处理文件上传
 export const config = {
@@ -87,10 +91,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       ? fields.ignoreFiles[0]
       : fields.ignoreFiles;
     const ignoreFiles = ignoreFilesRaw === 'true';
-    const ignoreVectorsRaw = Array.isArray(fields.ignoreVectors)
-      ? fields.ignoreVectors[0]
-      : fields.ignoreVectors;
-    const ignoreVectors = ignoreVectorsRaw === 'true';
+    const rebuildIndexRaw = Array.isArray(fields.rebuildIndex)
+      ? fields.rebuildIndex[0]
+      : fields.rebuildIndex;
+    const rebuildIndex = rebuildIndexRaw === 'true';
 
     // 获取上传的文件
     const fileField = files.file;
@@ -342,49 +346,62 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       'collectionTags'
     );
 
-    // 12. 导入向量数据（如果包含且不忽略）
-    let vectorsImported = 0;
-    const vectors = importData.vectors as
-      | Array<{
-          id: string;
-          vector: number[];
-          team_id: string;
-          dataset_id: string;
-          collection_id: string;
-        }>
-      | undefined;
-
-    if (!ignoreVectors && Array.isArray(vectors) && vectors.length > 0) {
+    // 12. 如果需要重建索引，为导入的数据创建训练任务
+    let rebuildTasksCount = 0;
+    if (rebuildIndex && datas.length > 0) {
       try {
-        const VECTOR_BATCH_SIZE = 500;
+        // 获取导入的数据集信息（用于获取 vectorModel 和 agentModel）
+        const importedDatasetIds = [...new Set(collections.map((c) => c.datasetId as string))];
+        const datasetDocs = await MongoDataset.find({
+          _id: { $in: importedDatasetIds }
+        })
+          .select('_id vectorModel agentModel')
+          .lean();
 
-        for (let i = 0; i < vectors.length; i += VECTOR_BATCH_SIZE) {
-          const batch = vectors.slice(i, i + VECTOR_BATCH_SIZE);
+        const datasetMap = new Map(datasetDocs.map((d) => [String(d._id), d]));
 
-          // 构建参数化 VALUES 子句
-          const params: unknown[] = [];
-          const placeholders = batch
-            .map((v, idx) => {
-              const mappedDatasetId = keepOriginalId
-                ? v.dataset_id
-                : idMap.get(v.dataset_id) || v.dataset_id;
-              const mappedCollectionId = keepOriginalId
-                ? v.collection_id
-                : idMap.get(v.collection_id) || v.collection_id;
+        // 创建训练账单
+        const firstDataset = datasetDocs[0];
+        if (firstDataset) {
+          const { usageId } = await createTrainingUsage({
+            teamId,
+            tmbId,
+            appName: '导入后重建索引',
+            billSource: UsageSourceEnum.training,
+            vectorModel: firstDataset.vectorModel,
+            agentModel: firstDataset.agentModel
+          });
 
-              const offset = idx * 4;
-              params.push(`[${v.vector.join(',')}]`, teamId, mappedDatasetId, mappedCollectionId);
-              return `($${offset + 1}::vector,$${offset + 2},$${offset + 3},$${offset + 4})`;
-            })
-            .join(',');
+          // 为每个数据创建训练任务
+          const trainingData = datas.map((data) => ({
+            teamId,
+            tmbId,
+            datasetId: data.datasetId as string,
+            collectionId: data.collectionId as string,
+            billId: usageId,
+            mode: TrainingModeEnum.chunk,
+            q: data.q as string,
+            a: data.a as string,
+            chunkIndex: (data.chunkIndex as number) || 0,
+            retryCount: 5
+          }));
 
-          const sql = `INSERT INTO ${DatasetVectorTableName} (vector, team_id, dataset_id, collection_id) VALUES ${placeholders} RETURNING id`;
-          const pg = await connectPg();
-          const result = await pg.query(sql, params);
-          vectorsImported += result.rowCount || 0;
+          // 分批插入训练任务
+          const TRAINING_BATCH_SIZE = 500;
+          for (let i = 0; i < trainingData.length; i += TRAINING_BATCH_SIZE) {
+            const batch = trainingData.slice(i, i + TRAINING_BATCH_SIZE);
+            try {
+              await MongoDatasetTraining.insertMany(batch, { ordered: false });
+              rebuildTasksCount += batch.length;
+            } catch (error) {
+              console.warn(`插入训练任务失败: ${(error as Error).message}`);
+            }
+          }
+
+          console.log(`已创建 ${rebuildTasksCount} 个重建索引训练任务`);
         }
       } catch (error) {
-        console.warn('导入向量数据失败:', (error as Error).message);
+        console.warn('创建重建索引任务失败:', (error as Error).message);
       }
     }
 
@@ -398,7 +415,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         dataTextsCount,
         collectionTagsCount,
         uploadedFilesCount: uploadedFileMap.size,
-        vectorsImported,
+        rebuildTasksCount: rebuildIndex ? rebuildTasksCount : undefined,
         ...(duplicateWarnings.length > 0 ? { warnings: duplicateWarnings } : {})
       }
     });

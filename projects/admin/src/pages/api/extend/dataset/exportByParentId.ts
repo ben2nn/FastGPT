@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
 
 import { findDatasetAndAllChildren } from '@fastgpt/service/core/dataset/controller';
+import { MongoDataset } from '@fastgpt/service/core/dataset/schema';
 import { MongoDatasetCollection } from '@fastgpt/service/core/dataset/collection/schema';
 import { MongoDatasetData } from '@fastgpt/service/core/dataset/data/schema';
 import { MongoDatasetDataText } from '@fastgpt/service/core/dataset/data/dataTextSchema';
@@ -12,8 +13,6 @@ import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
 import path from 'path';
 import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
 import { PassThrough } from 'stream';
-import { connectPg } from '@fastgpt/service/common/vectorDB/pg/controller';
-import { DatasetVectorTableName } from '@fastgpt/service/common/vectorDB/constants';
 
 const EXPORT_LIMIT = parseInt(process.env.EXPORT_LIMIT || '50000', 10);
 
@@ -34,16 +33,33 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 4. 获取并验证参数
-    const { parentId, includeFiles, includeVectors } = req.body;
-    if (!parentId || !/^[0-9a-fA-F]{24}$/.test(parentId)) {
-      return res.status(400).json({ error: 'Invalid parentId format' });
+    const { id, type, includeFiles } = req.body;
+    if (id && !/^[0-9a-fA-F]{24}$/.test(id)) {
+      return res.status(400).json({ error: 'Invalid id format' });
+    }
+    if (type && type !== 'dataset' && type !== 'folder' && type !== 'root') {
+      return res.status(400).json({ error: 'type 参数无效，必须是 dataset、folder 或 root' });
     }
 
-    // 5. 递归查找所有子数据集
-    const datasets = await findDatasetAndAllChildren({
-      teamId,
-      datasetId: parentId
-    });
+    // 5. 查找数据集
+    let datasets;
+    if (!id || type === 'root') {
+      // 根目录：导出该团队下所有数据集
+      datasets = await MongoDataset.find({ teamId, deleteTime: null }).lean();
+    } else if (type === 'dataset') {
+      // 只查找指定的数据集，不递归
+      const dataset = await MongoDataset.findOne({ _id: id, teamId }).lean();
+      if (!dataset) {
+        return res.status(404).json({ error: '数据集不存在' });
+      }
+      datasets = [dataset];
+    } else {
+      // folder 或未指定类型时，递归查找所有子数据集
+      datasets = await findDatasetAndAllChildren({
+        teamId,
+        datasetId: id
+      });
+    }
 
     const datasetIds = datasets.map((d) => d._id);
 
@@ -78,34 +94,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         .lean()
     ]);
 
-    // 8. 查询向量数据（如果需要）
-    let vectors: Array<{
-      id: string;
-      vector: number[];
-      team_id: string;
-      dataset_id: string;
-      collection_id: string;
-    }> = [];
-
-    if (includeVectors) {
-      try {
-        const pg = await connectPg();
-        const result = await pg.query(
-          `SELECT id, vector, team_id, dataset_id, collection_id
-          FROM ${DatasetVectorTableName}
-          WHERE dataset_id = ANY($1::text[])
-          LIMIT $2`,
-          [datasetIds.map(String), EXPORT_LIMIT]
-        );
-
-        vectors = result.rows;
-        console.log(`导出向量数据: ${vectors.length} 条`);
-      } catch (error) {
-        console.warn('导出向量数据失败:', (error as Error).message);
-      }
-    }
-
-    // 9. 组装导出数据
+    // 8. 组装导出数据
     const exportData = {
       version: '1.0',
       type: 'dataset',
@@ -115,11 +104,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       collections,
       datas,
       dataTexts,
-      collectionTags,
-      vectors: includeVectors ? vectors : undefined
+      collectionTags
     };
 
-    // 10. 根据是否包含源文件选择导出格式
+    // 9. 根据是否包含源文件选择导出格式
     if (includeFiles) {
       // 使用 archiver 流式创建 ZIP
       res.setHeader('Content-Type', 'application/zip');

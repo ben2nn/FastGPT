@@ -112,15 +112,15 @@ export const removeTeamMember = async (teamId: string, userId: string) => {
 
 // 知识库导出
 export const exportDataset = async (
-  parentId: string,
-  options?: { includeFiles?: boolean; includeVectors?: boolean }
+  id: string,
+  options?: { type?: string; includeFiles?: boolean }
 ) => {
-  const response = await authFetch(getWebReqUrl('/api/core/dataset/exportByParentId'), {
+  const response = await authFetch(getWebReqUrl('/api/extend/dataset/exportByParentId'), {
     method: 'POST',
     body: JSON.stringify({
-      parentId,
-      includeFiles: options?.includeFiles,
-      includeVectors: options?.includeVectors
+      id,
+      type: options?.type,
+      includeFiles: options?.includeFiles
     })
   });
   if (!response.ok) {
@@ -138,7 +138,7 @@ export const exportDataset = async (
 
 // 知识库导入
 export const importDataset = async (formData: FormData) => {
-  const response = await fetch(getWebReqUrl('/api/core/dataset/importFromJson'), {
+  const response = await fetch(getWebReqUrl('/api/extend/dataset/importFromJson'), {
     method: 'POST',
     body: formData
   });
@@ -260,27 +260,40 @@ export const importTools = async (
   return response.json();
 };
 
+// ==================== 应用管理 API ====================
+
+// 获取应用列表（按 parentId 获取，用于树形选择）
+export const fetchApps = async (parentId?: string | null, type?: 'workflow' | 'tool') => {
+  const response = await authFetch(getWebReqUrl('/api/extend/app/list'), {
+    method: 'POST',
+    body: JSON.stringify({ parentId: parentId || null, type })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || '获取应用列表失败');
+  }
+  return response.json();
+};
+
 // ==================== 知识库管理 API ====================
 
 // 获取知识库列表（所有团队）
 export const fetchDatasets = async (params?: {
+  parentId?: string | null;
   search?: string;
   teamId?: string;
   type?: string;
   page?: number;
   pageSize?: number;
 }) => {
-  const searchParams = new URLSearchParams();
-  if (params?.search) searchParams.set('search', params.search);
-  if (params?.teamId) searchParams.set('teamId', params.teamId);
-  if (params?.type) searchParams.set('type', params.type);
-  if (params?.page) searchParams.set('page', String(params.page));
-  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
-
-  const qs = searchParams.toString();
-  const url = getWebReqUrl(`/api/core/dataset/list${qs ? `?${qs}` : ''}`);
-
-  const response = await authFetch(url);
+  const response = await authFetch(getWebReqUrl('/api/core/dataset/list'), {
+    method: 'POST',
+    body: JSON.stringify({
+      parentId: params?.parentId,
+      type: params?.type,
+      searchKey: params?.search
+    })
+  });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.error || '获取知识库列表失败');

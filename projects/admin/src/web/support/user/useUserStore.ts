@@ -6,6 +6,7 @@ import { create, devtools, immer } from '@fastgpt/web/common/zustand';
 
 type UserInfoType = {
   username: string;
+  language?: string;
   team?: {
     teamId: string;
     teamName: string;
@@ -24,6 +25,7 @@ type State = {
       maxUploadFileSize?: number;
     };
   } | null;
+  updateUserInfo: (updates: Partial<UserInfoType>) => Promise<void>;
 };
 
 export const useUserStore = create<State>()(
@@ -40,7 +42,14 @@ export const useUserStore = create<State>()(
           }
         }
       },
-      teamPlanStatus: null
+      teamPlanStatus: null,
+      updateUserInfo: async (updates: Partial<UserInfoType>) => {
+        set((state) => {
+          if (state.userInfo) {
+            Object.assign(state.userInfo, updates);
+          }
+        });
+      }
     }))
   )
 );

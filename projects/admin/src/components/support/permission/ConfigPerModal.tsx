@@ -12,7 +12,7 @@ type ConfigPerModalProps = {
     defaultRole?: any;
     permission?: any;
     onGetCollaboratorList?: () => Promise<any>;
-    roleList?: any[];
+    roleList?: any;
     onUpdateCollaborators?: (props: any) => Promise<any>;
     onDelOneCollaborator?: (props: any) => Promise<any>;
     refreshDeps?: any[];

@@ -16,7 +16,7 @@ export async function register() {
         { connectSignoz },
         { initS3Buckets },
         { initializeDatabase },
-        { getInitConfig }
+        { getInitConfig, initGlobalVariables }
       ] = await Promise.all([
         import('@/service/common/mongo'),
         import('@fastgpt/service/common/vectorDB/controller'),
@@ -29,6 +29,9 @@ export async function register() {
 
       // 初始化可观测性
       connectSignoz();
+
+      // 初始化全局变量（HTTP 代理、用量处理函数等）
+      initGlobalVariables();
 
       // S3
       initS3Buckets();

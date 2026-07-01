@@ -5,7 +5,6 @@ import {
   Input,
   Switch,
   FormControl,
-  FormLabel,
   HStack,
   VStack,
   Text,
@@ -15,9 +14,14 @@ import {
 } from '@chakra-ui/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import MyIcon from '@fastgpt/web/components/common/Icon';
+import MySelect from '@fastgpt/web/components/common/MySelect';
+import Avatar from '@fastgpt/web/components/common/Avatar';
 import FillRowTabs from '@fastgpt/web/components/common/Tabs/FillRowTabs';
+import { useSystemStore } from '@/web/common/system/useSystemStore';
 import { ProtectedRoute } from '@/web/context/ProtectedRoute';
 import Layout from '@/web/context/Layout';
+import DatasetTreeSelect from '@/components/Select/DatasetTreeSelect';
+import AppTreeSelect from '@/components/Select/AppTreeSelect';
 import {
   exportDataset,
   importDataset,
@@ -28,7 +32,9 @@ import {
   exportModels,
   importModels,
   exportChannels,
-  importChannels
+  importChannels,
+  fetchDatasets,
+  fetchApps
 } from '@/web/core/extend/api';
 
 const MotionBox = motion(Box);
@@ -75,8 +81,9 @@ type ExportField = {
   label: string;
   placeholder: string;
   required?: boolean;
-  type?: 'input' | 'select';
+  type?: 'input' | 'select' | 'datasetSelect' | 'appSelect' | 'providerSelect';
   options?: { value: string; label: string }[];
+  filterType?: 'workflow' | 'tool';
 };
 
 type TabConfig = {
@@ -88,9 +95,8 @@ type TabConfig = {
   importFields?: ExportField[];
   showKeepOriginalId?: boolean;
   showIncludeFiles?: boolean;
-  showIncludeVectors?: boolean;
   showIgnoreFiles?: boolean;
-  showIgnoreVectors?: boolean;
+  showRebuildIndex?: boolean;
   exportDescription?: string;
   importDescription?: string;
   importResultLabels: Record<string, string>;
@@ -112,16 +118,25 @@ const TAB_CONFIGS: TabConfig[] = [
     exportTitle: '备份知识库',
     importTitle: '还原知识库',
     exportFields: [
-      { key: 'parentId', label: 'parentId', placeholder: '输入知识库或文件夹 ID', required: true }
+      {
+        key: 'parentId',
+        label: '选择知识库',
+        placeholder: '请选择要备份的知识库或文件夹',
+        type: 'datasetSelect'
+      }
     ],
     importFields: [
-      { key: 'targetParentId', label: '目标父文件夹 ID', placeholder: '留空则导入到根目录' }
+      {
+        key: 'targetParentId',
+        label: '目标位置',
+        placeholder: '留空则导入到根目录',
+        type: 'datasetSelect'
+      }
     ],
     showKeepOriginalId: true,
     showIncludeFiles: true,
-    showIncludeVectors: true,
     showIgnoreFiles: true,
-    showIgnoreVectors: true,
+    showRebuildIndex: true,
     importResultLabels: {
       datasetsCount: '数据集',
       collectionsCount: '集合',
@@ -129,7 +144,7 @@ const TAB_CONFIGS: TabConfig[] = [
       dataTextsCount: '全文索引',
       collectionTagsCount: '标签',
       uploadedFilesCount: '源文件',
-      vectorsImported: '向量'
+      rebuildTasksCount: '重建索引'
     }
   },
   {
@@ -138,10 +153,23 @@ const TAB_CONFIGS: TabConfig[] = [
     exportTitle: '备份工作流',
     importTitle: '还原工作流',
     exportFields: [
-      { key: 'parentId', label: 'parentId', placeholder: '输入工作流或文件夹 ID', required: true }
+      {
+        key: 'parentId',
+        label: '选择工作流',
+        placeholder: '请选择要备份的工作流或文件夹',
+        type: 'appSelect',
+        required: true,
+        filterType: 'workflow'
+      }
     ],
     importFields: [
-      { key: 'targetParentId', label: '目标父文件夹 ID', placeholder: '留空则导入到根目录' }
+      {
+        key: 'targetParentId',
+        label: '目标位置',
+        placeholder: '留空则导入到根目录',
+        type: 'appSelect',
+        filterType: 'workflow'
+      }
     ],
     showKeepOriginalId: true,
     importResultLabels: { appsCount: '应用', versionsCount: '版本' }
@@ -151,9 +179,23 @@ const TAB_CONFIGS: TabConfig[] = [
     icon: 'common/toolkit',
     exportTitle: '备份工具',
     importTitle: '还原工具',
-    exportFields: [{ key: 'parentId', label: 'parentId', placeholder: '留空导出全部工具' }],
+    exportFields: [
+      {
+        key: 'parentId',
+        label: '选择工具',
+        placeholder: '留空导出全部工具',
+        type: 'appSelect',
+        filterType: 'tool'
+      }
+    ],
     importFields: [
-      { key: 'targetParentId', label: '目标父文件夹 ID', placeholder: '留空则导入到根目录' }
+      {
+        key: 'targetParentId',
+        label: '目标位置',
+        placeholder: '留空则导入到根目录',
+        type: 'appSelect',
+        filterType: 'tool'
+      }
     ],
     showKeepOriginalId: true,
     importResultLabels: { appsCount: '应用', versionsCount: '版本' }
@@ -164,7 +206,7 @@ const TAB_CONFIGS: TabConfig[] = [
     exportTitle: '备份模型配置',
     importTitle: '还原模型配置',
     exportFields: [
-      { key: 'provider', label: '提供商', placeholder: '如 openai、anthropic' },
+      { key: 'provider', label: '提供商', placeholder: '全部提供商', type: 'providerSelect' },
       {
         key: 'modelType',
         label: '模型类型',
@@ -182,24 +224,65 @@ const TAB_CONFIGS: TabConfig[] = [
     exportTitle: '备份渠道',
     importTitle: '还原渠道',
     exportFields: [],
-    exportDescription: '导出所有渠道配置（不含 API Key）',
+    exportDescription: '导出所有渠道配置',
     showKeepOriginalId: true,
     importDescription: '按渠道名称匹配：已存在的渠道会更新，不存在的会创建',
     importResultLabels: { insertedCount: '新增', updatedCount: '更新', failedCount: '失败' }
   }
 ];
 
+// ========== 通用 Tab 内容 ==========
+
+// 获取知识库列表
+const getDatasetList = async (parentId?: string | null) => {
+  const result = await fetchDatasets({ parentId: parentId || null });
+  return Array.isArray(result?.data)
+    ? result.data
+    : Array.isArray(result?.list)
+      ? result.list
+      : Array.isArray(result)
+        ? result
+        : [];
+};
+
+// 获取应用列表
+const getAppList = async (parentId?: string | null, filterType?: 'workflow' | 'tool') => {
+  const result = await fetchApps(parentId || null, filterType);
+  const data = result?.data ?? result;
+  return Array.isArray(data?.list) ? data.list : [];
+};
+
 // ========== 表单字段 ==========
 
 function FieldInput({
   field,
   value,
-  onChange
+  onChange,
+  onDatasetSelect
 }: {
   field: ExportField;
   value: string;
   onChange: (v: string) => void;
+  onDatasetSelect?: (id: string, type: string) => void;
 }) {
+  const { getModelProviders } = useSystemStore();
+
+  const providerList = useMemo(() => {
+    if (field.type !== 'providerSelect') return [];
+    return [
+      { label: '全部提供商', value: '' },
+      ...getModelProviders().map((item) => ({
+        label: (
+          <HStack>
+            <Avatar src={item.avatar} w="1rem" borderRadius="0" />
+            <Box>{item.name}</Box>
+          </HStack>
+        ) as React.ReactNode,
+        value: item.id
+      }))
+    ];
+  }, [field.type, getModelProviders]);
+
   return (
     <FormControl>
       <Flex align="center" gap={3}>
@@ -234,6 +317,37 @@ function FieldInput({
               </option>
             ))}
           </Box>
+        ) : field.type === 'datasetSelect' ? (
+          <DatasetTreeSelect
+            value={value}
+            onChange={(id: string, type: string) => {
+              onChange(id);
+              onDatasetSelect?.(id, type);
+            }}
+            placeholder={field.placeholder}
+            fetchList={getDatasetList}
+          />
+        ) : field.type === 'appSelect' ? (
+          <AppTreeSelect
+            value={value}
+            onChange={(id: string) => {
+              onChange(id);
+            }}
+            placeholder={field.placeholder}
+            fetchList={getAppList}
+            filterType={field.filterType}
+          />
+        ) : field.type === 'providerSelect' ? (
+          <Box flex={1}>
+            <MySelect
+              value={value}
+              onChange={(v) => onChange(v)}
+              list={providerList}
+              h="36px"
+              bg="myGray.50"
+              fontSize="sm"
+            />
+          </Box>
         ) : (
           <Input
             placeholder={field.placeholder}
@@ -255,17 +369,15 @@ function FieldInput({
   );
 }
 
-// ========== 通用 Tab 内容 ==========
-
 function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [selectedType, setSelectedType] = useState<string>('');
   const [keepOriginalId, setKeepOriginalId] = useState(true);
   const [includeFiles, setIncludeFiles] = useState(false);
-  const [includeVectors, setIncludeVectors] = useState(false);
   const [ignoreFiles, setIgnoreFiles] = useState(false);
-  const [ignoreVectors, setIgnoreVectors] = useState(false);
+  const [rebuildIndex, setRebuildIndex] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -278,7 +390,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
   const handleExport = async () => {
     for (const field of config.exportFields) {
       if (field.required && !fieldValues[field.key]?.trim()) {
-        toast({ title: `请输入${field.label}`, status: 'warning', duration: 3000 });
+        toast({ title: `请选择${field.label}`, status: 'warning', duration: 3000 });
         return;
       }
     }
@@ -289,9 +401,9 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
 
       switch (tabIndex) {
         case 0: {
-          const result = await exportDataset(parentId!, {
-            includeFiles,
-            includeVectors
+          const result = await exportDataset(parentId || '', {
+            type: parentId ? selectedType || undefined : 'root',
+            includeFiles
           });
           if (result.isZip && result.blob) {
             // 下载 ZIP 文件
@@ -362,7 +474,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
         formData.append('file', selectedFile);
         formData.append('keepOriginalId', String(keepOriginalId));
         formData.append('ignoreFiles', String(ignoreFiles));
-        formData.append('ignoreVectors', String(ignoreVectors));
+        formData.append('rebuildIndex', String(rebuildIndex));
         if (targetParentId) formData.append('targetParentId', targetParentId);
         result = await importDataset(formData);
       } else {
@@ -419,6 +531,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
                 field={field}
                 value={fieldValues[field.key] || ''}
                 onChange={(v) => setField(field.key, v)}
+                onDatasetSelect={(_, type) => setSelectedType(type)}
               />
             ))}
           </VStack>
@@ -436,23 +549,6 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
               />
               <Text fontSize="xs" color="myGray.400">
                 导出时包含原始文件（文件会更大）
-              </Text>
-            </Flex>
-          )}
-
-          {/* 导出向量开关 */}
-          {config.showIncludeVectors && (
-            <Flex align="center" gap={3} mb={4}>
-              <Text fontSize="sm" color="myGray.600" w="120px" flexShrink={0} lineHeight="36px">
-                导出向量
-              </Text>
-              <Switch
-                isChecked={includeVectors}
-                onChange={(e) => setIncludeVectors(e.target.checked)}
-                size="sm"
-              />
-              <Text fontSize="xs" color="myGray.400">
-                导出向量索引数据（导入后无需重新训练）
               </Text>
             </Flex>
           )}
@@ -534,19 +630,19 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
               </Flex>
             )}
 
-            {/* 忽略向量开关 */}
-            {config.showIgnoreVectors && (
+            {/* 重建索引开关 */}
+            {config.showRebuildIndex && (
               <Flex align="center" gap={3}>
                 <Text fontSize="sm" color="myGray.600" w="120px" flexShrink={0} lineHeight="36px">
-                  忽略向量
+                  重建索引
                 </Text>
                 <Switch
-                  isChecked={ignoreVectors}
-                  onChange={(e) => setIgnoreVectors(e.target.checked)}
+                  isChecked={rebuildIndex}
+                  onChange={(e) => setRebuildIndex(e.target.checked)}
                   size="sm"
                 />
                 <Text fontSize="xs" color="myGray.400">
-                  不导入向量索引，导入后需重新训练
+                  导入后自动重建向量索引（会消耗 AI 额度）
                 </Text>
               </Flex>
             )}
@@ -740,7 +836,7 @@ export default function ImportExportPage() {
 
   return (
     <ProtectedRoute>
-      <Layout title="导入导出">
+      <Layout title="备份还原">
         <Box bg="myGray.50" minH="100%" mx={-4} mt={-4} p={4}>
           <Box mb={4}>
             <FillRowTabs
