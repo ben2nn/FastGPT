@@ -1,7 +1,7 @@
 import type { NextApiResponse } from 'next';
 import { NextAPI } from '@/service/middleware/entry';
 import { authDataset } from '@fastgpt/service/support/permission/dataset/auth';
-import { WritePermissionVal } from '@fastgpt/support/permission/dataset/constant';
+import { WritePermissionVal } from '@fastgpt/global/support/permission/dataset/constant';
 import { MongoDatasetTraining } from '@fastgpt/service/core/dataset/training/schema';
 import { clearEnhanceConfig } from '@/service/core/dataset/enhanceConfigCache';
 import type { ApiRequestProps } from '@fastgpt/service/type/next';
