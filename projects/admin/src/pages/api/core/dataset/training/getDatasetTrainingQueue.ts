@@ -6,9 +6,12 @@ import { MongoDatasetTraining } from '@fastgpt/service/core/dataset/training/sch
 import { ReadPermissionVal } from '@fastgpt/global/support/permission/constant';
 import { readFromSecondary } from '@fastgpt/service/common/mongo/utils';
 
+import { TrainingModeEnum } from '@fastgpt/global/core/dataset/constants';
+
 export type getDatasetTrainingQueueResponse = {
   rebuildingCount: number;
   trainingCount: number;
+  enhanceCount: number;
 };
 
 async function handler(
@@ -24,24 +27,25 @@ async function handler(
     per: ReadPermissionVal
   });
 
-  const [rebuildingCount, trainingCount] = await Promise.all([
+  const [rebuildingCount, enhanceCount, otherTrainingCount] = await Promise.all([
     MongoDatasetData.countDocuments(
       { rebuilding: true, teamId, datasetId },
-      {
-        ...readFromSecondary
-      }
+      { ...readFromSecondary }
     ),
     MongoDatasetTraining.countDocuments(
-      { teamId, datasetId },
-      {
-        ...readFromSecondary
-      }
+      { teamId, datasetId, mode: TrainingModeEnum.enhance },
+      { ...readFromSecondary }
+    ),
+    MongoDatasetTraining.countDocuments(
+      { teamId, datasetId, mode: { $ne: TrainingModeEnum.enhance } },
+      { ...readFromSecondary }
     )
   ]);
 
   return {
     rebuildingCount,
-    trainingCount
+    trainingCount: otherTrainingCount,
+    enhanceCount
   };
 }
 

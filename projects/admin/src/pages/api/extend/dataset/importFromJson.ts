@@ -83,10 +83,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       ? fields.keepOriginalId[0]
       : fields.keepOriginalId;
     const keepOriginalId = keepOriginalIdRaw === 'true';
-    const targetParentIdRaw = Array.isArray(fields.targetParentId)
-      ? fields.targetParentId[0]
-      : fields.targetParentId;
-    const targetParentId = targetParentIdRaw || undefined;
+    const targetIdRaw = Array.isArray(fields.targetId) ? fields.targetId[0] : fields.targetId;
+    const targetId = targetIdRaw || undefined;
+    const targetTypeRaw = Array.isArray(fields.targetType)
+      ? fields.targetType[0]
+      : fields.targetType;
+    const targetType = targetTypeRaw || undefined;
     const ignoreFilesRaw = Array.isArray(fields.ignoreFiles)
       ? fields.ignoreFiles[0]
       : fields.ignoreFiles;
@@ -236,10 +238,46 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       doc.tmbId = tmbId;
     }
 
+    // 8.5. 目标位置重复检测
+    if (targetId) {
+      if (targetType === 'folder') {
+        // 目录：递归查找目录下所有子知识库，按 _id 检测重复
+        const allDescendants: string[] = [];
+        const collectChildren = async (parentId: string) => {
+          const kids = await MongoDataset.find({ teamId, parentId }, '_id').lean();
+          for (const kid of kids) {
+            allDescendants.push(String(kid._id));
+            await collectChildren(String(kid._id));
+          }
+        };
+        await collectChildren(targetId);
+
+        const existingIdSet = new Set(allDescendants);
+        const importIds = datasets.map((doc: Record<string, unknown>) => String(doc._id));
+        const conflictIds = importIds.filter((id: string) => existingIdSet.has(id));
+
+        if (conflictIds.length > 0) {
+          return res.status(409).json({
+            success: false,
+            error: `目标目录下已存在 ${conflictIds.length} 个同 ID 知识库，请先删除后再导入`
+          });
+        }
+      } else {
+        // 知识库：按 _id 查找
+        const existingDataset = await MongoDataset.findOne({ _id: targetId, teamId });
+        if (existingDataset) {
+          return res.status(409).json({
+            success: false,
+            error: `目标知识库「${existingDataset.name}」已存在，请先删除后再导入`
+          });
+        }
+      }
+    }
+
     // 9. 原地更新顶级数据集的 parentId
     for (const doc of datasets) {
       updateDoc(doc);
-      if (targetParentId) doc.parentId = targetParentId;
+      if (targetType === 'folder' && targetId) doc.parentId = targetId;
     }
     collections.forEach(updateDoc);
     datas.forEach(updateDoc);

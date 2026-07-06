@@ -229,25 +229,24 @@ export const postLinkCollectionSync = (collectionId: string) =>
   });
 
 /* =============================== tag ==================================== */
-
 export const postCreateDatasetCollectionTag = (data: CreateDatasetCollectionTagParams) =>
-  POST(`/proapi/extend/dataset/tag/create`, data);
+  POST(`/extend/dataset/tag/create`, data);
 export const postAddTagsToCollections = (data: AddTagsToCollectionsParams) =>
-  POST(`/proapi/extend/dataset/tag/addToCollections`, data);
+  POST(`/extend/dataset/tag/addToCollections`, data);
 export const delDatasetCollectionTag = (data: { id: string; datasetId: string }) =>
-  DELETE(`/proapi/extend/dataset/tag/delete`, data);
+  DELETE(`/extend/dataset/tag/delete`, data);
 export const updateDatasetCollectionTag = (data: UpdateDatasetCollectionTagParams) =>
-  POST(`/proapi/extend/dataset/tag/update`, data);
+  POST(`/extend/dataset/tag/update`, data);
 export const getDatasetCollectionTags = (
   data: PaginationProps<{
     datasetId: string;
     searchText?: string;
   }>
-) => POST<PaginationResponse<DatasetTagType>>(`/proapi/extend/dataset/tag/list`, data);
+) => POST<PaginationResponse<DatasetTagType>>(`/extend/dataset/tag/list`, data);
 export const getTagUsage = (datasetId: string) =>
-  GET<TagUsageType[]>(`/proapi/extend/dataset/tag/tagUsage?datasetId=${datasetId}`);
+  GET<TagUsageType[]>(`/extend/dataset/tag/tagUsage?datasetId=${datasetId}`);
 export const getAllTags = (datasetId: string) =>
-  GET<{ list: DatasetTagType[] }>(`/proapi/extend/dataset/tag/getAllTags?datasetId=${datasetId}`);
+  GET<{ list: DatasetTagType[] }>(`/extend/dataset/tag/getAllTags?datasetId=${datasetId}`);
 
 /* =============================== data ==================================== */
 /* get dataset list */
@@ -284,6 +283,44 @@ export const getQuoteData = (data: GetQuoteDataProps) =>
 /* ================ training ==================== */
 export const postRebuildEmbedding = (data: rebuildEmbeddingBody) =>
   POST(`/core/dataset/training/rebuildEmbedding`, data);
+
+export const postEnhanceIndexes = (data: {
+  datasetId: string;
+  collectionId?: string;
+  collectionIds?: string[];
+  config?: any;
+}) => POST<{ insertLen: number; billId: string }>(`/core/dataset/training/enhanceIndexes`, data);
+
+export const postEnhancePreview = (data: { datasetId: string; collectionIds?: string[] }) =>
+  POST<{
+    totalChunks: number;
+    previewRows: Array<{
+      originalQ: string;
+      originalA: string;
+      previewQ: string;
+      previewA: string;
+      previewIndexes: string[];
+    }>;
+  }>(`/core/dataset/training/enhancePreview`, data);
+
+export const postEnhanceQuickTest = (data: {
+  datasetId: string;
+  collectionIds?: string[];
+  config: any;
+}) =>
+  POST<{
+    success: number;
+    skipped: number;
+    items: Array<{
+      collectionName: string;
+      articleTitle: string;
+      suggestedKeywords: string[];
+      previewQ: string;
+    }>;
+  }>(`/core/dataset/training/enhanceQuickTest`, data);
+
+export const postEnhanceCancel = (data: { billId: string; datasetId: string }) =>
+  POST<{ deletedCount: number }>(`/core/dataset/training/enhanceCancel`, data);
 
 export const getDatasetTrainingQueue = (datasetId: string) =>
   GET<getDatasetTrainingQueueResponse>(`/core/dataset/training/getDatasetTrainingQueue`, {

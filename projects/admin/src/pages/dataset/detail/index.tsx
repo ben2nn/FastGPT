@@ -27,10 +27,12 @@ const DataCard = dynamic(() => import('@/pageComponents/dataset/detail/DataCard'
 const Test = dynamic(() => import('@/pageComponents/dataset/detail/Test'));
 const Info = dynamic(() => import('@/pageComponents/dataset/detail/Info/index'));
 const Import = dynamic(() => import('@/pageComponents/dataset/detail/Import'));
+const IndexEnhance = dynamic(() => import('@/pageComponents/dataset/detail/IndexEnhance'));
 
 export enum TabEnum {
   dataCard = 'dataCard',
   collectionCard = 'collectionCard',
+  indexEnhance = 'indexEnhance',
   test = 'test',
   info = 'info',
   import = 'import'
@@ -83,6 +85,7 @@ const Detail = ({ datasetId, currentTab }: Props) => {
                     <CollectionCard />
                   </CollectionPageContextProvider>
                 )}
+                {currentTab === TabEnum.indexEnhance && <IndexEnhance datasetId={datasetId} />}
                 {currentTab === TabEnum.test && <Test datasetId={datasetId} />}
                 {currentTab === TabEnum.dataCard && <DataCard />}
                 {currentTab === TabEnum.import && <Import />}
@@ -96,7 +99,9 @@ const Detail = ({ datasetId, currentTab }: Props) => {
                   <Info datasetId={datasetId} />
                 </Flex>
               )}
-              {[TabEnum.collectionCard, TabEnum.test].includes(currentTab) && (
+              {[TabEnum.collectionCard, TabEnum.test, TabEnum.indexEnhance].includes(
+                currentTab
+              ) && (
                 <Flex {...sliderStyles} flex={'0 0 17rem'}>
                   <Info datasetId={datasetId} />
                 </Flex>
@@ -115,6 +120,7 @@ const Detail = ({ datasetId, currentTab }: Props) => {
                   </CollectionPageContextProvider>
                 )}
                 {currentTab === TabEnum.dataCard && <DataCard />}
+                {currentTab === TabEnum.indexEnhance && <IndexEnhance datasetId={datasetId} />}
                 {currentTab === TabEnum.test && <Test datasetId={datasetId} />}
                 {currentTab === TabEnum.info && <Info datasetId={datasetId} />}
                 {currentTab === TabEnum.import && <Import />}

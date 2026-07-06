@@ -119,7 +119,7 @@ const FolderSlideCard = ({
         </>
       )}
 
-      {feConfigs?.isPlus && (
+      {
         <>
           <MyDivider my={6} />
 
@@ -170,7 +170,7 @@ const FolderSlideCard = ({
             </Box>
           </Box>
         </>
-      )}
+      }
     </Box>
   );
 };

@@ -166,11 +166,12 @@ export const exportApp = async (parentId: string) => {
 export const importApp = async (
   file: string | object,
   keepOriginalId: boolean,
-  targetParentId?: string
+  targetId?: string,
+  targetType?: string
 ) => {
   const response = await authFetch(getWebReqUrl('/api/extend/app/importFromJson'), {
     method: 'POST',
-    body: JSON.stringify({ file, keepOriginalId, targetParentId })
+    body: JSON.stringify({ file, keepOriginalId, targetId, targetType })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -247,11 +248,12 @@ export const exportTools = async (parentId?: string) => {
 export const importTools = async (
   file: string | object,
   keepOriginalId: boolean,
-  targetParentId?: string
+  targetId?: string,
+  targetType?: string
 ) => {
   const response = await authFetch(getWebReqUrl('/api/extend/tool/importTools'), {
     method: 'POST',
-    body: JSON.stringify({ file, keepOriginalId, targetParentId })
+    body: JSON.stringify({ file, keepOriginalId, targetId, targetType })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));

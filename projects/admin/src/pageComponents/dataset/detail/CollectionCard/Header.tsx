@@ -188,8 +188,7 @@ const Header = ({ hasTrainingData }: { hasTrainingData: boolean }) => {
 
         {/* Tag */}
         {datasetDetail.type !== DatasetTypeEnum.websiteDataset &&
-          datasetDetail.permission.hasWritePer &&
-          feConfigs?.isPlus && <HeaderTagPopOver />}
+          datasetDetail.permission.hasWritePer && <HeaderTagPopOver />}
       </HStack>
 
       {/* diff collection button */}
@@ -250,26 +249,24 @@ const Header = ({ hasTrainingData }: { hasTrainingData: boolean }) => {
                       ),
                       onClick: onOpenFileSourceSelector
                     },
-                    ...(feConfigs?.isPlus
-                      ? [
-                          {
-                            label: (
-                              <Flex>
-                                <MyIcon name={'image'} mr={2} w={'20px'} />
-                                {t('dataset:core.dataset.Image collection')}
-                              </Flex>
-                            ),
-                            onClick: () =>
-                              router.replace({
-                                query: {
-                                  ...router.query,
-                                  currentTab: TabEnum.import,
-                                  source: ImportDataSourceEnum.imageDataset
-                                }
-                              })
-                          }
-                        ]
-                      : []),
+                    ...[
+                      {
+                        label: (
+                          <Flex>
+                            <MyIcon name={'image'} mr={2} w={'20px'} />
+                            {t('dataset:core.dataset.Image collection')}
+                          </Flex>
+                        ),
+                        onClick: () =>
+                          router.replace({
+                            query: {
+                              ...router.query,
+                              currentTab: TabEnum.import,
+                              source: ImportDataSourceEnum.imageDataset
+                            }
+                          })
+                      }
+                    ],
 
                     {
                       label: (
@@ -325,7 +322,7 @@ const Header = ({ hasTrainingData }: { hasTrainingData: boolean }) => {
                       >
                         {t('dataset:params_config')}
                       </Button>
-                      {!hasTrainingData && feConfigs?.isPlus && (
+                      {!hasTrainingData && (
                         <Button
                           variant={'whitePrimary'}
                           onClick={openDatasetSyncConfirm}
@@ -488,7 +485,7 @@ const Header = ({ hasTrainingData }: { hasTrainingData: boolean }) => {
                       {t('dataset:add_file')}
                     </Box>
                   </Flex>
-                  {!hasTrainingData && feConfigs?.isPlus && (
+                  {!hasTrainingData && (
                     <Button
                       variant={'whitePrimary'}
                       onClick={openDatasetSyncConfirm}

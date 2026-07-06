@@ -24,10 +24,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     // 解析请求体
-    const { file, keepOriginalId, targetParentId, keepApiKey } = req.body as {
+    const { file, keepOriginalId, targetId, targetType, keepApiKey } = req.body as {
       file: unknown;
       keepOriginalId?: boolean;
-      targetParentId?: string;
+      targetId?: string;
+      targetType?: string;
       keepApiKey?: boolean;
     };
 
@@ -116,10 +117,46 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return updated;
     };
 
+    // 目标位置重复检测
+    if (targetId) {
+      if (targetType === 'folder') {
+        // 目录：递归查找目录下所有子 app，按 _id 检测重复
+        const allDescendants: string[] = [];
+        const collectChildren = async (parentId: string) => {
+          const kids = await MongoApp.find({ teamId, parentId }, '_id').lean();
+          for (const kid of kids) {
+            allDescendants.push(String(kid._id));
+            await collectChildren(String(kid._id));
+          }
+        };
+        await collectChildren(targetId);
+
+        const existingIdSet = new Set(allDescendants);
+        const importIds = apps.map((doc: Record<string, unknown>) => String(doc._id));
+        const conflictIds = importIds.filter((id: string) => existingIdSet.has(id));
+
+        if (conflictIds.length > 0) {
+          return res.status(409).json({
+            success: false,
+            error: `目标目录下已存在 ${conflictIds.length} 个同 ID 工具，请先删除后再导入`
+          });
+        }
+      } else {
+        // 工具：按 _id 查找
+        const existingApp = await MongoApp.findOne({ _id: targetId, teamId });
+        if (existingApp) {
+          return res.status(409).json({
+            success: false,
+            error: `目标工具「${existingApp.name}」已存在，请先删除后再导入`
+          });
+        }
+      }
+    }
+
     const updatedApps = apps.map((doc: Record<string, unknown>) => {
       const updated = updateDoc(doc);
-      if (targetParentId) {
-        updated.parentId = targetParentId;
+      if (targetType === 'folder' && targetId) {
+        updated.parentId = targetId;
       }
       return updated;
     });

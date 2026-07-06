@@ -252,7 +252,7 @@ const Info = ({ datasetId }: { datasetId: string }) => {
           </Box>
         </Box>
 
-        {feConfigs?.isPlus && (
+        {
           <Flex alignItems={'center'} pt={5}>
             <FormLabel fontSize={'mini'} fontWeight={'500'}>
               {t('dataset:sync_schedule')}
@@ -278,7 +278,7 @@ const Info = ({ datasetId }: { datasetId: string }) => {
               }}
             />
           </Flex>
-        )}
+        }
 
         {datasetDetail.type === DatasetTypeEnum.externalFile && (
           <>

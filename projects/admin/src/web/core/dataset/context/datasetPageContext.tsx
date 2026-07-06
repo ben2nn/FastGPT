@@ -40,12 +40,14 @@ type DatasetPageContextType = {
 
   rebuildingCount: number;
   trainingCount: number;
+  enhanceCount: number;
   refetchDatasetTraining: () => void;
 };
 
 export const DatasetPageContext = createContext<DatasetPageContextType>({
   rebuildingCount: 0,
   trainingCount: 0,
+  enhanceCount: 0,
   refetchDatasetTraining: function (): void {
     throw new Error('Function not implemented.');
   },
@@ -115,7 +117,7 @@ export const DatasetPageContextProvider = ({
 
   const { runAsync: loadAllDatasetTags, data: allDatasetTags = [] } = useRequest(
     async () => {
-      if (!feConfigs?.isPlus || !datasetDetail._id) return [];
+      if (!datasetDetail._id) return [];
 
       const { list } = await getAllTags(datasetDetail._id);
       return list;
@@ -159,10 +161,12 @@ export const DatasetPageContextProvider = ({
   );
 
   // training and rebuild queue
-  const { data: { rebuildingCount = 0, trainingCount = 0 } = {}, refetch: refetchDatasetTraining } =
-    useQuery(['getDatasetTrainingQueue'], () => getDatasetTrainingQueue(datasetId), {
-      refetchInterval: 10000
-    });
+  const {
+    data: { rebuildingCount = 0, trainingCount = 0, enhanceCount = 0 } = {},
+    refetch: refetchDatasetTraining
+  } = useQuery(['getDatasetTrainingQueue'], () => getDatasetTrainingQueue(datasetId), {
+    refetchInterval: 3000
+  });
 
   const { data: paths = [], runAsync: refetchPaths } = useRequest(
     () =>
@@ -192,6 +196,7 @@ export const DatasetPageContextProvider = ({
 
     rebuildingCount,
     trainingCount,
+    enhanceCount,
     refetchDatasetTraining,
 
     searchDatasetTagsResult,

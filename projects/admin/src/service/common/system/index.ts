@@ -7,12 +7,6 @@ import { initFastGPTConfig } from '@fastgpt/service/common/system/tools';
 import type { FastGPTConfigFileType } from '@fastgpt/global/common/system/types';
 import { initHttpAgent } from '@fastgpt/service/common/middle/httpAgent';
 import { POST } from '@fastgpt/service/common/api/plusRequest';
-import { isProVersion } from '@fastgpt/service/common/system/constants';
-import type {
-  PushUsageItemsProps,
-  ConcatUsageProps,
-  CreateUsageProps
-} from '@fastgpt/global/support/wallet/usage/api';
 import type {
   DeepRagSearchProps,
   SearchDatasetDataResponse
@@ -22,6 +16,7 @@ import type { AuthOpenApiLimitProps } from '@fastgpt/service/support/openapi/aut
 const defaultFeConfigs = {
   show_emptyChat: true,
   show_git: true,
+  isPlus: true,
   docUrl: 'https://doc.fastgpt.io',
   systemTitle: 'FastGPT Admin',
   uploadFileMaxSize: Number(process.env.UPLOAD_FILE_MAX_SIZE || 1000),
@@ -51,7 +46,8 @@ async function initSystemConfig() {
   const config: FastGPTConfigFileType = {
     feConfigs: {
       ...defaultFeConfigs,
-      ...(fastgptConfig.feConfigs || {})
+      ...(fastgptConfig.feConfigs || {}),
+      isPlus: true // 强制覆盖，确保共享包中的商业功能路由始终通过
     },
     systemEnv: {
       ...(fastgptConfig.systemEnv || {})
@@ -82,23 +78,22 @@ export function initGlobalVariables() {
       return POST<AuthOpenApiLimitProps>('/support/openapi/authLimit', data);
     };
 
-    global.createUsageHandler = function createUsageHandler(data: CreateUsageProps) {
-      if (!isProVersion()) return;
-      return POST<string>('/support/wallet/usage/createUsage', data);
+    global.createUsageHandler = function createUsageHandler() {
+      // admin 未部署商业版计费服务，跳过
     };
-    global.concatUsageHandler = function concatUsageHandler(data: ConcatUsageProps) {
-      if (!isProVersion()) return;
-      return POST('/support/wallet/usage/concatUsage', data);
+    global.concatUsageHandler = function concatUsageHandler() {
+      // admin 未部署商业版计费服务，跳过
     };
-    global.pushUsageItemsHandler = function pushUsageItemsHandler(data: PushUsageItemsProps) {
-      if (!isProVersion()) return;
-      return POST('/support/wallet/usage/pushUsageItems', data);
+    global.pushUsageItemsHandler = function pushUsageItemsHandler() {
+      // admin 未部署商业版计费服务，跳过
     };
   }
 
   global.datasetParseQueueLen = global.datasetParseQueueLen ?? 0;
   global.qaQueueLen = global.qaQueueLen ?? 0;
   global.vectorQueueLen = global.vectorQueueLen ?? 0;
+  global.autoIndexQueueLen = global.autoIndexQueueLen ?? 0;
+  global.imageIndexQueueLen = global.imageIndexQueueLen ?? 0;
   initHttpAgent();
   initPlusRequest();
 }

@@ -12,6 +12,7 @@ import FolderPath from '@/components/common/folder/Path';
 export enum TabEnum {
   dataCard = 'dataCard',
   collectionCard = 'collectionCard',
+  indexEnhance = 'indexEnhance',
   test = 'test',
   info = 'info',
   import = 'import'
@@ -33,6 +34,7 @@ const NavBar = ({ currentTab }: { currentTab: TabEnum }) => {
       label: t('common:core.dataset.Collection'),
       value: TabEnum.collectionCard
     },
+    { label: '索引增强', value: TabEnum.indexEnhance },
     { label: t('common:core.dataset.test.Search Test'), value: TabEnum.test },
     ...(datasetDetail.permission.hasManagePer && !isPc
       ? [{ label: t('common:Config'), value: TabEnum.info }]

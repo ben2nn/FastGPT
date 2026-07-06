@@ -46,7 +46,7 @@ async function handler(req: ApiRequestProps, res: ApiResponseType<VerifyResponse
     addLog.error('Token verification error:', error);
     return res.status(401).json({
       success: false,
-      error: 'Token 无效或已过期'
+      error: '会话无效或已过期'
     });
   }
 }

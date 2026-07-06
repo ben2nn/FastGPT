@@ -121,22 +121,16 @@ const CollaboratorContextProvider = ({
     loading: isFetchingCollaborator
   } = useRequest(
     async () => {
-      if (feConfigs.isPlus) {
-        const { clbs, parentClbs = [] } = await onGetCollaboratorList();
-        return {
-          clbs: clbs.map((clb) => ({
-            ...clb,
-            permission: new Permission({ role: clb.permission.role })
-          })),
-          parentClbs: parentClbs.map((clb) => ({
-            ...clb,
-            permission: new Permission({ role: clb.permission.role })
-          }))
-        };
-      }
+      const { clbs, parentClbs = [] } = await onGetCollaboratorList();
       return {
-        clbs: [],
-        parentClbs: []
+        clbs: clbs.map((clb) => ({
+          ...clb,
+          permission: new Permission({ role: clb.permission.role })
+        })),
+        parentClbs: parentClbs.map((clb) => ({
+          ...clb,
+          permission: new Permission({ role: clb.permission.role })
+        }))
       };
     },
     {

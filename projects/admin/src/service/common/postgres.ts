@@ -12,6 +12,37 @@ declare global {
   var __postgresPool: Pool | undefined;
 }
 
+// 保活定时器
+let keepAliveInterval: NodeJS.Timeout | null = null;
+
+/**
+ * 启动连接池保活机制
+ * 定期发送简单查询防止连接因空闲而断开
+ */
+function startKeepAlive(pool: Pool) {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+  }
+
+  // 每 60 秒执行一次保活查询
+  keepAliveInterval = setInterval(async () => {
+    try {
+      const client = await pool.connect();
+      await client.query('SELECT 1');
+      client.release();
+    } catch (error) {
+      addLog.warn('PostgreSQL 保活查询失败:', error);
+    }
+  }, 60000);
+
+  // 防止定时器阻止进程退出
+  if (keepAliveInterval.unref) {
+    keepAliveInterval.unref();
+  }
+
+  addLog.info('PostgreSQL 保活机制已启动（每 60 秒）');
+}
+
 /**
  * 获取或创建全局 PostgreSQL 连接池
  * 统一管理连接池，避免重复创建
@@ -37,7 +68,7 @@ export function getPostgresPool(): Pool {
     global.__postgresPool = new Pool({
       connectionString,
       max: maxConnections,
-      idleTimeoutMillis: 30000,
+      idleTimeoutMillis: 300000, // 5 分钟空闲超时，与 MongoDB 保持一致
       connectionTimeoutMillis: 10000
     });
 
@@ -45,6 +76,9 @@ export function getPostgresPool(): Pool {
     global.__postgresPool.on('error', (err) => {
       addLog.error('PostgreSQL 连接池错误', err);
     });
+
+    // 启动保活机制
+    startKeepAlive(global.__postgresPool);
 
     addLog.info('PostgreSQL 连接池创建成功');
   }

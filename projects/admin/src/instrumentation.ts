@@ -16,7 +16,8 @@ export async function register() {
         { connectSignoz },
         { initS3Buckets },
         { initializeDatabase },
-        { getInitConfig, initGlobalVariables }
+        { getInitConfig, initGlobalVariables },
+        { startMongoWatch }
       ] = await Promise.all([
         import('@/service/common/mongo'),
         import('@fastgpt/service/common/vectorDB/controller'),
@@ -24,7 +25,8 @@ export async function register() {
         import('@fastgpt/service/common/otel/trace/register'),
         import('@fastgpt/service/common/s3'),
         import('@/service/common/task'),
-        import('@/service/common/system')
+        import('@/service/common/system'),
+        import('@/service/common/system/mongoWatch')
       ]);
 
       // 初始化可观测性
@@ -42,8 +44,21 @@ export async function register() {
       // 等待 MongoDB 主库连接完成（依赖 MongoDB 的操作必须在此之后）
       await connectToMongo();
 
+      // 启动 MongoDB Change Streams 监听（保持连接活跃）
+      await startMongoWatch();
+
       // 并行：系统配置和模型数据加载（依赖 MongoDB 已连接）
       await Promise.all([getInitConfig(), loadSystemModels(), initVectorStore()]);
+
+      // 启动 admin 增强索引队列（enhance/auto/image 模式）
+      const { startAdminTrainingQueue } = await import('@/service/core/dataset/training/utils');
+      startAdminTrainingQueue(true);
+
+      // 每分钟定时兜底（防止 Watch 丢失事件）
+      const { setCron } = await import('@fastgpt/service/common/system/cron');
+      setCron('*/1 * * * *', () => {
+        startAdminTrainingQueue();
+      });
 
       // 任务初始化：PostgreSQL → 表结构 → 任务配置 → 任务管理器（带超时防止进程永久挂起）
       await initializeDatabase();

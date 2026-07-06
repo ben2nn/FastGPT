@@ -234,7 +234,8 @@ export enum TrainingModeEnum {
   qa = 'qa',
   auto = 'auto',
   image = 'image',
-  imageParse = 'imageParse'
+  imageParse = 'imageParse',
+  enhance = 'enhance'
 }
 
 /* ------------ search -------------- */

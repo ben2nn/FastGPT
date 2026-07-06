@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { QuestionOutlineIcon } from '@chakra-ui/icons';
 import {
   Box,
@@ -12,7 +12,16 @@ import {
   Flex,
   Button,
   IconButton,
-  Tooltip
+  Tooltip,
+  Progress,
+  Text,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
+  useDisclosure
 } from '@chakra-ui/react';
 import { ImportDataSourceEnum } from '@fastgpt/global/core/dataset/constants';
 import { useTranslation } from 'next-i18next';
@@ -34,24 +43,77 @@ import { DatasetPageContext } from '@/web/core/dataset/context/datasetPageContex
 import { DatasetImportContext, type ImportFormType } from '../Context';
 import { type ApiCreateDatasetCollectionParams } from '@fastgpt/global/core/dataset/api.d';
 
+// ==================== 增强索引相关工具函数 ====================
+
+function getApiUrl(path: string): string {
+  const base = (process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+function trackEnhanceProgress(
+  taskId: string,
+  onProgress: (data: { current: number; total: number; phase: string; message?: string }) => void
+): EventSource {
+  const es = new EventSource(
+    getApiUrl(`/api/core/dataset/training/enhanceProgress?taskId=${encodeURIComponent(taskId)}`)
+  );
+  es.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onProgress(data);
+      if (data.phase === 'done' || data.phase === 'error') es.close();
+    } catch {}
+  };
+  es.onerror = () => es.close();
+  return es;
+}
+
+async function fetchCreateFileIdEnhance(
+  params: Record<string, unknown>
+): Promise<{ collectionId: string }> {
+  const res = await fetch(getApiUrl('/api/core/dataset/collection/create/fileIdEnhance'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.message || `请求失败 (${res.status})`);
+  }
+  return res.json();
+}
+
+// ==================== 主组件 ====================
+
 const Upload = () => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
-  const { collectionId = '' } = router.query as {
-    collectionId: string;
-  };
+  const { collectionId = '' } = router.query as { collectionId: string };
   const datasetDetail = useContextSelector(DatasetPageContext, (v) => v.datasetDetail);
   const retrainNewCollectionId = useRef('');
+  const eventSourceRefs = useRef<Map<string, EventSource>>(new Map());
+  const forceQueueRef = useRef(false); // true=强制队列模式（跳过增强检查）
+
+  // 对话框状态
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const pendingUploadRef = useRef<(() => Promise<void>) | null>(null);
 
   const { importSource, parentId, sources, setSources, processParamsForm } = useContextSelector(
     DatasetImportContext,
     (v) => v
   );
 
+  // 检查是否开启了索引增强
+  const hasEnhancement = useMemo(() => {
+    const values = processParamsForm.getValues();
+    return !!(values as any).autoIndexes || !!(values as any).imageIndex;
+  }, [processParamsForm]);
+
   const { totalFilesCount, waitingFilesCount, allFinished, hasCreatingFiles } = useMemo(() => {
     const totalFilesCount = sources.length;
-
     const { waitingFilesCount, allFinished, hasCreatingFiles } = sources.reduce(
       (acc, file) => {
         if (file.createStatus === 'waiting') acc.waitingFilesCount++;
@@ -61,7 +123,6 @@ const Upload = () => {
       },
       { waitingFilesCount: 0, allFinished: true, hasCreatingFiles: false }
     );
-
     return { totalFilesCount, waitingFilesCount, allFinished, hasCreatingFiles };
   }, [sources]);
 
@@ -75,102 +136,189 @@ const Upload = () => {
     }
   }, [waitingFilesCount, totalFilesCount, allFinished, t]);
 
-  const { runAsync: startUpload, loading: isLoading } = useRequest(
+  // 更新增强进度
+  const updateEnhanceProgress = useCallback(
+    (fileId: string, data: { current: number; total: number; phase: string; message?: string }) => {
+      setSources((state) =>
+        state.map((source) =>
+          source.id === fileId ? { ...source, enhanceProgress: data } : source
+        )
+      );
+    },
+    [setSources]
+  );
+
+  // ---- 立即执行模式 ----
+  const uploadWithEnhance = useCallback(
     async ({ customPdfParse, webSelector, ...data }: ImportFormType) => {
-      if (sources.length === 0) return;
       const filterWaitingSources = sources.filter((item) => item.createStatus === 'waiting');
 
-      if (importSource === ImportDataSourceEnum.apiDataset) {
+      for await (const item of filterWaitingSources) {
         setSources((state) =>
-          state.map((source) => ({
-            ...source,
-            createStatus: 'creating'
-          }))
+          state.map((source) =>
+            source.id === item.id
+              ? { ...source, createStatus: 'creating', enhanceProgress: undefined }
+              : source
+          )
         );
 
-        const apiFiles = filterWaitingSources
-          .filter((item) => item.apiFile)
-          .map((item) => item.apiFile!);
+        try {
+          if (importSource === ImportDataSourceEnum.fileLocal && item.dbFileId) {
+            const taskId = `enhance_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-        await postCreateDatasetApiDatasetCollection({
-          ...data,
-          parentId,
-          datasetId: datasetDetail._id,
-
-          customPdfParse,
-          apiFiles
-        });
-      } else {
-        // Batch create collection and upload chunks
-        for await (const item of filterWaitingSources) {
-          setSources((state) =>
-            state.map((source) =>
-              source.id === item.id
-                ? {
-                    ...source,
-                    createStatus: 'creating'
-                  }
-                : source
-            )
-          );
-
-          // create collection
-          const commonParams: ApiCreateDatasetCollectionParams & {
-            name: string;
-          } = {
-            ...data,
-            parentId,
-            datasetId: datasetDetail._id,
-            name: item.sourceName,
-
-            customPdfParse
-          };
-
-          if (importSource === ImportDataSourceEnum.reTraining) {
-            const res = await postReTrainingDatasetFileCollection({
-              ...commonParams,
-              collectionId
+            const es = trackEnhanceProgress(taskId, (progressData) => {
+              updateEnhanceProgress(item.id, progressData);
             });
-            retrainNewCollectionId.current = res.collectionId;
-          } else if (importSource === ImportDataSourceEnum.fileLocal && item.dbFileId) {
-            await postCreateDatasetFileCollection({
-              ...commonParams,
+            eventSourceRefs.current.set(item.id, es);
+
+            await fetchCreateFileIdEnhance({
+              ...data,
+              parentId,
+              datasetId: datasetDetail._id,
+              name: item.sourceName,
+              customPdfParse,
+              fileId: item.dbFileId,
+              taskId
+            });
+
+            es.close();
+            eventSourceRefs.current.delete(item.id);
+          } else {
+            // 非 fileLocal 类型走原始 API
+            const commonParams = {
+              ...data,
+              parentId,
+              datasetId: datasetDetail._id,
+              name: item.sourceName,
+              customPdfParse
+            };
+
+            if (importSource === ImportDataSourceEnum.fileLink && item.link) {
+              await postCreateDatasetLinkCollection({
+                ...commonParams,
+                link: item.link,
+                metadata: { webPageSelector: webSelector }
+              });
+            } else if (importSource === ImportDataSourceEnum.fileCustom && item.rawText) {
+              await postCreateDatasetTextCollection({ ...commonParams, text: item.rawText });
+            }
+          }
+        } catch (error: any) {
+          const es = eventSourceRefs.current.get(item.id);
+          if (es) {
+            es.close();
+            eventSourceRefs.current.delete(item.id);
+          }
+          throw error;
+        }
+
+        setSources((state) =>
+          state.map((source) =>
+            source.id === item.id ? { ...source, createStatus: 'finish' } : source
+          )
+        );
+      }
+    },
+    [sources, importSource, parentId, datasetDetail._id, setSources, updateEnhanceProgress]
+  );
+
+  // ---- 队列模式（不等进度，直接返回）----
+  const uploadWithQueue = useCallback(
+    async ({ customPdfParse, webSelector, ...data }: ImportFormType) => {
+      const filterWaitingSources = sources.filter((item) => item.createStatus === 'waiting');
+
+      for await (const item of filterWaitingSources) {
+        setSources((state) =>
+          state.map((source) =>
+            source.id === item.id ? { ...source, createStatus: 'creating' } : source
+          )
+        );
+
+        try {
+          if (importSource === ImportDataSourceEnum.fileLocal && item.dbFileId) {
+            // 使用增强 API 但不等待进度（后台处理）
+            await fetchCreateFileIdEnhance({
+              ...data,
+              parentId,
+              datasetId: datasetDetail._id,
+              name: item.sourceName,
+              customPdfParse,
               fileId: item.dbFileId
             });
           } else if (importSource === ImportDataSourceEnum.fileLink && item.link) {
             await postCreateDatasetLinkCollection({
-              ...commonParams,
+              ...data,
+              parentId,
+              datasetId: datasetDetail._id,
+              name: item.sourceName,
+              customPdfParse,
               link: item.link,
-              metadata: {
-                webPageSelector: webSelector
-              }
+              metadata: { webPageSelector: webSelector }
             });
           } else if (importSource === ImportDataSourceEnum.fileCustom && item.rawText) {
-            // manual collection
             await postCreateDatasetTextCollection({
-              ...commonParams,
+              ...data,
+              parentId,
+              datasetId: datasetDetail._id,
+              name: item.sourceName,
+              customPdfParse,
               text: item.rawText
             });
           } else if (importSource === ImportDataSourceEnum.externalFile && item.externalFileUrl) {
             await postCreateDatasetExternalFileCollection({
-              ...commonParams,
+              ...data,
+              parentId,
+              datasetId: datasetDetail._id,
+              name: item.sourceName,
+              customPdfParse,
               externalFileUrl: item.externalFileUrl,
               externalFileId: item.externalFileId,
               filename: item.sourceName
             });
           }
-
-          setSources((state) =>
-            state.map((source) =>
-              source.id === item.id
-                ? {
-                    ...source,
-                    createStatus: 'finish'
-                  }
-                : source
-            )
-          );
+        } catch (error: any) {
+          throw error;
         }
+
+        setSources((state) =>
+          state.map((source) =>
+            source.id === item.id ? { ...source, createStatus: 'finish' } : source
+          )
+        );
+      }
+    },
+    [sources, importSource, parentId, datasetDetail._id, setSources]
+  );
+
+  // ---- 统一入口 ----
+  const { runAsync: startUpload, loading: isLoading } = useRequest(
+    async (formData: ImportFormType) => {
+      if (sources.length === 0) return;
+
+      if (importSource === ImportDataSourceEnum.apiDataset) {
+        // API 数据集走原始逻辑
+        setSources((state) => state.map((source) => ({ ...source, createStatus: 'creating' })));
+        const apiFiles = sources
+          .filter((item) => item.createStatus === 'waiting' && item.apiFile)
+          .map((item) => item.apiFile!);
+        await postCreateDatasetApiDatasetCollection({
+          ...formData,
+          parentId,
+          datasetId: datasetDetail._id,
+          customPdfParse: formData.customPdfParse,
+          apiFiles
+        });
+        setSources((state) => state.map((source) => ({ ...source, createStatus: 'finish' })));
+      } else if (
+        hasEnhancement &&
+        !forceQueueRef.current &&
+        importSource === ImportDataSourceEnum.fileLocal
+      ) {
+        // 有增强且用户选择立即执行 → 内联增强模式
+        await uploadWithEnhance(formData);
+      } else {
+        // 队列模式（无增强 / 用户选择推入队列）
+        await uploadWithQueue(formData);
       }
     },
     {
@@ -184,13 +332,8 @@ const Upload = () => {
             status: 'success'
           });
         }
-
-        // Close import page
         router.replace({
-          query: {
-            datasetId: datasetDetail._id,
-            parentId
-          }
+          query: { datasetId: datasetDetail._id, parentId }
         });
       },
       onError(error) {
@@ -209,6 +352,33 @@ const Upload = () => {
       errorToast: t('file:upload_failed')
     }
   );
+
+  // 点击上传按钮
+  const handleUpload = () => {
+    forceQueueRef.current = false; // 重置
+    processParamsForm.handleSubmit((data) => {
+      if (hasEnhancement) {
+        pendingUploadRef.current = () => startUpload(data);
+        onOpen();
+      } else {
+        startUpload(data);
+      }
+    })();
+  };
+
+  // 对话框：立即执行
+  const handleEnhanceNow = () => {
+    onClose();
+    forceQueueRef.current = false;
+    pendingUploadRef.current?.();
+  };
+
+  // 对话框：推入队列
+  const handleEnhanceQueue = () => {
+    onClose();
+    forceQueueRef.current = true;
+    pendingUploadRef.current?.();
+  };
 
   return (
     <Box h={'100%'} overflow={'auto'}>
@@ -239,7 +409,7 @@ const Upload = () => {
                   </Flex>
                 </Td>
                 <Td>
-                  <Box display={'inline-block'}>
+                  <Box display={'inline-block'} minW={'200px'}>
                     {item.errorMsg ? (
                       <Tooltip label={item.errorMsg} fontSize="md">
                         <Flex alignItems="center">
@@ -247,6 +417,29 @@ const Upload = () => {
                           <QuestionOutlineIcon ml={2} color="red.500" w="14px" />
                         </Flex>
                       </Tooltip>
+                    ) : item.createStatus === 'creating' &&
+                      item.enhanceProgress?.phase === 'enhancing' &&
+                      item.enhanceProgress.total > 0 ? (
+                      <Box>
+                        <Flex alignItems="center" mb={1}>
+                          <MyTag colorSchema={'blue'}>索引增强</MyTag>
+                          <Text ml={2} fontSize="xs" color="myGray.500">
+                            {item.enhanceProgress.current}/{item.enhanceProgress.total}
+                          </Text>
+                        </Flex>
+                        <Progress
+                          value={(item.enhanceProgress.current / item.enhanceProgress.total) * 100}
+                          h={'6px'}
+                          w={'100%'}
+                          maxW={'210px'}
+                          size="sm"
+                          borderRadius={'20px'}
+                          colorScheme="blue"
+                          bg="myGray.200"
+                          hasStripe
+                          isAnimated
+                        />
+                      </Box>
                     ) : (
                       <>
                         {item.createStatus === 'waiting' && (
@@ -282,17 +475,40 @@ const Upload = () => {
       </TableContainer>
 
       <Flex justifyContent={'flex-end'} mt={4}>
-        <Button
-          isLoading={isLoading}
-          onClick={processParamsForm.handleSubmit((data) => startUpload(data))}
-        >
-          {totalFilesCount > 0 &&
-            `${t('dataset:total_num_files', {
-              total: totalFilesCount
-            })} | `}
+        <Button isLoading={isLoading} onClick={handleUpload}>
+          {totalFilesCount > 0 && `${t('dataset:total_num_files', { total: totalFilesCount })} | `}
           {buttonText}
         </Button>
       </Flex>
+
+      {/* 增强索引确认对话框 */}
+      <AlertDialog isOpen={isOpen} leastDestructiveRef={cancelRef} onClose={onClose}>
+        <AlertDialogOverlay />
+        <AlertDialogContent>
+          <AlertDialogHeader fontSize="lg" fontWeight="bold">
+            索引增强
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            检测到已开启索引增强功能。请选择执行方式：
+            <Box mt={3} fontSize="sm" color="myGray.600">
+              <Text>
+                • <b>立即执行</b>：在当前页面等待完成，可查看实时进度
+              </Text>
+              <Text mt={1}>
+                • <b>推入队列</b>：后台异步处理，可关闭页面
+              </Text>
+            </Box>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <Button ref={cancelRef} variant="outline" onClick={handleEnhanceNow}>
+              立即执行
+            </Button>
+            <Button colorScheme="blue" onClick={handleEnhanceQueue} ml={3}>
+              推入队列
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Box>
   );
 };

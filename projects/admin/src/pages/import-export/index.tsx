@@ -127,7 +127,7 @@ const TAB_CONFIGS: TabConfig[] = [
     ],
     importFields: [
       {
-        key: 'targetParentId',
+        key: 'targetId',
         label: '目标位置',
         placeholder: '留空则导入到根目录',
         type: 'datasetSelect'
@@ -164,7 +164,7 @@ const TAB_CONFIGS: TabConfig[] = [
     ],
     importFields: [
       {
-        key: 'targetParentId',
+        key: 'targetId',
         label: '目标位置',
         placeholder: '留空则导入到根目录',
         type: 'appSelect',
@@ -190,7 +190,7 @@ const TAB_CONFIGS: TabConfig[] = [
     ],
     importFields: [
       {
-        key: 'targetParentId',
+        key: 'targetId',
         label: '目标位置',
         placeholder: '留空则导入到根目录',
         type: 'appSelect',
@@ -258,12 +258,14 @@ function FieldInput({
   field,
   value,
   onChange,
-  onDatasetSelect
+  onDatasetSelect,
+  onTargetTypeChange
 }: {
   field: ExportField;
   value: string;
   onChange: (v: string) => void;
   onDatasetSelect?: (id: string, type: string) => void;
+  onTargetTypeChange?: (type: string) => void;
 }) {
   const { getModelProviders } = useSystemStore();
 
@@ -295,27 +297,18 @@ function FieldInput({
           )}
         </Text>
         {field.type === 'select' ? (
-          <Box
-            as="select"
-            value={value}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
-            flex={1}
-            h="36px"
-            px={3}
-            borderRadius="md"
-            border="1px solid"
-            borderColor="borderColor.low"
-            bg="myGray.50"
-            fontSize="sm"
-            color="myGray.700"
-            outline="none"
-            _focus={{ borderColor: 'primary.400' }}
-          >
-            {field.options?.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
+          <Box w="280px">
+            <MySelect
+              value={value}
+              onChange={(v) => onChange(v)}
+              list={(field.options || []).map((opt) => ({
+                label: opt.label,
+                value: opt.value
+              }))}
+              h="36px"
+              bg="myGray.50"
+              fontSize="sm"
+            />
           </Box>
         ) : field.type === 'datasetSelect' ? (
           <DatasetTreeSelect
@@ -323,6 +316,7 @@ function FieldInput({
             onChange={(id: string, type: string) => {
               onChange(id);
               onDatasetSelect?.(id, type);
+              onTargetTypeChange?.(type);
             }}
             placeholder={field.placeholder}
             fetchList={getDatasetList}
@@ -330,15 +324,16 @@ function FieldInput({
         ) : field.type === 'appSelect' ? (
           <AppTreeSelect
             value={value}
-            onChange={(id: string) => {
+            onChange={(id: string, type: string) => {
               onChange(id);
+              onTargetTypeChange?.(type);
             }}
             placeholder={field.placeholder}
             fetchList={getAppList}
             filterType={field.filterType}
           />
         ) : field.type === 'providerSelect' ? (
-          <Box flex={1}>
+          <Box w="280px">
             <MySelect
               value={value}
               onChange={(v) => onChange(v)}
@@ -355,7 +350,7 @@ function FieldInput({
             onChange={(e) => onChange(e.target.value)}
             size="sm"
             h="36px"
-            flex={1}
+            w="280px"
             bg="myGray.50"
             border="1px solid"
             borderColor="borderColor.low"
@@ -379,6 +374,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
   const [ignoreFiles, setIgnoreFiles] = useState(false);
   const [rebuildIndex, setRebuildIndex] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedTargetType, setSelectedTargetType] = useState<string>('');
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<Record<string, number> | null>(null);
@@ -466,7 +462,7 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
     setImporting(true);
     setImportResult(null);
     try {
-      const targetParentId = fieldValues.targetParentId?.trim();
+      const targetId = fieldValues.targetId?.trim();
       let result: { data: Record<string, number> };
 
       if (tabIndex === 0) {
@@ -475,16 +471,27 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
         formData.append('keepOriginalId', String(keepOriginalId));
         formData.append('ignoreFiles', String(ignoreFiles));
         formData.append('rebuildIndex', String(rebuildIndex));
-        if (targetParentId) formData.append('targetParentId', targetParentId);
+        if (targetId) formData.append('targetId', targetId);
+        if (selectedTargetType) formData.append('targetType', selectedTargetType);
         result = await importDataset(formData);
       } else {
         const text = await readFileAsJSON(selectedFile);
         switch (tabIndex) {
           case 1:
-            result = await importApp(text, keepOriginalId, targetParentId || undefined);
+            result = await importApp(
+              text,
+              keepOriginalId,
+              targetId || undefined,
+              selectedTargetType || undefined
+            );
             break;
           case 2:
-            result = await importTools(text, keepOriginalId, targetParentId || undefined);
+            result = await importTools(
+              text,
+              keepOriginalId,
+              targetId || undefined,
+              selectedTargetType || undefined
+            );
             break;
           case 3:
             result = await importModels(text, keepOriginalId);
@@ -654,6 +661,11 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
                 field={field}
                 value={fieldValues[field.key] || ''}
                 onChange={(v) => setField(field.key, v)}
+                onTargetTypeChange={
+                  field.type === 'appSelect' || field.type === 'datasetSelect'
+                    ? setSelectedTargetType
+                    : undefined
+                }
               />
             ))}
           </VStack>

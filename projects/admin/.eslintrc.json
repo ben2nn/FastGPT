@@ -3,7 +3,8 @@
   "rules": {
     "react-hooks/rules-of-hooks": 0,
     "react-hooks/exhaustive-deps": 0,
-    "@typescript-eslint/consistent-type-imports": 0
+    "@typescript-eslint/consistent-type-imports": 0,
+    "@next/next/no-html-link-for-pages": 0
   },
   "ignorePatterns": ["scripts/**/*.js", "*.config.js"]
 }

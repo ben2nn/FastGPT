@@ -167,9 +167,7 @@ const DataCard = () => {
                 />
               )}
             </Box>
-            {feConfigs?.isPlus && !!collection?.tags?.length && (
-              <TagsPopOver currentCollection={collection} />
-            )}
+            {!!collection?.tags?.length && <TagsPopOver currentCollection={collection} />}
           </Box>
 
           <Button

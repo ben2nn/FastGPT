@@ -1,6 +1,9 @@
+/**
+ * 文件上传 API（队列模式）
+ * 推入训练队列，由 parse 队列处理
+ */
 import { authDataset } from '@fastgpt/service/support/permission/dataset/auth';
 import { type FileIdCreateDatasetCollectionParams } from '@fastgpt/global/core/dataset/api';
-import { createCollectionAndInsertData } from '@fastgpt/service/core/dataset/collection/controller';
 import { DatasetCollectionTypeEnum } from '@fastgpt/global/core/dataset/constants';
 import { NextAPI } from '@/service/middleware/entry';
 import { type ApiRequestProps } from '@fastgpt/service/type/next';
@@ -9,6 +12,7 @@ import { type CreateCollectionResponse } from '@/global/core/dataset/api';
 import { CommonErrEnum } from '@fastgpt/global/common/error/code/common';
 import { getS3DatasetSource } from '@fastgpt/service/common/s3/sources/dataset';
 import { isS3ObjectKey } from '@fastgpt/service/common/s3/utils';
+import { adminCreateCollectionAndInsertData } from '@/service/core/dataset/collection/adminCreateCollection';
 
 async function handler(
   req: ApiRequestProps<FileIdCreateDatasetCollectionParams>
@@ -32,7 +36,7 @@ async function handler(
     return Promise.reject(CommonErrEnum.fileNotFound);
   }
 
-  const { collectionId, insertResults } = await createCollectionAndInsertData({
+  const { collectionId, insertResults } = await adminCreateCollectionAndInsertData({
     dataset,
     createCollectionParams: {
       ...body,
@@ -40,15 +44,13 @@ async function handler(
       tmbId,
       type: DatasetCollectionTypeEnum.file,
       name: metadata.filename,
-      fileId, // ObjectId -> ObjectKey
+      fileId,
       customPdfParse
-    }
+    },
+    enhanceInline: false
   });
 
-  return {
-    collectionId,
-    results: insertResults
-  };
+  return { collectionId, results: insertResults };
 }
 
 export default NextAPI(handler);

@@ -11,6 +11,22 @@ export type ImportSourceItemType = {
   metadata?: Record<string, any>;
   errorMsg?: string;
 
+  // 索引增强进度（立即执行模式）
+  enhanceProgress?: {
+    current: number;
+    total: number;
+    phase: string;
+    message?: string;
+  };
+
+  // 索引增强进度
+  enhanceProgress?: {
+    current: number;
+    total: number;
+    phase: string;
+    message?: string;
+  };
+
   // source
   sourceName: string;
   icon: string;
