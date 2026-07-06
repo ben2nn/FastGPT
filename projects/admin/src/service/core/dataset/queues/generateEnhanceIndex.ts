@@ -15,6 +15,7 @@ import { delay } from '@fastgpt/service/common/bullmq';
 import { createLLMResponse } from '@fastgpt/service/core/ai/llm/request';
 import { DatasetDataIndexTypeEnum } from '@fastgpt/global/core/dataset/data/constants';
 import { checkTeamAiPointsAndLock } from './utils';
+import { stripHtml } from '@/service/common/string';
 
 // Q-A-Index Prompt（参考 convert_kb_csv.py 逻辑）
 const ENHANCE_QA_INDEX_PROMPT = `你是一名知识库索引生成专家。根据以下切片内容，生成检索信息。
@@ -179,10 +180,14 @@ export async function generateEnhanceIndex(): Promise<any> {
 
         // 构建 Prompt（使用 Q-A-Index 结构）
         // 从 q 内容中提取标题，不用集合名（避免文件编号干扰）
+        // 去掉 HTML 标签，避免将标签作为"内容"发送给 LLM
         const title = extractTitle(existingData.q);
+        const cleanA = stripHtml(existingData.a || '');
+        const cleanQ = stripHtml(existingData.q || '');
+        const content = cleanA || cleanQ;
         const prompt = ENHANCE_QA_INDEX_PROMPT.replace('{{title}}', title).replace(
           '{{content}}',
-          existingData.a || existingData.q
+          content
         );
 
         // 调用 LLM
@@ -199,15 +204,10 @@ export async function generateEnhanceIndex(): Promise<any> {
         // 解析结果
         const { q: newQ, indexes: newIndexes } = parseEnhanceResult(answerText);
 
-        // 构建新的 A 字段（加上下文头）
+        // 构建新的 A 字段（去掉 HTML + 加上下文头）
         const chapter = extractChapter(existingData.q);
         const article = extractArticle(existingData.q);
-        const newA = buildAnswerWithContext(
-          existingData.a || existingData.q,
-          title,
-          chapter,
-          article
-        );
+        const newA = buildAnswerWithContext(cleanA || cleanQ, title, chapter, article);
 
         // 构建新的 indexes 数组
         const indexes: { type: DatasetDataIndexTypeEnum; text: string }[] = [];

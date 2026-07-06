@@ -10,6 +10,7 @@ import type {
   EnhancePreviewResponse,
   EnhancePreviewRow
 } from '@/pageComponents/dataset/detail/IndexEnhance/types';
+import { stripHtml } from '@/service/common/string';
 
 async function handler(
   req: ApiRequestProps<EnhancePreviewBody>,
@@ -121,20 +122,6 @@ function extractTitle(q: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   return clean.slice(0, 30);
-}
-
-// 去掉 HTML 标签，保留纯文本
-function stripHtml(text: string): string {
-  return text
-    .replace(/<br\s*\/?>/gi, '\n') // <br> → 换行
-    .replace(/<\/?(p|div|li|h[1-6])[^>]*>/gi, '\n') // 块级标签 → 换行
-    .replace(/<[^>]+>/g, '') // 去掉其他所有标签
-    .replace(/&nbsp;/g, ' ') // &nbsp; → 空格
-    .replace(/&lt;/g, '<') // &lt; → <
-    .replace(/&gt;/g, '>') // &gt; → >
-    .replace(/&amp;/g, '&') // &amp; → &
-    .replace(/\n{3,}/g, '\n\n') // 多个空行合并
-    .trim();
 }
 
 // 从原始 q 字段提取章节（匹配"第X章"）
