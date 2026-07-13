@@ -153,7 +153,7 @@ export const importDataset = async (formData: FormData) => {
 export const exportApp = async (parentId: string) => {
   const response = await authFetch(getWebReqUrl('/api/extend/app/exportByParentId'), {
     method: 'POST',
-    body: JSON.stringify({ parentId })
+    body: JSON.stringify({ parentId, keepApiKey: true })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -171,7 +171,7 @@ export const importApp = async (
 ) => {
   const response = await authFetch(getWebReqUrl('/api/extend/app/importFromJson'), {
     method: 'POST',
-    body: JSON.stringify({ file, keepOriginalId, targetId, targetType })
+    body: JSON.stringify({ file, keepOriginalId, targetId, targetType, keepApiKey: true })
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
