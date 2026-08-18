@@ -27,6 +27,7 @@ import {
   DatasetCollectionDataProcessModeEnum
 } from '@fastgpt/global/core/dataset/constants';
 import { DatasetDataIndexTypeEnum } from '@fastgpt/global/core/dataset/data/constants';
+import { ADMIN_ONLY_LOCK_TIME } from '@/service/core/dataset/training/utils';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { hashStr } from '@fastgpt/global/common/string/tools';
 import { replaceVariable } from '@fastgpt/global/common/string/tools';
@@ -306,7 +307,9 @@ export async function adminCreateCollectionAndInsertData({
         mode: enhanceInline ? TrainingModeEnum.chunk : trainingMode,
         billId,
         data,
-        session: sess
+        session: sess,
+        // admin 专属任务:app 队列不拾取(enhance 模式天然 admin 独占,无需标记)
+        lockTime: ADMIN_ONLY_LOCK_TIME
       });
 
       return { collectionId: String(collectionId), insertResults };

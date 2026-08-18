@@ -13,7 +13,6 @@ import type {
 } from '@fastgpt/global/core/dataset/type';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { MongoDatasetTraining } from '@fastgpt/service/core/dataset/training/schema';
-import { addMinutes } from 'date-fns';
 import { checkTeamAiPointsAndLock } from './utils';
 import { getErrText } from '@fastgpt/global/common/error/utils';
 import { delay } from '@fastgpt/service/common/bullmq';
@@ -47,6 +46,8 @@ const getAdminTrainingMode = (collection: {
   return TrainingModeEnum.chunk;
 };
 import { pushDataListToTrainingQueue } from '@fastgpt/service/core/dataset/training/controller';
+import { ADMIN_ONLY_LOCK_TIME } from '@/service/core/dataset/training/constants';
+import { findTrainingTaskWithAdminFallback } from '@/service/core/dataset/training/queuePick';
 import { DatasetDataIndexTypeEnum } from '@fastgpt/global/core/dataset/data/constants';
 import { mongoSessionRun } from '@fastgpt/service/common/mongo/sessionRun';
 import { MongoDatasetCollection } from '@fastgpt/service/core/dataset/collection/schema';
@@ -118,31 +119,27 @@ export const datasetParseQueue = async (): Promise<any> => {
         error = false
       } = await (async () => {
         try {
-          const data = await MongoDatasetTraining.findOneAndUpdate(
-            {
-              mode: TrainingModeEnum.enhance,
-              dataId: { $exists: false }, // 排除索引增强任务（有 dataId 的）
-              retryCount: { $gt: 0 },
-              lockTime: { $lte: addMinutes(new Date(), -10) }
-            },
-            {
-              lockTime: new Date(),
-              $inc: { retryCount: -1 }
-            }
-          )
-            .populate<{
-              dataset: DatasetSchemaType;
-              collection: DatasetCollectionSchemaType;
-            }>([
-              {
-                path: 'collection',
-                select: '-qaPrompt'
-              },
-              {
-                path: 'dataset'
-              }
-            ])
-            .lean();
+          const data = await findTrainingTaskWithAdminFallback({
+            mode: TrainingModeEnum.enhance,
+            // 排除索引增强任务(有 dataId 的)
+            extraFilter: { dataId: { $exists: false } },
+            coolMinutes: 10,
+            populate: (query) =>
+              query
+                .populate<{
+                  dataset: DatasetSchemaType;
+                  collection: DatasetCollectionSchemaType;
+                }>([
+                  {
+                    path: 'collection',
+                    select: '-qaPrompt'
+                  },
+                  {
+                    path: 'dataset'
+                  }
+                ])
+                .lean()
+          });
           if (!data) return { done: true };
           return { data };
         } catch (error) {
@@ -292,7 +289,9 @@ export const datasetParseQueue = async (): Promise<any> => {
             mode: trainingMode,
             billId: data.billId,
             data: trainingData,
-            session
+            session,
+            // admin 专属任务:app 队列不拾取
+            lockTime: ADMIN_ONLY_LOCK_TIME
           });
 
           // 6. Delete task

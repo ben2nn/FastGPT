@@ -10,6 +10,10 @@ import { getLLMModel, getEmbeddingModel, getVlmModel } from '@fastgpt/service/co
 import { TrainingModeEnum } from '@fastgpt/global/core/dataset/constants';
 import { type ApiRequestProps } from '@fastgpt/service/type/next';
 import { OwnerPermissionVal } from '@fastgpt/global/support/permission/constant';
+import {
+  ADMIN_ONLY_LOCK_TIME,
+  getAdminOnlyInitialExpireAt
+} from '@/service/core/dataset/training/utils';
 
 export type rebuildEmbeddingBody = {
   datasetId: string;
@@ -119,7 +123,10 @@ async function handler(req: ApiRequestProps<rebuildEmbeddingBody>): Promise<Resp
                 mode: TrainingModeEnum.chunk,
                 model: vectorModel,
                 dataId: data._id,
-                retryCount: 50
+                retryCount: 50,
+                // admin 专属任务:app 队列不拾取;expireAt 过去时间使创建后立即可拾取
+                lockTime: ADMIN_ONLY_LOCK_TIME,
+                expireAt: getAdminOnlyInitialExpireAt()
               }
             ],
             {

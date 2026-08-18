@@ -35,6 +35,7 @@ export async function pushDataListToTrainingQueue({
   billId,
   mode = TrainingModeEnum.chunk,
   indexSize,
+  lockTime,
   session
 }: PushDataToTrainingQueueProps): Promise<PushDatasetDataResponse> {
   const vectorModelData = getEmbeddingModel(vectorModel);
@@ -126,7 +127,10 @@ export async function pushDataListToTrainingQueue({
           indexSize,
           weight: weight ?? 0,
           indexes: item.indexes,
-          retryCount: 5
+          retryCount: 5,
+          // admin 专属任务:lockTime 远期使 app 队列不可见;
+          // expireAt 设过去时间,使任务创建后立即可被 admin 拾取(expireAt <= now-冷却)
+          ...(lockTime && { lockTime, expireAt: new Date(Date.now() - 10 * 60 * 1000) })
         })),
         {
           session,

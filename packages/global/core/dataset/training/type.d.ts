@@ -18,4 +18,5 @@ export type PushDataToTrainingQueueProps = {
 
   billId?: string;
   session?: ClientSession;
+  lockTime?: Date;
 };

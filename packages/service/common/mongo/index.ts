@@ -2,6 +2,9 @@ import { isTestEnv } from '@fastgpt/global/common/system/constants';
 import { addLog } from '../../common/system/log';
 import type { Model } from 'mongoose';
 import mongoose, { Mongoose } from 'mongoose';
+import { waitForMongoReady } from './waitForReady';
+
+export { waitForMongoReady, MONGO_READY_WAIT_TIMEOUT_MS } from './waitForReady';
 
 export default mongoose;
 export * from 'mongoose';
@@ -39,6 +42,17 @@ const addCommonMiddleware = (schema: mongoose.Schema) => {
   ];
 
   operations.forEach((op: any) => {
+    // 查询前等待连接就绪：断连→重连窗口期内的查询不再立即失败（MongoNotConnectedError）
+    // 等待逻辑自身异常不阻断查询；超时后放行，查询自然失败（与未等待时的行为一致）
+    schema.pre(op, async function (this: any, next) {
+      try {
+        await waitForMongoReady(connectionMongo.connection);
+      } catch {
+        // ignore
+      }
+      next();
+    });
+
     schema.pre(op, function (this: any, next) {
       this._startTime = Date.now();
       this._query = this.getQuery ? this.getQuery() : null;

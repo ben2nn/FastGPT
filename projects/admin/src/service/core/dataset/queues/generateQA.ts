@@ -8,7 +8,6 @@ import { Prompt_AgentQA } from '@fastgpt/global/core/ai/prompt/agent';
 import type { PushDatasetDataChunkProps } from '@fastgpt/global/core/dataset/api.d';
 import { getLLMModel } from '@fastgpt/service/core/ai/model';
 import { checkTeamAiPointsAndLock } from './utils';
-import { addMinutes } from 'date-fns';
 import type { LLMModelItemType } from '@fastgpt/global/core/ai/model.d';
 import {
   chunkAutoChunkSize,
@@ -17,6 +16,8 @@ import {
 import { getErrText } from '@fastgpt/global/common/error/utils';
 import { text2Chunks } from '@fastgpt/service/worker/function';
 import { pushDataListToTrainingQueue } from '@fastgpt/service/core/dataset/training/controller';
+import { ADMIN_ONLY_LOCK_TIME } from '@/service/core/dataset/training/constants';
+import { findTrainingTaskWithAdminFallback } from '@/service/core/dataset/training/queuePick';
 import { delay } from '@fastgpt/service/common/bullmq';
 import { createLLMResponse } from '@fastgpt/service/core/ai/llm/request';
 import { UsageItemTypeEnum } from '@fastgpt/global/support/wallet/usage/constants';
@@ -50,28 +51,23 @@ export async function generateQA(): Promise<any> {
         error = false
       } = await (async () => {
         try {
-          const data = await MongoDatasetTraining.findOneAndUpdate(
-            {
-              mode: TrainingModeEnum.qa,
-              retryCount: { $gt: 0 },
-              lockTime: { $lte: addMinutes(new Date(), -10) }
-            },
-            {
-              lockTime: new Date(),
-              $inc: { retryCount: -1 }
-            }
-          )
-            .populate<PopulateType>([
-              {
-                path: 'dataset',
-                select: 'agentModel vectorModel vlmModel'
-              },
-              {
-                path: 'collection',
-                select: 'qaPrompt'
-              }
-            ])
-            .lean();
+          const data = await findTrainingTaskWithAdminFallback({
+            mode: TrainingModeEnum.qa,
+            coolMinutes: 10,
+            populate: (query) =>
+              query
+                .populate<PopulateType>([
+                  {
+                    path: 'dataset',
+                    select: 'agentModel vectorModel vlmModel'
+                  },
+                  {
+                    path: 'collection',
+                    select: 'qaPrompt'
+                  }
+                ])
+                .lean()
+          });
 
           // task preemption
           if (!data) {
@@ -153,7 +149,9 @@ export async function generateQA(): Promise<any> {
           billId: data.billId,
           vectorModel: data.dataset.vectorModel,
           agentModel: data.dataset.agentModel,
-          vlmModel: data.dataset.vlmModel
+          vlmModel: data.dataset.vlmModel,
+          // admin 专属任务:app 队列不拾取
+          lockTime: ADMIN_ONLY_LOCK_TIME
         });
 
         // delete data from training

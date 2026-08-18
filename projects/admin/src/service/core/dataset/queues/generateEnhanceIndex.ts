@@ -9,13 +9,13 @@ import { MongoDatasetTraining } from '@fastgpt/service/core/dataset/training/sch
 import { TrainingModeEnum } from '@fastgpt/global/core/dataset/constants';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { getLLMModel } from '@fastgpt/service/core/ai/model';
-import { addMinutes } from 'date-fns';
 import { getErrText } from '@fastgpt/global/common/error/utils';
 import { delay } from '@fastgpt/service/common/bullmq';
 import { createLLMResponse } from '@fastgpt/service/core/ai/llm/request';
 import { DatasetDataIndexTypeEnum } from '@fastgpt/global/core/dataset/data/constants';
 import { checkTeamAiPointsAndLock } from './utils';
 import { stripHtml } from '@/service/common/string';
+import { findTrainingTaskWithAdminFallback } from '@/service/core/dataset/training/queuePick';
 
 // Q-A-Index Prompt（参考 convert_kb_csv.py 逻辑）
 const ENHANCE_QA_INDEX_PROMPT = `你是一名知识库索引生成专家。根据以下切片内容，生成检索信息。
@@ -130,20 +130,19 @@ export async function generateEnhanceIndex(): Promise<any> {
         error = false
       } = await (async () => {
         try {
-          const data = await MongoDatasetTraining.findOneAndUpdate(
-            {
-              mode: TrainingModeEnum.enhance,
-              dataId: { $exists: true, $ne: null },
-              retryCount: { $gt: 0 },
-              lockTime: { $lte: addMinutes(new Date(), -10) }
-            },
-            { lockTime: new Date(), $inc: { retryCount: -1 } }
-          )
-            .populate<PopulateType>([
-              { path: 'dataset', select: 'agentModel vectorModel vlmModel' },
-              { path: 'collection', select: 'indexSize name' }
-            ])
-            .lean();
+          const data = await findTrainingTaskWithAdminFallback({
+            mode: TrainingModeEnum.enhance,
+            // 仅处理有 dataId 的增强任务(无 dataId 的由 parse 队列处理)
+            extraFilter: { dataId: { $exists: true, $ne: null } },
+            coolMinutes: 10,
+            populate: (query) =>
+              query
+                .populate<PopulateType>([
+                  { path: 'dataset', select: 'agentModel vectorModel vlmModel' },
+                  { path: 'collection', select: 'indexSize name' }
+                ])
+                .lean()
+          });
           if (!data) return { done: true };
           return { data };
         } catch {

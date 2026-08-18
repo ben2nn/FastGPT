@@ -16,6 +16,10 @@ import { WritePermissionVal } from '@fastgpt/global/support/permission/constant'
 import { addLog } from '@fastgpt/service/common/system/log';
 import { setEnhanceConfig } from '@/service/core/dataset/enhanceConfigCache';
 import type { EnhanceRuleConfig } from '@/pageComponents/dataset/detail/IndexEnhance/types';
+import {
+  ADMIN_ONLY_LOCK_TIME,
+  getAdminOnlyInitialExpireAt
+} from '@/service/core/dataset/training/constants';
 
 export type enhanceIndexesBody = {
   datasetId: string;
@@ -115,7 +119,11 @@ async function handler(req: ApiRequestProps<enhanceIndexesBody>) {
           a: data.a,
           chunkIndex: data.chunkIndex,
           indexes: existingIndexes,
-          retryCount: 50
+          retryCount: 50,
+          // admin 专属任务:统一打标(app 目前不消费 enhance,防御将来);
+          // expireAt 过去时间使创建后立即可拾取
+          lockTime: ADMIN_ONLY_LOCK_TIME,
+          expireAt: getAdminOnlyInitialExpireAt()
         };
       });
 

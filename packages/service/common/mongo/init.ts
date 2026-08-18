@@ -4,6 +4,17 @@ import type { Mongoose } from 'mongoose';
 
 const maxConnecting = Math.max(30, Number(process.env.DB_MAX_LINK || 20));
 
+// 模块级监听器（共享引用，保证 removeListener 能精确匹配、幂等注册）
+const onMongoError = (error: Error) => {
+  console.error('mongo error', error);
+};
+const onMongoConnected = () => {
+  console.log('mongo connected');
+};
+const onMongoDisconnected = () => {
+  console.error('mongo disconnected');
+};
+
 /**
  * connect MongoDB and init data
  */
@@ -19,9 +30,12 @@ export async function connectMongo(props: {
     return db;
   }
 
+  // 幂等注册：只移除自身注册的监听器，不误删其他模块注册的监听器
+  // （如 admin 项目 mongoWatch 的自动重连监控）
   const RemoveListeners = () => {
-    db.connection.removeAllListeners('error');
-    db.connection.removeAllListeners('disconnected');
+    db.connection.removeListener('error', onMongoError);
+    db.connection.removeListener('disconnected', onMongoDisconnected);
+    db.connection.removeListener('connected', onMongoConnected);
   };
 
   console.log('MongoDB start connect');
@@ -30,15 +44,9 @@ export async function connectMongo(props: {
     RemoveListeners();
     db.set('strictQuery', 'throw');
 
-    db.connection.on('error', async (error) => {
-      console.error('mongo error', error);
-    });
-    db.connection.on('connected', async () => {
-      console.log('mongo connected');
-    });
-    db.connection.on('disconnected', async () => {
-      console.error('mongo disconnected');
-    });
+    db.connection.on('error', onMongoError);
+    db.connection.on('connected', onMongoConnected);
+    db.connection.on('disconnected', onMongoDisconnected);
 
     await db.connect(url, {
       bufferCommands: true,

@@ -3,7 +3,8 @@ import {
   connectionMongo,
   connectionLogMongo,
   MONGO_URL,
-  MONGO_LOG_URL
+  MONGO_LOG_URL,
+  waitForMongoReady
 } from '@fastgpt/service/common/mongo';
 import { addLog } from '@fastgpt/service/common/system/log';
 
@@ -16,28 +17,6 @@ let _externalReconnecting = false;
 export const setExternalReconnecting = (v: boolean) => {
   _externalReconnecting = v;
 };
-
-/**
- * 等待 MongoDB 连接真正就绪（readyState === 1）
- * connectMongo 在 readyState !== 0 时直接返回，不等待 connecting→connected 转换
- * 此函数补充等待，确保 driver 级连接已建立
- */
-export async function waitForMongoReady(timeoutMs = 10000): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (connectionMongo.connection.readyState === 1) {
-      try {
-        // 验证 driver 级连接确实可用
-        await connectionMongo.connection.db.admin().ping();
-        return true;
-      } catch {
-        // ping 失败，继续等待
-      }
-    }
-    await new Promise((r) => setTimeout(r, 200));
-  }
-  return false;
-}
 
 // 保活定时器
 let keepAliveInterval: NodeJS.Timeout | null = null;
@@ -60,6 +39,24 @@ function startMongoKeepAlive() {
   keepAliveInterval = setInterval(async () => {
     const readyState = connectionMongo.connection.readyState;
 
+    // readyState === 1 时也 ping 一次，检测 TCP 假死（连接对象健康但实际不可用）
+    if (readyState === 1) {
+      try {
+        await Promise.race([
+          connectionMongo.connection.db?.admin().ping(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('ping 超时 (5s)')), 5000)
+          )
+        ]);
+        return; // 连接健康
+      } catch {
+        addLog.warn('MongoDB 保活检查：ping 失败（连接假死），主动断开触发自动重连');
+        // 主动断开重置 driver 状态，disconnected 事件会触发 mongoWatch 的 handleReconnect 自动重连
+        await connectionMongo.disconnect().catch(() => {});
+        return;
+      }
+    }
+
     // 0 = disconnected, 3 = disconnecting
     if (readyState === 0 || readyState === 3) {
       // 如果 mongoWatch 的 handleReconnect 正在进行，跳过保活重连避免竞争
@@ -70,7 +67,7 @@ function startMongoKeepAlive() {
       addLog.warn(`MongoDB 保活检查：连接状态异常 (readyState=${readyState})，尝试重连`);
       try {
         await connectMongo({ db: connectionMongo, url: MONGO_URL });
-        const ready = await waitForMongoReady(10000);
+        const ready = await waitForMongoReady(connectionMongo.connection, 10000);
         if (ready) {
           addLog.info('MongoDB 保活重连成功');
           // 保活重连后重建 Change Streams（旧 streams 在断连时已失效）
@@ -114,7 +111,7 @@ export async function connectToMongo() {
     addLog.info('MongoDB 连接已建立');
 
     // 验证 driver 级连接确实可用（connectMongo 可能在 readyState=2 时返回）
-    const ready = await waitForMongoReady(10000);
+    const ready = await waitForMongoReady(connectionMongo.connection, 10000);
     if (!ready) {
       throw new Error('MongoDB 连接建立后 driver 级连接未就绪');
     }

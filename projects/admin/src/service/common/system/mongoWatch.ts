@@ -2,13 +2,9 @@ import { getInitConfig } from '.';
 import { createAdminTrainingMongoWatch } from '@/service/core/dataset/training/utils';
 import { MongoSystemConfigs } from '@fastgpt/service/common/system/config/schema';
 import { addLog } from '@fastgpt/service/common/system/log';
-import { connectionMongo, MONGO_URL } from '@fastgpt/service/common/mongo';
+import { connectionMongo, MONGO_URL, waitForMongoReady } from '@fastgpt/service/common/mongo';
 import { connectMongo } from '@fastgpt/service/common/mongo/init';
-import {
-  waitForMongoReady,
-  setExternalReconnecting,
-  setOnKeepAliveReconnect
-} from '@/service/common/mongo';
+import { setExternalReconnecting, setOnKeepAliveReconnect } from '@/service/common/mongo';
 
 let changeStreams: any[] = [];
 let isReconnecting = false;
@@ -42,7 +38,7 @@ export const startMongoWatch = async () => {
 const setupChangeStreams = async () => {
   try {
     // 再次确认连接就绪（防御性检查）
-    const ready = await waitForMongoReady(5000);
+    const ready = await waitForMongoReady(connectionMongo.connection, 5000);
     if (!ready) {
       addLog.error('Change Streams 建立失败：连接未就绪');
       return;
@@ -69,23 +65,31 @@ const setupChangeStreams = async () => {
   }
 };
 
+// 连接事件监听器（具名函数，支持幂等注册）
+const onMongoDisconnected = () => {
+  addLog.warn('MongoDB 连接断开，启动自动重连');
+  handleReconnect();
+};
+const onMongoConnected = () => {
+  addLog.info('MongoDB 连接已建立');
+};
+const onMongoError = (error: Error) => {
+  addLog.error('MongoDB 连接错误', error);
+};
+
 /**
  * 设置连接监控
  * 监听连接断开事件，自动触发重连
+ * 幂等：重复调用不会累积监听器
  */
 const setupConnectionMonitor = () => {
-  connectionMongo.connection.on('disconnected', () => {
-    addLog.warn('MongoDB 连接断开，启动自动重连');
-    handleReconnect();
-  });
+  connectionMongo.connection.removeListener('disconnected', onMongoDisconnected);
+  connectionMongo.connection.removeListener('connected', onMongoConnected);
+  connectionMongo.connection.removeListener('error', onMongoError);
 
-  connectionMongo.connection.on('connected', () => {
-    addLog.info('MongoDB 连接已建立');
-  });
-
-  connectionMongo.connection.on('error', (error) => {
-    addLog.error('MongoDB 连接错误', error);
-  });
+  connectionMongo.connection.on('disconnected', onMongoDisconnected);
+  connectionMongo.connection.on('connected', onMongoConnected);
+  connectionMongo.connection.on('error', onMongoError);
 
   addLog.info('MongoDB 连接监控已启用');
 };
@@ -107,14 +111,21 @@ const handleReconnect = async () => {
   const baseDelay = 1000; // 1 秒
 
   while (retryCount < maxRetries) {
-    const retryDelay = baseDelay * Math.pow(2, retryCount); // 指数退避
-    addLog.info(`等待 ${retryDelay}ms 后尝试重连 (${retryCount + 1}/${maxRetries})`);
+    // 首次重连立即执行（断连已发生，无需再等）；后续重试保持指数退避
+    const retryDelay = retryCount === 0 ? 0 : baseDelay * Math.pow(2, retryCount);
+    if (retryDelay > 0) {
+      addLog.info(`等待 ${retryDelay}ms 后尝试重连 (${retryCount + 1}/${maxRetries})`);
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
 
-    await new Promise((resolve) => setTimeout(resolve, retryDelay));
-
-    // 检查是否已经重连成功
+    // 检查驱动层是否已自动恢复连接
+    // 断线会使 Change Streams 游标失效，即使连接已恢复也必须重建
     if (connectionMongo.connection.readyState === 1) {
-      addLog.info('MongoDB 已重新连接');
+      addLog.info('MongoDB 已重新连接，重建 Change Streams');
+      cleanupMongoWatch();
+      await setupChangeStreams();
+      // 兜底重注册连接监控（防止监听器被意外移除后断开不再自动重连）
+      setupConnectionMonitor();
       isReconnecting = false;
       setExternalReconnecting(false);
       return;
@@ -125,7 +136,7 @@ const handleReconnect = async () => {
       await connectMongo({ db: connectionMongo, url: MONGO_URL });
 
       // connectMongo 在 readyState !== 0 时直接返回，需等待 driver 级连接真正就绪
-      const ready = await waitForMongoReady(10000);
+      const ready = await waitForMongoReady(connectionMongo.connection, 10000);
       if (!ready) {
         addLog.warn(`MongoDB 重连后连接未就绪 (${retryCount + 1}/${maxRetries})`);
         retryCount++;
@@ -137,6 +148,8 @@ const handleReconnect = async () => {
       // 重新建立 Change Streams
       cleanupMongoWatch();
       await setupChangeStreams();
+      // 兜底重注册连接监控（防止监听器被意外移除后断开不再自动重连）
+      setupConnectionMonitor();
 
       isReconnecting = false;
       setExternalReconnecting(false);

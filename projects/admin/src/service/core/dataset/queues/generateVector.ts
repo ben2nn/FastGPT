@@ -3,7 +3,6 @@ import { MongoDatasetTraining } from '@fastgpt/service/core/dataset/training/sch
 import { TrainingModeEnum } from '@fastgpt/global/core/dataset/constants';
 import { pushGenerateVectorUsage } from '@/service/support/wallet/usage/push';
 import { checkTeamAiPointsAndLock } from './utils';
-import { addMinutes } from 'date-fns';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { MongoDatasetData } from '@fastgpt/service/core/dataset/data/schema';
 import {
@@ -20,6 +19,11 @@ import type {
 } from '@fastgpt/global/core/dataset/type';
 import { retryFn } from '@fastgpt/global/common/system/utils';
 import { delay } from '@fastgpt/service/common/bullmq';
+import {
+  ADMIN_ONLY_LOCK_TIME,
+  getAdminOnlyInitialExpireAt
+} from '@/service/core/dataset/training/constants';
+import { findTrainingTaskWithAdminFallback } from '@/service/core/dataset/training/queuePick';
 
 const reduceQueue = () => {
   global.vectorQueueLen = global.vectorQueueLen > 0 ? global.vectorQueueLen - 1 : 0;
@@ -53,32 +57,26 @@ export async function generateVector(): Promise<any> {
         error = false
       } = await (async () => {
         try {
-          const data = await MongoDatasetTraining.findOneAndUpdate(
-            {
-              mode: TrainingModeEnum.chunk,
-              retryCount: { $gt: 0 },
-              lockTime: { $lte: addMinutes(new Date(), -3) }
-            },
-            {
-              lockTime: new Date(),
-              $inc: { retryCount: -1 }
-            }
-          )
-            .populate<PopulateType>([
-              {
-                path: 'dataset',
-                select: 'vectorModel'
-              },
-              {
-                path: 'collection',
-                select: 'name indexPrefixTitle'
-              },
-              {
-                path: 'data',
-                select: '_id indexes'
-              }
-            ])
-            .lean();
+          const data = await findTrainingTaskWithAdminFallback({
+            mode: TrainingModeEnum.chunk,
+            populate: (query) =>
+              query
+                .populate<PopulateType>([
+                  {
+                    path: 'dataset',
+                    select: 'vectorModel'
+                  },
+                  {
+                    path: 'collection',
+                    select: 'name indexPrefixTitle'
+                  },
+                  {
+                    path: 'data',
+                    select: '_id indexes'
+                  }
+                ])
+                .lean()
+          });
 
           // task preemption
           if (!data) {
@@ -209,7 +207,10 @@ const rebuildData = async ({ trainingData }: { trainingData: TrainingDataType })
                 billId: trainingData.billId,
                 mode: TrainingModeEnum.chunk,
                 dataId: newRebuildingData._id,
-                retryCount: 50
+                retryCount: 50,
+                // admin 专属任务:app 队列不拾取;expireAt 过去时间使创建后立即可拾取
+                lockTime: ADMIN_ONLY_LOCK_TIME,
+                expireAt: getAdminOnlyInitialExpireAt()
               }
             ],
             { session, ordered: true }

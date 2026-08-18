@@ -9,9 +9,10 @@ import type { ChatCompletionMessageParam } from '@fastgpt/global/core/ai/type.d'
 import { addLog } from '@fastgpt/service/common/system/log';
 import { replaceVariable } from '@fastgpt/global/common/string/tools';
 import { getLLMModel, getVlmModel } from '@fastgpt/service/core/ai/model';
-import { addMinutes } from 'date-fns';
 import { getErrText } from '@fastgpt/global/common/error/utils';
 import { pushDataListToTrainingQueue } from '@fastgpt/service/core/dataset/training/controller';
+import { ADMIN_ONLY_LOCK_TIME } from '@/service/core/dataset/training/constants';
+import { findTrainingTaskWithAdminFallback } from '@/service/core/dataset/training/queuePick';
 import { delay } from '@fastgpt/service/common/bullmq';
 import { createLLMResponse } from '@fastgpt/service/core/ai/llm/request';
 import { DatasetDataIndexTypeEnum } from '@fastgpt/global/core/dataset/data/constants';
@@ -56,19 +57,17 @@ export async function generateImageIndex(): Promise<any> {
         error = false
       } = await (async () => {
         try {
-          const data = await MongoDatasetTraining.findOneAndUpdate(
-            {
-              mode: TrainingModeEnum.image,
-              retryCount: { $gt: 0 },
-              lockTime: { $lte: addMinutes(new Date(), -10) }
-            },
-            { lockTime: new Date(), $inc: { retryCount: -1 } }
-          )
-            .populate<PopulateType>([
-              { path: 'dataset', select: 'agentModel vectorModel vlmModel' },
-              { path: 'collection', select: 'autoIndexes indexSize' }
-            ])
-            .lean();
+          const data = await findTrainingTaskWithAdminFallback({
+            mode: TrainingModeEnum.image,
+            coolMinutes: 10,
+            populate: (query) =>
+              query
+                .populate<PopulateType>([
+                  { path: 'dataset', select: 'agentModel vectorModel vlmModel' },
+                  { path: 'collection', select: 'autoIndexes indexSize' }
+                ])
+                .lean()
+          });
           if (!data) return { done: true };
           return { data };
         } catch {
@@ -173,7 +172,9 @@ export async function generateImageIndex(): Promise<any> {
           indexSize: data.collection?.indexSize,
           vectorModel: data.dataset.vectorModel,
           agentModel: data.dataset.agentModel,
-          vlmModel: data.dataset.vlmModel
+          vlmModel: data.dataset.vlmModel,
+          // admin 专属任务:app 队列不拾取
+          lockTime: ADMIN_ONLY_LOCK_TIME
         });
 
         await MongoDatasetTraining.findByIdAndDelete(data._id);

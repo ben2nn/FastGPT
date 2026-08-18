@@ -19,6 +19,10 @@ import {
 import { MongoDatasetTraining } from '@fastgpt/service/core/dataset/training/schema';
 import { createTrainingUsage } from '@fastgpt/service/support/wallet/usage/controller';
 import { UsageSourceEnum } from '@fastgpt/global/support/wallet/usage/constants';
+import {
+  ADMIN_ONLY_LOCK_TIME,
+  getAdminOnlyInitialExpireAt
+} from '@/service/core/dataset/training/utils';
 
 // 禁用默认 bodyParser，使用 formidable 处理文件上传
 export const config = {
@@ -284,16 +288,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     dataTexts.forEach(updateDoc);
     collectionTags.forEach(updateDoc);
 
-    // 源环境的向量 dataId 在新环境无效，清除避免重建时误删新环境中同 ID 的向量
-    // （勾选「重建索引」时由 generateVector 的 rebuildData 重新生成向量 ID）
-    datas.forEach((doc) => {
-      const indexes = doc.indexes;
-      if (Array.isArray(indexes)) {
-        indexes.forEach((idx: Record<string, unknown>) => {
-          delete idx.dataId;
-        });
-      }
-    });
+    // 源环境的向量 dataId 在新环境无效（PG BIGSERIAL 自增，跨环境必然重复），
+    // 若保留则重建索引后会误删新环境中同 ID 的向量。
+    // 注意：不能在插入前 delete idx.dataId——schema 中 dataId 为 required:true，
+    // Mongoose insertMany 在 ordered:false 时会静默跳过校验失败的文档，导致整条数据丢失。
+    // 因此在数据插入成功后统一 $unset 清除（见下方第 11 步）。
 
     // 释放 idMap，减少内存占用
     if (!keepOriginalId) {
@@ -359,38 +358,53 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       model: { insertMany: (docs: T[], opts: Record<string, unknown>) => Promise<T[]> },
       docs: T[],
       name: string
-    ) {
-      let insertedCount = 0;
+    ): Promise<Set<string>> {
+      const insertedIds = new Set<string>();
       for (let i = 0; i < docs.length; i += BATCH_SIZE) {
         const batch = docs.slice(i, i + BATCH_SIZE);
         try {
           const result = await model.insertMany(batch, { ordered: false });
-          insertedCount += result.length;
+          result.forEach((doc) => insertedIds.add(String(doc._id)));
         } catch (err: unknown) {
-          if (err instanceof Error && 'code' in err && (err as { code: number }).code === 11000) {
-            const writeResult = (err as { result?: { insertedCount?: number } }).result;
-            if (writeResult?.insertedCount) {
-              insertedCount += writeResult.insertedCount;
-            }
-            const dupCount = batch.length - (writeResult?.insertedCount ?? 0);
+          // Mongoose 在 driver 写入错误（如 11000 重复键）时会在错误对象上
+          // 填充 insertedDocs（成功插入的文档数组），据此恢复成功插入的 _id
+          const bulkErr = err as { code?: number; insertedDocs?: unknown[] };
+          if (bulkErr.code === 11000) {
+            const inserted = bulkErr.insertedDocs ?? [];
+            inserted.forEach((doc) =>
+              insertedIds.add(String((doc as Record<string, unknown>)._id))
+            );
+            const dupCount = batch.length - inserted.length;
             duplicateWarnings.push(`${name}: ${dupCount} 条重复已跳过`);
           } else {
             throw err;
           }
         }
       }
-      return insertedCount;
+      return insertedIds;
     }
 
-    const datasetsCount = await batchInsert(MongoDataset, datasets, 'datasets');
-    const collectionsCount = await batchInsert(MongoDatasetCollection, collections, 'collections');
-    const datasCount = await batchInsert(MongoDatasetData, datas, 'datas');
-    const dataTextsCount = await batchInsert(MongoDatasetDataText, dataTexts, 'dataTexts');
-    const collectionTagsCount = await batchInsert(
+    const datasetsIds = await batchInsert(MongoDataset, datasets, 'datasets');
+    const collectionsIds = await batchInsert(MongoDatasetCollection, collections, 'collections');
+    const datasIds = await batchInsert(MongoDatasetData, datas, 'datas');
+    const dataTextsIds = await batchInsert(MongoDatasetDataText, dataTexts, 'dataTexts');
+    const collectionTagsIds = await batchInsert(
       MongoDatasetCollectionTags,
       collectionTags,
       'collectionTags'
     );
+
+    // 清除源环境向量 dataId（必须在创建训练任务之前完成）：
+    // 保留原值会在 rebuildData 重建时误删新环境中同 ID 的向量
+    if (datasIds.size > 0) {
+      const idList = [...datasIds].map((id) => new Types.ObjectId(id));
+      for (let i = 0; i < idList.length; i += BATCH_SIZE) {
+        await MongoDatasetData.updateMany(
+          { _id: { $in: idList.slice(i, i + BATCH_SIZE) } },
+          { $unset: { 'indexes.$[].dataId': 1 } }
+        );
+      }
+    }
 
     // 12. 如果需要重建索引，为导入的数据创建训练任务
     let rebuildTasksCount = 0;
@@ -418,23 +432,31 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             agentModel: firstDataset.agentModel
           });
 
-          // 为每个数据创建训练任务
-          // 必须带 dataId：数据已直接写入 MongoDatasetData，
-          // 带 dataId 才会走 generateVector 的 rebuildData（更新已有行并重建向量），
-          // 否则走 insertData 会新建重复数据，导致数据条数翻倍
-          const trainingData = datas.map((data) => ({
-            teamId,
-            tmbId,
-            datasetId: data.datasetId as string,
-            collectionId: data.collectionId as string,
-            billId: usageId,
-            mode: TrainingModeEnum.chunk,
-            dataId: data._id as string,
-            q: data.q as string,
-            a: data.a as string,
-            chunkIndex: (data.chunkIndex as number) || 0,
-            retryCount: 5
-          }));
+          // 为每个实际插入成功的数据创建训练任务：
+          // 1. 必须带 dataId：数据已直接写入 MongoDatasetData，
+          //    带 dataId 才会走 generateVector 的 rebuildData（更新已有行并重建向量），
+          //    否则走 insertData 会新建重复数据，导致数据条数翻倍
+          // 2. 过滤被跳过（重复/冲突）的数据，避免产生指向不存在数据的
+          //    孤儿任务（[Vector Queue] Not data 错误）
+          const trainingData = datas
+            .filter((data) => datasIds.has(String(data._id)))
+            .map((data) => ({
+              teamId,
+              tmbId,
+              datasetId: data.datasetId as string,
+              collectionId: data.collectionId as string,
+              billId: usageId,
+              mode: TrainingModeEnum.chunk,
+              dataId: data._id as string,
+              q: data.q as string,
+              a: data.a as string,
+              chunkIndex: (data.chunkIndex as number) || 0,
+              retryCount: 5,
+              // admin 专属任务:lockTime 远期值使 app 队列(lockTime <= now-3min)永不拾取;
+              // expireAt 设过去时间,创建后立即可被 admin 拾取
+              lockTime: ADMIN_ONLY_LOCK_TIME,
+              expireAt: getAdminOnlyInitialExpireAt()
+            }));
 
           // 分批插入训练任务
           const TRAINING_BATCH_SIZE = 500;
@@ -459,11 +481,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     res.status(200).json({
       success: true,
       data: {
-        datasetsCount,
-        collectionsCount,
-        datasCount,
-        dataTextsCount,
-        collectionTagsCount,
+        datasetsCount: datasetsIds.size,
+        collectionsCount: collectionsIds.size,
+        datasCount: datasIds.size,
+        dataTextsCount: dataTextsIds.size,
+        collectionTagsCount: collectionTagsIds.size,
         uploadedFilesCount: uploadedFileMap.size,
         rebuildTasksCount: rebuildIndex ? rebuildTasksCount : undefined,
         ...(duplicateWarnings.length > 0 ? { warnings: duplicateWarnings } : {})

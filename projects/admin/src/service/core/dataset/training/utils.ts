@@ -8,6 +8,13 @@ import { type DatasetTrainingSchemaType } from '@fastgpt/global/core/dataset/typ
 import { MongoDatasetTraining } from '@fastgpt/service/core/dataset/training/schema';
 import { datasetParseQueue } from '../queues/datasetParse';
 
+// 常量独立存放于 constants.ts(避免队列模块反向依赖本文件的循环)
+export {
+  ADMIN_ONLY_LOCK_TIME,
+  ADMIN_ONLY_LOCK_THRESHOLD,
+  getAdminOnlyInitialExpireAt
+} from './constants';
+
 /**
  * 完整训练队列 Watch（app 使用，监听所有标准模式）
  */
