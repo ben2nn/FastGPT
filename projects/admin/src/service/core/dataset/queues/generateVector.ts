@@ -170,8 +170,10 @@ const rebuildData = async ({ trainingData }: { trainingData: TrainingDataType })
     return Promise.reject('Not data');
   }
 
-  // Old vectorId
-  const deleteVectorIdList = trainingData.data.indexes.map((index) => index.dataId);
+  // Old vectorId（过滤无 dataId 的索引，如导入数据已清除源环境向量 ID 的情况）
+  const deleteVectorIdList = trainingData.data.indexes
+    .map((index) => index.dataId)
+    .filter(Boolean) as string[];
 
   // Find next rebuilding data to insert training queue
   try {

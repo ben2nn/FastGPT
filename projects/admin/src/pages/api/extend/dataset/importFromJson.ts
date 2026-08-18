@@ -284,8 +284,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     dataTexts.forEach(updateDoc);
     collectionTags.forEach(updateDoc);
 
-    // 注意：不修改 datas.indexes，保留原始的 dataId
-    // 如果需要重新生成向量，请在 app 中使用"重新训练"功能
+    // 源环境的向量 dataId 在新环境无效，清除避免重建时误删新环境中同 ID 的向量
+    // （勾选「重建索引」时由 generateVector 的 rebuildData 重新生成向量 ID）
+    datas.forEach((doc) => {
+      const indexes = doc.indexes;
+      if (Array.isArray(indexes)) {
+        indexes.forEach((idx: Record<string, unknown>) => {
+          delete idx.dataId;
+        });
+      }
+    });
 
     // 释放 idMap，减少内存占用
     if (!keepOriginalId) {
@@ -411,6 +419,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           });
 
           // 为每个数据创建训练任务
+          // 必须带 dataId：数据已直接写入 MongoDatasetData，
+          // 带 dataId 才会走 generateVector 的 rebuildData（更新已有行并重建向量），
+          // 否则走 insertData 会新建重复数据，导致数据条数翻倍
           const trainingData = datas.map((data) => ({
             teamId,
             tmbId,
@@ -418,6 +429,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             collectionId: data.collectionId as string,
             billId: usageId,
             mode: TrainingModeEnum.chunk,
+            dataId: data._id as string,
             q: data.q as string,
             a: data.a as string,
             chunkIndex: (data.chunkIndex as number) || 0,

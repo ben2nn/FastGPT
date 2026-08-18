@@ -11,7 +11,7 @@ import {
   type ParentTreePathItemType
 } from '@fastgpt/global/common/parentFolder/type';
 import { useRouter } from 'next/router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { createContext } from 'use-context-selector';
 import { useRequest } from '@fastgpt/web/hooks/useRequest';
 import { type DatasetUpdateBody } from '@fastgpt/global/core/dataset/api';
@@ -20,6 +20,7 @@ import { DatasetTypeEnum } from '@fastgpt/global/core/dataset/constants';
 import { type DatasetItemType, type DatasetListItemType } from '@fastgpt/global/core/dataset/type';
 import { type EditResourceInfoFormType } from '@/components/common/Modal/EditResourceModal';
 import { useTranslation } from 'next-i18next';
+import { useDebounce } from 'ahooks';
 
 const MoveModal = dynamic(() => import('@/components/common/folder/MoveModal'));
 
@@ -70,7 +71,12 @@ function DatasetContextProvider({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const [moveDatasetId, setMoveDatasetId] = useState<string>();
   const [searchKey, setSearchKey] = useState('');
-  const { parentId = null } = router.query as { parentId?: string | null };
+
+  // 对 searchKey 进行防抖，避免每次按键都触发 API 请求
+  const debouncedSearchKey = useDebounce(searchKey, { wait: 300 });
+
+  // 在 Next.js 水合完成前，router.query 可能为空，导致不必要的重新请求
+  const parentId = (router.query.parentId ?? null) as string | null;
 
   const {
     data: myDatasets = [],
@@ -79,12 +85,12 @@ function DatasetContextProvider({ children }: { children: React.ReactNode }) {
   } = useRequest(
     () =>
       getDatasets({
-        searchKey,
+        searchKey: debouncedSearchKey,
         parentId
       }),
     {
       manual: false,
-      refreshDeps: [parentId, searchKey]
+      refreshDeps: [parentId, debouncedSearchKey]
     }
   );
 
@@ -140,22 +146,40 @@ function DatasetContextProvider({ children }: { children: React.ReactNode }) {
     errorToast: t('common:dataset.Delete Dataset Error')
   });
 
-  const contextValue = {
-    isFetchingDatasets,
-    setMoveDatasetId,
-    paths,
-    refetchPaths,
-    refetchFolderDetail,
-    folderDetail,
-    editedDataset,
-    setEditedDataset,
-    onDelDataset,
-    onUpdateDataset,
-    myDatasets,
-    loadMyDatasets,
-    searchKey,
-    setSearchKey
-  };
+  const contextValue = useMemo(
+    () => ({
+      isFetchingDatasets,
+      setMoveDatasetId,
+      paths,
+      refetchPaths,
+      refetchFolderDetail,
+      folderDetail,
+      editedDataset,
+      setEditedDataset,
+      onDelDataset,
+      onUpdateDataset,
+      myDatasets,
+      loadMyDatasets,
+      searchKey,
+      setSearchKey
+    }),
+    [
+      isFetchingDatasets,
+      setMoveDatasetId,
+      paths,
+      refetchPaths,
+      refetchFolderDetail,
+      folderDetail,
+      editedDataset,
+      setEditedDataset,
+      onDelDataset,
+      onUpdateDataset,
+      myDatasets,
+      loadMyDatasets,
+      searchKey,
+      setSearchKey
+    ]
+  );
 
   return (
     <DatasetsContext.Provider value={contextValue}>

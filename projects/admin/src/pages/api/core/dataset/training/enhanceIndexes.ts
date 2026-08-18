@@ -81,6 +81,7 @@ async function handler(req: ApiRequestProps<enhanceIndexesBody>) {
 
   while (true) {
     const batch = await MongoDatasetData.find(dataQuery)
+      .sort({ _id: 1 }) // 稳定排序：增强处理会并发更新数据行，无排序的 skip 分页可能重复/遗漏扫描
       .skip(skip)
       .limit(batchSize)
       .select({ _id: 1, collectionId: 1, q: 1, a: 1, chunkIndex: 1, indexes: 1 })
