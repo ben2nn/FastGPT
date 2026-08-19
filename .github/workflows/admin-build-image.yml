@@ -17,7 +17,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  HARBOR_REGISTRY: p.52nn.us
+  HARBOR_REGISTRY: harbor.hrids.com
   HARBOR_PROJECT: ai_project
   IMAGE_NAME: ${{ github.repository }}
 
@@ -81,7 +81,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=fastgpt-admin image
-          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-admin,p.52nn.us/ai_project/fastgpt-admin",push-by-digest=true,push=true
+          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-admin,harbor.hrids.com/ai_project/fastgpt-admin",push-by-digest=true,push=true
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
@@ -137,13 +137,13 @@ jobs:
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:latest" >> $GITHUB_ENV
             echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:latest" >> $GITHUB_ENV
-            echo "Harbor_Tag=p.52nn.us/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
-            echo "Harbor_Latest=p.52nn.us/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Harbor_Tag=harbor.hrids.com/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Harbor_Latest=harbor.hrids.com/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
           else
             echo "Git_Tag=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:${{ github.ref_name }}" >> $GITHUB_ENV
             echo "Git_Latest=ghcr.io/${{ github.repository_owner }}/fastgpt-admin:latest" >> $GITHUB_ENV
-            echo "Harbor_Tag=p.52nn.us/ai_project/fastgpt-admin:${{ github.ref_name }}" >> $GITHUB_ENV
-            echo "Harbor_Latest=p.52nn.us/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
+            echo "Harbor_Tag=harbor.hrids.com/ai_project/fastgpt-admin:${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "Harbor_Latest=harbor.hrids.com/ai_project/fastgpt-admin:latest" >> $GITHUB_ENV
           fi
 
       - name: Create manifest list and push
