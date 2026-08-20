@@ -71,42 +71,46 @@ export const useEditTitle = ({
     }
   }, [canEmpty, onClose, toast, valueRule]);
 
-  const EditModal = ({
-    maxLength = 50,
-    iconSrc = 'modal/edit',
-    closeBtnText = '关闭'
-  }: {
-    maxLength?: number;
-    iconSrc?: string;
-    closeBtnText?: string;
-  }) => {
-    const { runAsync, loading } = useRequest(onclickConfirm);
+  // eslint-disable-next-line react/display-name
+  const EditModal = useCallback(
+    ({
+      maxLength = 50,
+      iconSrc = 'modal/edit',
+      closeBtnText = '关闭'
+    }: {
+      maxLength?: number;
+      iconSrc?: string;
+      closeBtnText?: string;
+    }) => {
+      const { runAsync, loading } = useRequest(onclickConfirm);
 
-    return (
-      <MyModal isOpen={isOpen} onClose={onClose} iconSrc={iconSrc} title={title} maxW={'500px'}>
-        <ModalBody>
-          {!!tip && <FormLabel mb={2}>{tip}</FormLabel>}
-          <Input
-            ref={inputRef}
-            defaultValue={defaultValue.current}
-            placeholder={placeholder}
-            autoFocus
-            maxLength={maxLength}
-          />
-        </ModalBody>
-        <ModalFooter>
-          {!!closeBtnText && (
-            <Button mr={3} variant={'whiteBase'} onClick={onClose}>
-              {closeBtnText}
+      return (
+        <MyModal isOpen={isOpen} onClose={onClose} iconSrc={iconSrc} title={title} maxW={'500px'}>
+          <ModalBody>
+            {!!tip && <FormLabel mb={2}>{tip}</FormLabel>}
+            <Input
+              ref={inputRef}
+              defaultValue={defaultValue.current}
+              placeholder={placeholder}
+              autoFocus
+              maxLength={maxLength}
+            />
+          </ModalBody>
+          <ModalFooter>
+            {!!closeBtnText && (
+              <Button mr={3} variant={'whiteBase'} onClick={onClose}>
+                {closeBtnText}
+              </Button>
+            )}
+            <Button onClick={runAsync} isLoading={loading}>
+              确认
             </Button>
-          )}
-          <Button onClick={runAsync} isLoading={loading}>
-            确认
-          </Button>
-        </ModalFooter>
-      </MyModal>
-    );
-  };
+          </ModalFooter>
+        </MyModal>
+      );
+    },
+    [isOpen, onClose, onclickConfirm, placeholder, tip, title]
+  );
 
   return {
     onOpenModal,

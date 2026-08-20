@@ -164,7 +164,7 @@ export const DatasetPageContextProvider = ({
   const {
     data: { rebuildingCount = 0, trainingCount = 0, enhanceCount = 0 } = {},
     refetch: refetchDatasetTraining
-  } = useQuery(['getDatasetTrainingQueue'], () => getDatasetTrainingQueue(datasetId), {
+  } = useQuery(['getDatasetTrainingQueue', datasetId], () => getDatasetTrainingQueue(datasetId), {
     refetchInterval: 3000
   });
 
