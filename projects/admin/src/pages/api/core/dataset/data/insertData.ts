@@ -19,6 +19,7 @@ import { CommonErrEnum } from '@fastgpt/global/common/error/code/common';
 import { addAuditLog } from '@fastgpt/service/support/user/audit/util';
 import { AuditEventEnum } from '@fastgpt/global/support/user/audit/constants';
 import { getI18nDatasetType } from '@fastgpt/service/support/user/audit/util';
+import { pushEnhanceTaskForData } from '@/service/core/dataset/training/pushEnhanceTask';
 
 async function handler(req: NextApiRequest) {
   const { collectionId, q, a, indexes } = req.body as InsertOneDatasetDataProps;
@@ -88,6 +89,19 @@ async function handler(req: NextApiRequest) {
     tmbId,
     inputTokens: tokens,
     model: vectorModelData.model
+  });
+
+  // 联动增量增强索引:插入成功后入队,异步由 generateEnhanceIndex 拾取增强
+  await pushEnhanceTaskForData({
+    teamId: String(teamId),
+    tmbId: String(tmbId),
+    datasetId: String(datasetId),
+    collectionId: String(collectionId),
+    dataId: String(insertId),
+    q: formatQ,
+    a: formatA,
+    chunkIndex: 0,
+    indexes: formatIndexes
   });
 
   (() => {

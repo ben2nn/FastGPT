@@ -8,6 +8,7 @@ import { type ApiRequestProps } from '@fastgpt/service/type/next';
 import { addAuditLog } from '@fastgpt/service/support/user/audit/util';
 import { AuditEventEnum } from '@fastgpt/global/support/user/audit/constants';
 import { getI18nDatasetType } from '@fastgpt/service/support/user/audit/util';
+import { pushEnhanceTaskForData } from '@/service/core/dataset/training/pushEnhanceTask';
 
 async function handler(req: ApiRequestProps<UpdateDatasetDataProps>) {
   const { dataId, q, a, indexes = [] } = req.body;
@@ -45,6 +46,19 @@ async function handler(req: ApiRequestProps<UpdateDatasetDataProps>) {
       tmbId,
       inputTokens: tokens,
       model: vectorModel
+    });
+
+    // 联动增量增强索引:更新成功后入队,异步由 generateEnhanceIndex 拾取增强
+    await pushEnhanceTaskForData({
+      teamId: String(teamId),
+      tmbId: String(tmbId),
+      datasetId: String(collection.datasetId),
+      collectionId: String(collection._id),
+      dataId,
+      q,
+      a,
+      chunkIndex: 0,
+      indexes
     });
 
     (() => {

@@ -65,8 +65,8 @@ async function initSystemConfig() {
 export function initGlobalVariables() {
   function initPlusRequest() {
     global.textCensorHandler = function textCensorHandler({ text }: { text: string }) {
-      if (!isProVersion()) return Promise.resolve({ code: 200 });
-      return POST<{ code: number; message?: string }>('/common/censor/check', { text });
+      // admin 未部署商业版内容审核服务，直接放行
+      return Promise.resolve({ code: 200 });
     };
 
     global.deepRagHandler = function deepRagHandler(data: DeepRagSearchProps) {
@@ -74,8 +74,8 @@ export function initGlobalVariables() {
     };
 
     global.authOpenApiHandler = function authOpenApiHandler(data: AuthOpenApiLimitProps) {
-      if (!isProVersion()) return Promise.resolve();
-      return POST<AuthOpenApiLimitProps>('/support/openapi/authLimit', data);
+      // admin 未部署商业版 OpenAPI 鉴权限流服务，跳过
+      return Promise.resolve();
     };
 
     global.createUsageHandler = function createUsageHandler() {
