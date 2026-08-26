@@ -14,7 +14,7 @@ import { delay } from '@fastgpt/service/common/bullmq';
 import { createLLMResponse } from '@fastgpt/service/core/ai/llm/request';
 import { DatasetDataIndexTypeEnum } from '@fastgpt/global/core/dataset/data/constants';
 import { checkTeamAiPointsAndLock } from './utils';
-import { stripHtml } from '@/service/common/string';
+import { stripHtml, unwrapAutoLinkUrl } from '@/service/common/string';
 import { findTrainingTaskWithAdminFallback } from '@/service/core/dataset/training/queuePick';
 
 // Q-A-Index Prompt（参考 convert_kb_csv.py 逻辑）
@@ -81,7 +81,7 @@ function buildAnswerWithContext(
 }
 
 function extractTitle(q: string): string {
-  const firstLine = q.split('\n')[0]?.trim() || '';
+  const firstLine = unwrapAutoLinkUrl(q.split('\n')[0]?.trim() || '');
   return firstLine
     .replace(/^#{1,6}\s*/, '')
     .replace(/\*\*(.*?)\*\*/g, '$1')

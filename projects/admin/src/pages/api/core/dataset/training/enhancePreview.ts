@@ -10,7 +10,7 @@ import type {
   EnhancePreviewResponse,
   EnhancePreviewRow
 } from '@/pageComponents/dataset/detail/IndexEnhance/types';
-import { stripHtml } from '@/service/common/string';
+import { stripHtml, unwrapAutoLinkUrl } from '@/service/common/string';
 
 async function handler(
   req: ApiRequestProps<EnhancePreviewBody>,
@@ -106,7 +106,7 @@ function buildTemplateIndexes(
 
 // 从原始 q 字段提取标题（清理 md/html 标签，取第一行前 30 字）
 function extractTitle(q: string): string {
-  const firstLine = q.split('\n')[0]?.trim() || '';
+  const firstLine = unwrapAutoLinkUrl(q.split('\n')[0]?.trim() || '');
   // 清理 markdown 标记：#标题、**粗体**、*斜体*、`代码`、[链接](url)、![图片](url)
   let clean = firstLine
     .replace(/^#{1,6}\s*/, '') // # 标题

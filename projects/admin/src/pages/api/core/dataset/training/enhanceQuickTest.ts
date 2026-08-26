@@ -11,6 +11,7 @@ import type {
   EnhanceQuickTestBody,
   EnhanceQuickTestResponse
 } from '@/pageComponents/dataset/detail/IndexEnhance/types';
+import { unwrapAutoLinkUrl } from '@/service/common/string';
 
 async function handler(
   req: ApiRequestProps<EnhanceQuickTestBody>,
@@ -245,7 +246,7 @@ function buildAnswerWithContextFull(
 }
 
 function extractTitle(q: string): string {
-  const firstLine = q.split('\n')[0]?.trim() || '';
+  const firstLine = unwrapAutoLinkUrl(q.split('\n')[0]?.trim() || '');
   return firstLine
     .replace(/^#{1,6}\s*/, '')
     .replace(/\*\*(.*?)\*\*/g, '$1')
