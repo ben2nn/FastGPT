@@ -475,17 +475,20 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
         if (selectedTargetType) formData.append('targetType', selectedTargetType);
         result = await importDataset(formData);
       } else {
-        const text = await readFileAsJSON(selectedFile);
         switch (tabIndex) {
-          case 1:
-            result = await importApp(
-              text,
-              keepOriginalId,
-              targetId || undefined,
-              selectedTargetType || undefined
-            );
+          case 1: {
+            // 工作流导入走 multipart/form-data，支持大文件
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('keepOriginalId', String(keepOriginalId));
+            formData.append('keepApiKey', 'true');
+            if (targetId) formData.append('targetId', targetId);
+            if (selectedTargetType) formData.append('targetType', selectedTargetType);
+            result = await importApp(formData);
             break;
-          case 2:
+          }
+          case 2: {
+            const text = await readFileAsJSON(selectedFile);
             result = await importTools(
               text,
               keepOriginalId,
@@ -493,12 +496,17 @@ function TabContent({ config, tabIndex }: { config: TabConfig; tabIndex: number 
               selectedTargetType || undefined
             );
             break;
-          case 3:
+          }
+          case 3: {
+            const text = await readFileAsJSON(selectedFile);
             result = await importModels(text, keepOriginalId);
             break;
-          case 4:
+          }
+          case 4: {
+            const text = await readFileAsJSON(selectedFile);
             result = await importChannels(text, keepOriginalId);
             break;
+          }
           default:
             throw new Error('未知的导入类型');
         }

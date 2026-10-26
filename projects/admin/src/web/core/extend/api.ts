@@ -162,20 +162,15 @@ export const exportApp = async (parentId: string) => {
   return response.json();
 };
 
-// 工作流导入
-export const importApp = async (
-  file: string | object,
-  keepOriginalId: boolean,
-  targetId?: string,
-  targetType?: string
-) => {
-  const response = await authFetch(getWebReqUrl('/api/extend/app/importFromJson'), {
+// 工作流导入（multipart/form-data 流式上传，避免大文件触发 413）
+export const importApp = async (formData: FormData) => {
+  const response = await fetch(getWebReqUrl('/api/extend/app/importFromJson'), {
     method: 'POST',
-    body: JSON.stringify({ file, keepOriginalId, targetId, targetType, keepApiKey: true })
+    body: formData
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || '工作流导入失败');
+    throw new Error(err.error || `工作流导入失败（HTTP ${response.status}）`);
   }
   return response.json();
 };

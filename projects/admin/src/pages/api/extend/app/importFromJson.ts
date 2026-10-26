@@ -8,17 +8,63 @@ import { MongoOutLink } from '@fastgpt/service/support/outLink/schema';
 import { MongoOpenApi } from '@fastgpt/service/support/openapi/schema';
 import { getNanoid } from '@fastgpt/global/common/string/tools';
 import { Types } from 'mongoose';
+import formidable from 'formidable';
+import { readFile, unlink } from 'fs/promises';
+
+// 禁用默认 bodyParser，使用 formidable 处理文件上传。
+// 默认 bodyParser 会把整个请求体读入内存并受 sizeLimit 限制（超过即返回 413），
+// 而应用导出文件可能达到几百 MB，这里改为流式写入临时文件，避免 413 与内存翻倍。
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
+
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+
+type ParsedForm = {
+  fields: formidable.Fields;
+  files: formidable.Files;
+};
+
+function parseFormData(req: NextApiRequest): Promise<ParsedForm> {
+  return new Promise((resolve, reject) => {
+    const form = formidable({
+      maxFileSize: MAX_FILE_SIZE,
+      keepExtensions: true
+    });
+
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve({ fields, files });
+      }
+    });
+  });
+}
+
+// 兼容 JSON 请求体（老客户端），手动读取原始流，不受 bodyParser 限制
+async function readJsonBody(req: NextApiRequest): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer));
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+}
+
+function getField(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // 1. 连接数据库
-
-    // 2. 验证请求方法
+    // 1. 验证请求方法
     if (req.method !== 'POST') {
       return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
-    // 3. 验证认证
+    // 2. 验证认证
     const authResult = await authAdmin(req);
     const teamId = authResult.teamId;
     const tmbId = authResult.tmbId;
@@ -26,35 +72,96 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(401).json({ success: false, error: '无法获取团队信息' });
     }
 
-    // 4. 解析请求体
-    const { file, keepOriginalId, targetId, targetType, keepApiKey } = req.body as {
-      file: unknown;
-      keepOriginalId?: boolean;
-      targetId?: string;
-      targetType?: string;
-      keepApiKey?: boolean;
-    };
+    // 3. 解析请求体（multipart/form-data 优先，兼容旧版 JSON 请求体）
+    const contentType = String(req.headers['content-type'] || '');
+    let importData: Record<string, unknown> = {};
+    let keepOriginalId = false;
+    let keepApiKey = false;
+    let targetId: string | undefined;
+    let targetType: string | undefined;
 
-    if (!file) {
-      return res.status(400).json({ success: false, error: 'File is required' });
+    if (contentType.includes('multipart/form-data')) {
+      let fields: formidable.Fields;
+      let files: formidable.Files;
+      try {
+        ({ fields, files } = await parseFormData(req));
+      } catch (error) {
+        console.error('Parse form data error:', error);
+        return res.status(400).json({
+          success: false,
+          error: '文件上传失败：' + (error instanceof Error ? error.message : '未知错误')
+        });
+      }
+
+      keepOriginalId = getField(fields.keepOriginalId) === 'true';
+      keepApiKey = getField(fields.keepApiKey) === 'true';
+      targetId = getField(fields.targetId) || undefined;
+      targetType = getField(fields.targetType) || undefined;
+
+      const fileField = files.file;
+      const uploadedFile = Array.isArray(fileField) ? fileField[0] : fileField;
+      if (!uploadedFile) {
+        return res.status(400).json({ success: false, error: 'File is required' });
+      }
+
+      try {
+        const content = await readFile(uploadedFile.filepath, 'utf-8');
+        importData = JSON.parse(content) as Record<string, unknown>;
+      } catch {
+        return res.status(400).json({ success: false, error: 'Invalid JSON format' });
+      } finally {
+        // 清理临时文件
+        await unlink(uploadedFile.filepath).catch(() => {});
+      }
+    } else {
+      let body: {
+        file?: unknown;
+        keepOriginalId?: boolean;
+        targetId?: string;
+        targetType?: string;
+        keepApiKey?: boolean;
+      };
+      try {
+        body = (await readJsonBody(req)) as typeof body;
+      } catch {
+        return res.status(400).json({ success: false, error: 'Invalid JSON format' });
+      }
+
+      const { file } = body;
+      keepOriginalId = body.keepOriginalId === true;
+      keepApiKey = body.keepApiKey === true;
+      targetId = body.targetId;
+      targetType = body.targetType;
+
+      if (!file) {
+        return res.status(400).json({ success: false, error: 'File is required' });
+      }
+
+      try {
+        importData = (typeof file === 'string' ? JSON.parse(file) : file) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        return res.status(400).json({ success: false, error: 'Invalid JSON format' });
+      }
     }
 
-    // 5. 解析 JSON 文件
-    let importData;
-    try {
-      importData = typeof file === 'string' ? JSON.parse(file) : file;
-    } catch {
-      return res.status(400).json({ success: false, error: 'Invalid JSON format' });
-    }
-
-    // 6. 验证 JSON 结构
-    if (!['1.0', '2.0'].includes(importData.version) || importData.type !== 'app') {
+    // 4. 验证 JSON 结构
+    if (!['1.0', '2.0'].includes(importData.version as string) || importData.type !== 'app') {
       return res.status(400).json({ success: false, error: 'Invalid import file format' });
     }
 
-    const { apps, versions } = importData;
-    const outLinks: Record<string, unknown>[] = importData.outLinks || [];
-    const openApis: Record<string, unknown>[] = importData.openApis || [];
+    const { apps, versions } = importData as {
+      apps: Record<string, unknown>[];
+      versions: Record<string, unknown>[];
+    };
+    const outLinks: Record<string, unknown>[] = Array.isArray(importData.outLinks)
+      ? (importData.outLinks as Record<string, unknown>[])
+      : [];
+    const openApis: Record<string, unknown>[] = Array.isArray(importData.openApis)
+      ? (importData.openApis as Record<string, unknown>[])
+      : [];
 
     // 验证数组字段
     if (!Array.isArray(apps) || !Array.isArray(versions)) {
@@ -64,7 +171,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // 6.5. 检查导入数据量限制
+    // 4.5. 检查导入数据量限制
     const IMPORT_LIMIT = parseInt(process.env.IMPORT_LIMIT || '50000', 10);
     const totalDocs = apps.length + versions.length + outLinks.length + openApis.length;
     if (totalDocs > IMPORT_LIMIT) {
@@ -74,7 +181,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // 7. 处理 ID 映射
+    // 5. 处理 ID 映射
     const idMap = new Map<string, string>();
 
     if (!keepOriginalId) {
@@ -87,7 +194,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
     }
 
-    // 8. 更新文档引用
+    // 6. 更新文档引用
     const updateId = (id: string) => {
       if (keepOriginalId) return id;
       return idMap.get(id) || id;
@@ -110,7 +217,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return updated;
     };
 
-    // 8.5. 目标位置重复检测
+    // 6.5. 目标位置重复检测
     if (targetId) {
       if (targetType === 'folder') {
         // 目录：递归查找目录下所有子 app，按 _id 检测重复
@@ -147,7 +254,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       }
     }
 
-    // 9. 更新文档
+    // 7. 更新文档
     const updatedApps = apps.map((doc: Record<string, unknown>) => {
       const updated = updateDoc(doc);
       if (targetType === 'folder' && targetId) {
@@ -193,7 +300,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return updated;
     });
 
-    // 10. 分批写入数据库
+    // 8. 分批写入数据库
     const BATCH_SIZE = 2000;
     const duplicateWarnings: string[] = [];
 
@@ -235,7 +342,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         : Promise.resolve(0)
     ]);
 
-    // 11. 返回导入结果
+    // 9. 返回导入结果
     res.status(200).json({
       success: true,
       data: {
@@ -251,13 +358,5 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     res.status(500).json({ success: false, error: 'Import failed' });
   }
 }
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '100mb'
-    }
-  }
-};
 
 export default NextAPI(handler);
