@@ -75,7 +75,7 @@ export default function LoginPage() {
           zIndex={1}
         >
           <Heading color="white" size="2xl" mb={4}>
-            FastGPT Admin
+            AI基础管理后台
           </Heading>
           <Text color="whiteAlpha.800" fontSize="lg">
             AI Agent 管理平台

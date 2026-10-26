@@ -37,6 +37,7 @@ const menuItems: MenuItem[] = [
     path: '/tasks',
     activeLinks: ['/tasks']
   },
+  /** 
   {
     label: '用户管理',
     icon: 'navbar/userLight',
@@ -51,6 +52,7 @@ const menuItems: MenuItem[] = [
     path: '/team/list',
     activeLinks: ['/team']
   },
+  */
   {
     label: '知识库',
     icon: 'navbar/datasetLight',
@@ -123,7 +125,7 @@ export default function AdminSidebar() {
       {/* 品牌区 */}
       <Flex align="center" p={6}>
         <Text color="white" fontWeight="bold" fontSize="lg">
-          FastGPT Admin
+          AI基础管理后台
         </Text>
       </Flex>
 
