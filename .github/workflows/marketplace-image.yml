@@ -65,7 +65,10 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=fastgpt-marketplace image
-          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-marketplace,registry.cn-hangzhou.aliyuncs.com/hrids/fastgpt-marketplace",push-by-digest=true,push=true
+          outputs: type=image,"name=ghcr.io/${{ github.repository_owner }}/fastgpt-marketplace,registry.cn-hangzhou.aliyuncs.com/hrids/fastgpt-marketplace",push-by-digest=true,push=true,oci-mediatypes=false
+          # 阿里云 ACR 不识别 OCI 附加层（application/vnd.oci.empty.v1+json），关闭 provenance/SBOM
+          provenance: false
+          sbom: false
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
 
