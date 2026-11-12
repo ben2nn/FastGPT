@@ -19,7 +19,11 @@ dayjs.extend(timezone);
 
 import ExportButton from './ExportButton';
 import type { StatisticsQuery } from '@/service/core/statistics/statistics';
-import { DEFAULT_TIMEZONE } from '@/web/common/constants';
+import {
+  formatToTimeZoneInput,
+  getNowInTimeZone,
+  parseTimeZoneInput
+} from '@/web/common/utils/time';
 
 /**
  * 调用状态选项
@@ -47,18 +51,18 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   onAutoRefreshChange
 }) => {
   // 筛选条件状态
-  // 将 ISO UTC 时间转换为本地时间格式用于显示
+  // 显示值统一使用业务时区（DEFAULT_TIMEZONE），避免浏览器时区与业务时区不一致导致时间偏移
   const [startTime, setStartTime] = useState<string>(() => {
     if (initialFilters.startTime) {
-      return dayjs(initialFilters.startTime).format('YYYY-MM-DDTHH:mm');
+      return formatToTimeZoneInput(initialFilters.startTime);
     }
-    return dayjs().subtract(7, 'day').format('YYYY-MM-DDTHH:mm');
+    return formatToTimeZoneInput(getNowInTimeZone().subtract(7, 'day'));
   });
   const [endTime, setEndTime] = useState<string>(() => {
     if (initialFilters.endTime) {
-      return dayjs(initialFilters.endTime).format('YYYY-MM-DDTHH:mm');
+      return formatToTimeZoneInput(initialFilters.endTime);
     }
-    return dayjs().format('YYYY-MM-DDTHH:mm');
+    return formatToTimeZoneInput(getNowInTimeZone());
   });
   const [appName, setAppName] = useState<string>(initialFilters.appName || '');
   const [modelName, setModelName] = useState<string>(initialFilters.modelName || '');
@@ -73,7 +77,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
    */
   const handleQuickTimeChange = useCallback(
     (value: string) => {
-      const now = dayjs();
+      const now = getNowInTimeZone();
       let start: dayjs.Dayjs;
       let end: dayjs.Dayjs = now;
 
@@ -94,17 +98,13 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           start = now.subtract(7, 'day');
       }
 
-      const startTimeStr = start.format('YYYY-MM-DDTHH:mm');
-      const endTimeStr = end.format('YYYY-MM-DDTHH:mm');
+      setStartTime(start.format('YYYY-MM-DDTHH:mm'));
+      setEndTime(end.format('YYYY-MM-DDTHH:mm'));
 
-      setStartTime(startTimeStr);
-      setEndTime(endTimeStr);
-
-      // 立即应用筛选
-      // 将本地时间解析为上海时区的时间
+      // 立即应用筛选（业务时区、带偏移的 ISO 字符串）
       const filters: StatisticsQuery = {
-        startTime: start.tz(DEFAULT_TIMEZONE).format(),
-        endTime: end.tz(DEFAULT_TIMEZONE).format()
+        startTime: start.format(),
+        endTime: end.format()
       };
 
       // 保留其他筛选条件
@@ -127,14 +127,11 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
    * 应用筛选条件
    */
   const handleApplyFilter = useCallback(() => {
-    // 将用户输入的本地时间字符串解析为上海时区的时间
-    // 例如：用户输入 "2026-01-04T16:41" 表示上海时间的 16:41
-    const startUTC = dayjs.tz(startTime, DEFAULT_TIMEZONE).format();
-    const endUTC = dayjs.tz(endTime, DEFAULT_TIMEZONE).format();
-
+    // 输入框的值是不带时区的本地时间，按业务时区解析
+    // 例如：用户输入 "2026-01-04T16:41" 表示业务时区的 16:41
     const filters: StatisticsQuery = {
-      startTime: startUTC,
-      endTime: endUTC
+      startTime: parseTimeZoneInput(startTime),
+      endTime: parseTimeZoneInput(endTime)
     };
 
     // 添加可选筛选条件
@@ -155,7 +152,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
    * 重置筛选条件
    */
   const handleReset = useCallback(() => {
-    const now = dayjs();
+    const now = getNowInTimeZone();
     const start = now.subtract(7, 'day');
 
     setStartTime(start.format('YYYY-MM-DDTHH:mm'));
@@ -164,11 +161,10 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     setModelName('');
     setCallStatus('');
 
-    // 触发筛选
-    // 将本地时间解析为上海时区的时间
+    // 触发筛选（业务时区、带偏移的 ISO 字符串）
     onFilterChange({
-      startTime: start.tz(DEFAULT_TIMEZONE).format(),
-      endTime: now.tz(DEFAULT_TIMEZONE).format()
+      startTime: start.format(),
+      endTime: now.format()
     });
   }, [onFilterChange]);
 
@@ -213,18 +209,18 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     // 只有在时间有效时才构建筛选条件
     if (!isTimeRangeValid) {
       // 返回一个默认的有效时间范围
-      const now = dayjs();
+      const now = getNowInTimeZone();
       const start = now.subtract(7, 'day');
       return {
-        startTime: start.tz(DEFAULT_TIMEZONE).format(),
-        endTime: now.tz(DEFAULT_TIMEZONE).format()
+        startTime: start.format(),
+        endTime: now.format()
       };
     }
 
-    // 将用户输入的本地时间字符串解析为上海时区的时间
+    // 输入框的值是不带时区的本地时间，按业务时区解析
     const filters: StatisticsQuery = {
-      startTime: dayjs.tz(startTime, DEFAULT_TIMEZONE).format(),
-      endTime: dayjs.tz(endTime, DEFAULT_TIMEZONE).format()
+      startTime: parseTimeZoneInput(startTime),
+      endTime: parseTimeZoneInput(endTime)
     };
 
     if (appName.trim()) {

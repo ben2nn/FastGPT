@@ -174,6 +174,48 @@ export function getDaysAgoEndUTC(days: number): string {
 }
 
 /**
+ * 获取业务时区（DEFAULT_TIMEZONE）的当前时间
+ *
+ * @returns 业务时区的 dayjs 对象
+ */
+export function getNowInTimeZone(): dayjs.Dayjs {
+  return dayjs().tz(DEFAULT_TIMEZONE);
+}
+
+/**
+ * 将时间值格式化为业务时区的 datetime-local 输入框显示值
+ *
+ * 注意：不能直接用 `dayjs(value).format()`（浏览器本地时区）展示，
+ * 否则浏览器时区与业务时区不一致时，用户看到的时间与实际查询时间会偏移。
+ *
+ * @param time 时间值，缺省为当前时间
+ * @returns `YYYY-MM-DDTHH:mm` 格式的业务时区时间
+ */
+export function formatToTimeZoneInput(time?: string | Date | dayjs.Dayjs | null): string {
+  const date = time ? dayjs(time) : dayjs();
+  const validDate = date.isValid() ? date : dayjs();
+  return validDate.tz(DEFAULT_TIMEZONE).format('YYYY-MM-DDTHH:mm');
+}
+
+/**
+ * 将 datetime-local 输入框的值按业务时区解析为 API 使用的 ISO 8601 字符串
+ *
+ * 输入框的值是不带时区的本地时间，例如 `2026-11-12T17:15`，
+ * 需要按业务时区（而不是浏览器/服务器时区）解析，输出带偏移的 ISO 字符串，
+ * 例如 `2026-11-12T17:15:00+08:00`。
+ *
+ * @param value datetime-local 输入框的值
+ * @returns 带时区偏移的 ISO 8601 字符串
+ */
+export function parseTimeZoneInput(value: string): string {
+  // dayjs.tz 传入非法字符串会抛异常，先做有效性校验
+  if (!dayjs(value).isValid()) {
+    return '';
+  }
+  return dayjs.tz(value, DEFAULT_TIMEZONE).format();
+}
+
+/**
  * 获取默认的时间范围（最近 N 天）
  * 从当前时间往前推 N 天
  *

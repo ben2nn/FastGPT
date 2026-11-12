@@ -4,9 +4,47 @@
  */
 
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 import type { StatisticsQuery, TimeGranularity } from '@/service/core/statistics/statistics';
 import { StatisticsError, StatisticsErrorCode } from '@/service/core/statistics/statistics';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+/**
+ * 允许的时钟漂移上限（毫秒）
+ *
+ * 前端传入的结束时间通常是「浏览器当前时间」，浏览器与服务器时钟不同步时，
+ * 结束时间可能比服务器当前时间略晚。此时不应直接判定为非法请求，
+ * 而是将结束时间收敛到服务器当前时间；只有明显超出合理范围的未来时间才报错。
+ */
+const MAX_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
+
+/** 匹配带时区偏移的时间字符串（Z 或 ±HH:mm / ±HHmm） */
+const TIMEZONE_OFFSET_REGEX = /(z|[+-]\d{2}:?\d{2})$/i;
+
+/**
+ * 将时间字符串解析为绝对时刻
+ *
+ * - 带时区偏移（如 `2026-11-12T17:15:07+08:00`、`...Z`）：按其偏移解析
+ * - 不带偏移（如 `2026-11-12T17:15:07`）：按业务时区（DEFAULT_TIMEZONE）解析，
+ *   避免服务器时区（如容器内的 UTC）与业务时区不一致导致时间整体偏移
+ */
+export function parseTimeToDayjs(value: string): dayjs.Dayjs {
+  const time = String(value).trim();
+  if (TIMEZONE_OFFSET_REGEX.test(time)) {
+    return dayjs(time);
+  }
+  // dayjs.tz 传入非法字符串时会直接抛异常，先做一次有效性校验
+  const parsed = dayjs(time);
+  if (!parsed.isValid()) {
+    return parsed;
+  }
+  return dayjs.tz(time, DEFAULT_TIMEZONE);
+}
 
 /**
  * 验证统计查询参数的基本格式
@@ -26,14 +64,14 @@ function validateQuerySchema(query: any): void {
   // 验证 startTime
   if (!query.startTime || typeof query.startTime !== 'string') {
     errors.push('startTime: 开始时间必须是有效的字符串');
-  } else if (!dayjs(query.startTime).isValid()) {
+  } else if (!parseTimeToDayjs(query.startTime).isValid()) {
     errors.push('startTime: 开始时间必须是有效的 ISO 8601 格式');
   }
 
   // 验证 endTime
   if (!query.endTime || typeof query.endTime !== 'string') {
     errors.push('endTime: 结束时间必须是有效的字符串');
-  } else if (!dayjs(query.endTime).isValid()) {
+  } else if (!parseTimeToDayjs(query.endTime).isValid()) {
     errors.push('endTime: 结束时间必须是有效的 ISO 8601 格式');
   }
 
@@ -77,9 +115,9 @@ function validateQuerySchema(query: any): void {
 
   // 验证时间范围
   if (query.startTime && query.endTime) {
-    const start = new Date(query.startTime);
-    const end = new Date(query.endTime);
-    if (start >= end) {
+    const start = parseTimeToDayjs(query.startTime);
+    const end = parseTimeToDayjs(query.endTime);
+    if (start.isValid() && end.isValid() && (start.isAfter(end) || start.isSame(end))) {
       errors.push('开始时间必须早于结束时间');
     }
   }
@@ -97,15 +135,25 @@ function validateQuerySchema(query: any): void {
  * 验证规则：
  * 1. 开始时间必须早于结束时间
  * 2. 时间范围不能超过 365 天
- * 3. 时间不能是未来时间
+ * 3. 开始时间不能是未来时间；结束时间若因时钟漂移略晚于当前时间，
+ *    会收敛到当前时间（而不是直接报错），仅当明显超出合理范围时才报错
+ *
+ * 字符串处理约定（时区安全）：
+ * - 带时区偏移的时间字符串按绝对时刻解析
+ * - 不带偏移的时间字符串按业务时区（DEFAULT_TIMEZONE）解析
+ * - 返回值统一为业务时区、带偏移的 ISO 8601 字符串
  *
  * @param startTime 开始时间（ISO 8601 格式）
  * @param endTime 结束时间（ISO 8601 格式）
+ * @returns 归一化后的时间范围（业务时区，带偏移）
  * @throws StatisticsError 如果验证失败
  */
-export function validateTimeRange(startTime: string, endTime: string): void {
-  const start = dayjs(startTime);
-  const end = dayjs(endTime);
+export function validateTimeRange(
+  startTime: string,
+  endTime: string
+): { startTime: string; endTime: string } {
+  const start = parseTimeToDayjs(startTime);
+  const end = parseTimeToDayjs(endTime);
   const now = dayjs();
 
   // 验证日期格式
@@ -131,10 +179,37 @@ export function validateTimeRange(startTime: string, endTime: string): void {
     });
   }
 
-  // 验证时间不能是未来时间
-  if (end.isAfter(now)) {
-    throw new StatisticsError(StatisticsErrorCode.INVALID_TIME_RANGE, '结束时间不能是未来时间');
+  // 验证开始时间不能是未来时间
+  if (start.isAfter(now)) {
+    throw new StatisticsError(StatisticsErrorCode.INVALID_TIME_RANGE, '开始时间不能是未来时间', {
+      startTime: start.format(),
+      serverNow: now.format(),
+      timezone: DEFAULT_TIMEZONE
+    });
   }
+
+  // 结束时间晚于当前时间：允许时钟漂移，收敛到当前时间；超出合理范围才报错
+  let effectiveEnd = end;
+  if (end.isAfter(now)) {
+    if (end.diff(now) > MAX_CLOCK_SKEW_MS) {
+      throw new StatisticsError(StatisticsErrorCode.INVALID_TIME_RANGE, '结束时间不能是未来时间', {
+        endTime: end.format(),
+        serverNow: now.format(),
+        timezone: DEFAULT_TIMEZONE
+      });
+    }
+    effectiveEnd = now;
+  }
+
+  // 收敛后再次确认时间范围有效
+  if (!start.isBefore(effectiveEnd)) {
+    throw new StatisticsError(StatisticsErrorCode.INVALID_TIME_RANGE, '开始时间必须早于结束时间');
+  }
+
+  return {
+    startTime: start.tz(DEFAULT_TIMEZONE).format(),
+    endTime: effectiveEnd.tz(DEFAULT_TIMEZONE).format()
+  };
 }
 
 /**
@@ -203,8 +278,8 @@ export function calculateGranularity(
     return explicitGranularity;
   }
 
-  const start = dayjs(startTime);
-  const end = dayjs(endTime);
+  const start = parseTimeToDayjs(startTime);
+  const end = parseTimeToDayjs(endTime);
   const daysDiff = end.diff(start, 'day');
 
   // 根据时间范围自动计算粒度
@@ -246,8 +321,8 @@ export function validateAndCleanQuery(query: any): StatisticsQuery {
     // 2. 进行基本验证
     validateQuerySchema(cleanedQuery);
 
-    // 3. 验证时间范围
-    validateTimeRange(cleanedQuery.startTime, cleanedQuery.endTime);
+    // 3. 验证时间范围（返回业务时区、带偏移的归一化时间）
+    const { startTime, endTime } = validateTimeRange(cleanedQuery.startTime, cleanedQuery.endTime);
 
     // 4. 验证分页参数
     const { pageNum, pageSize } = validatePagination(cleanedQuery.pageNum, cleanedQuery.pageSize);
@@ -255,6 +330,8 @@ export function validateAndCleanQuery(query: any): StatisticsQuery {
     // 5. 返回清洗后的参数
     return {
       ...cleanedQuery,
+      startTime,
+      endTime,
       pageNum,
       pageSize
     };

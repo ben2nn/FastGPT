@@ -7,9 +7,15 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import { Box, Skeleton, Text, useColorModeValue } from '@chakra-ui/react';
 import * as echarts from 'echarts';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 
 import { useTrendStatistics } from '@/web/core/statistics/hooks';
+import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 import type { StatisticsQuery, TimeGranularity } from '@/service/core/statistics/statistics';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 interface TrendChartProps {
   filters: StatisticsQuery;
@@ -23,7 +29,9 @@ interface TrendChartProps {
  * @returns 格式化后的时间字符串
  */
 const formatTimestamp = (timestamp: string, granularity: TimeGranularity): string => {
-  const date = dayjs(timestamp);
+  // 趋势数据的日/周/月分桶按业务时区计算，展示时也必须使用业务时区，
+  // 否则浏览器时区与业务时区不一致时，日期会错位一天
+  const date = dayjs(timestamp).tz(DEFAULT_TIMEZONE);
 
   switch (granularity) {
     case 'day':

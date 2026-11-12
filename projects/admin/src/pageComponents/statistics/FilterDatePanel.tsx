@@ -8,7 +8,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 import type { StatisticsQuery } from '@/service/core/statistics/statistics';
-import { DEFAULT_TIMEZONE } from '@/web/common/constants';
+import { formatToTimeZoneInput, getNowInTimeZone } from '@/web/common/utils/time';
 
 /**
  * 快捷时间选项
@@ -38,18 +38,18 @@ const FilterDatePanel: React.FC<FilterPanelProps> = ({
   const [quickTimeOption, setQuickTimeOption] = useState<string>('last7days');
 
   // 筛选条件状态
-  // 将 ISO UTC 时间转换为本地时间格式用于显示
+  // 显示值统一使用业务时区（DEFAULT_TIMEZONE），避免浏览器时区与业务时区不一致导致时间偏移
   const [startTime, setStartTime] = useState<string>(() => {
     if (initialFilters.startTime) {
-      return dayjs(initialFilters.startTime).format('YYYY-MM-DDTHH:mm');
+      return formatToTimeZoneInput(initialFilters.startTime);
     }
-    return dayjs().subtract(7, 'day').format('YYYY-MM-DDTHH:mm');
+    return formatToTimeZoneInput(getNowInTimeZone().subtract(7, 'day'));
   });
   const [endTime, setEndTime] = useState<string>(() => {
     if (initialFilters.endTime) {
-      return dayjs(initialFilters.endTime).format('YYYY-MM-DDTHH:mm');
+      return formatToTimeZoneInput(initialFilters.endTime);
     }
-    return dayjs().format('YYYY-MM-DDTHH:mm');
+    return formatToTimeZoneInput(getNowInTimeZone());
   });
 
   /**
@@ -61,7 +61,7 @@ const FilterDatePanel: React.FC<FilterPanelProps> = ({
 
       setQuickTimeOption(value);
 
-      const now = dayjs();
+      const now = getNowInTimeZone();
       let start: dayjs.Dayjs;
       let end: dayjs.Dayjs = now;
 
@@ -79,8 +79,8 @@ const FilterDatePanel: React.FC<FilterPanelProps> = ({
           start = now.subtract(7, 'day');
       }
 
-      const newStartTime = start.tz(DEFAULT_TIMEZONE).format();
-      const newEndTime = end.tz(DEFAULT_TIMEZONE).format();
+      const newStartTime = start.format();
+      const newEndTime = end.format();
 
       console.log('[FilterDatePanel] 计算的时间范围:', {
         value,
