@@ -51,6 +51,30 @@ const formatDecimal = (num: number, decimals: number = 2): string => {
 };
 
 /**
+ * 格式化耗时（秒）
+ * @param seconds 秒数
+ * @returns 格式化后的字符串
+ */
+const formatDuration = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '0s';
+  }
+  if (seconds < 60) {
+    return `${seconds.toFixed(2)}s`;
+  }
+
+  const totalSeconds = Math.round(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m ${remainingSeconds}s`;
+};
+
+/**
  * 根据成功率获取颜色
  * @param rate 成功率（0-100）
  * @returns 颜色值
@@ -130,6 +154,8 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
         totalCalls: '0',
         totalTokens: '0',
         totalPoints: '0',
+        totalDuration: '0s',
+        avgDuration: '0s',
         successRate: '0%',
         avgTokensPerCall: '0',
         successRateColor: 'gray.500'
@@ -140,6 +166,8 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
       totalCalls: formatLargeNumber(data.totalCalls),
       totalTokens: formatLargeNumber(data.totalTokens),
       totalPoints: formatDecimal(data.totalPoints, 2),
+      totalDuration: formatDuration(data.totalDuration),
+      avgDuration: formatDuration(data.avgDuration),
       successRate: `${formatDecimal(data.successRate, 2)}%`,
       avgTokensPerCall: formatDecimal(data.avgTokensPerCall, 2),
       successRateColor: getSuccessRateColor(data.successRate)
@@ -152,7 +180,7 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
         base: '1fr',
         md: 'repeat(2, 1fr)',
         lg: 'repeat(3, 1fr)',
-        xl: 'repeat(5, 1fr)'
+        xl: 'repeat(4, 1fr)'
       }}
       gap={4}
       w="100%"
@@ -199,6 +227,24 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
         value={formattedData.avgTokensPerCall}
         icon="core/app/simpleMode/ai"
         helpText="每次调用平均消耗"
+        isLoading={isLoading}
+      />
+
+      {/* 卡片 6: 总耗时 */}
+      <StatCard
+        label="总耗时"
+        value={formattedData.totalDuration}
+        icon="common/time"
+        helpText={data ? `${data.totalDuration.toFixed(2)} 秒` : undefined}
+        isLoading={isLoading}
+      />
+
+      {/* 卡片 7: 平均耗时 */}
+      <StatCard
+        label="平均耗时"
+        value={formattedData.avgDuration}
+        icon="common/time"
+        helpText="每次调用平均耗时"
         isLoading={isLoading}
       />
     </Grid>

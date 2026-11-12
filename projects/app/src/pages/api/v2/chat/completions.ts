@@ -403,6 +403,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       ? flowResponses
       : filterPublicNodeResponseData({ nodeRespones: flowResponses, responseDetail: showCite });
 
+    // Aggregate real token usage from all workflow nodes
+    const usage = flowUsages.reduce(
+      (acc, item) => {
+        const promptTokens = acc.prompt_tokens + (item.inputTokens || 0);
+        const completionTokens = acc.completion_tokens + (item.outputTokens || 0);
+        return {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens
+        };
+      },
+      { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+    );
+
     if (stream) {
       workflowResponseWrite({
         event: SseResponseEventEnum.answer,
@@ -458,7 +472,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         error,
         id: chatId || '',
         model: '',
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 1 },
+        usage,
         choices: [
           {
             message: {

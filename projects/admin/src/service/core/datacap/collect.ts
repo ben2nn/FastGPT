@@ -4,9 +4,36 @@
  */
 
 import { MongoChatItem } from '@fastgpt/service/core/chat/chatItemSchema';
+import { MongoChatItemResponse } from '@fastgpt/service/core/chat/chatItemResponseSchema';
+import {
+  ChatItemResponseCollectionName,
+  chatCollectionName
+} from '@fastgpt/service/core/chat/constants';
+import { AppCollectionName } from '@fastgpt/service/core/app/schema';
+import { AppVersionCollectionName } from '@fastgpt/service/core/app/version/schema';
+import { Types } from '@fastgpt/service/common/mongo';
 import type { ModelCallLog, DataCapStats } from '@/types/datacap';
 import { SystemError, ErrorType } from '@/service/common/errors';
 import { addLog } from '@fastgpt/service/common/system/log';
+
+/**
+ * 需要采集的节点类型。
+ * 值对应 FlowNodeTypeEnum：
+ * - chatNode: AI 对话
+ * - classifyQuestion: 问题分类
+ * - contentExtract: 内容提取
+ * - tools: Agent / 工具调用
+ * - cfr: 问题优化（queryExtension 的实际枚举值）
+ */
+const COLLECTABLE_MODULE_TYPES = ['chatNode', 'classifyQuestion', 'contentExtract', 'tools', 'cfr'];
+
+type ExtractBatchResult = {
+  logs: ModelCallLog[];
+  /** 本批扫描到的 AI 消息数（用于判断是否还有下一批） */
+  scannedCount: number;
+  /** 本批最后一条 AI 消息的 _id（游标分页） */
+  lastId: Types.ObjectId | null;
+};
 
 /**
  * 数据提取服务类
@@ -53,29 +80,31 @@ export class DataCapCollect {
       };
 
       const allLogs: ModelCallLog[] = [];
-      let skip = 0;
+      let lastId: Types.ObjectId | null = null;
+      let batchNumber = 0;
       let hasMore = true;
 
-      // 分批处理数据
+      // 按 AI 消息的 _id 游标分页：避免 skip 大偏移量，也不会因为部分消息
+      // 没有可采集的节点响应而提前结束
       while (hasMore) {
-        const batchNumber = Math.floor(skip / effectiveBatchSize) + 1;
+        batchNumber++;
         addLog.debug(`正在处理第 ${batchNumber} 批数据`, {
-          skip,
+          lastId: lastId ? String(lastId) : null,
           batchSize: effectiveBatchSize
         });
 
-        const batchLogs = await this.extractBatch(startDate, endDate, skip, effectiveBatchSize);
+        const {
+          logs,
+          scannedCount,
+          lastId: nextLastId
+        } = await this.extractBatch(startDate, endDate, lastId, effectiveBatchSize);
 
-        if (batchLogs.length === 0) {
+        allLogs.push(...logs);
+
+        if (scannedCount < effectiveBatchSize || !nextLastId) {
           hasMore = false;
         } else {
-          allLogs.push(...batchLogs);
-          skip += effectiveBatchSize;
-
-          // 如果返回的记录数少于批次大小，说明已经是最后一批
-          if (batchLogs.length < effectiveBatchSize) {
-            hasMore = false;
-          }
+          lastId = nextLastId;
         }
       }
 
@@ -86,7 +115,9 @@ export class DataCapCollect {
       addLog.info('数据提取完成', {
         totalRecords: allLogs.length,
         executionTime: this.stats.executionTime,
-        recordsPerSecond: Math.round((allLogs.length / this.stats.executionTime) * 1000)
+        recordsPerSecond: Math.round(
+          (allLogs.length / Math.max(this.stats.executionTime, 1)) * 1000
+        )
       });
 
       return allLogs;
@@ -111,134 +142,159 @@ export class DataCapCollect {
    * 提取一批数据
    * @param startDate 开始时间
    * @param endDate 结束时间
-   * @param skip 跳过的记录数
-   * @param limit 限制返回的记录数
-   * @returns 提取的记录数组
+   * @param lastId 上一批最后一条 AI 消息的 _id（游标分页）
+   * @param limit 本批最多扫描的 AI 消息数
+   * @returns 本批调用记录、扫描数量与下一页游标
    */
   private async extractBatch(
     startDate: Date,
     endDate: Date,
-    skip: number,
+    lastId: Types.ObjectId | null,
     limit: number
-  ): Promise<ModelCallLog[]> {
+  ): Promise<ExtractBatchResult> {
     try {
       addLog.debug('查询条件', {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        skip,
+        lastId: lastId ? String(lastId) : null,
         limit
       });
 
-      // 先检查是否有符合条件的数据
-      const humanCount = await MongoChatItem.countDocuments({
-        obj: 'Human',
-        time: { $gte: startDate, $lte: endDate }
-      });
-      addLog.debug('Human 消息数量', { humanCount });
-
-      const aiCount = await MongoChatItem.countDocuments({
-        obj: 'AI',
-        time: { $gte: startDate, $lte: endDate }
-      });
-      addLog.debug('AI 消息数量', { aiCount });
-
-      // 检查样本数据结构
-      const sampleHuman = await MongoChatItem.findOne({
-        obj: 'Human',
-        time: { $gte: startDate, $lte: endDate }
-      }).lean();
-
-      if (sampleHuman) {
-        addLog.debug('Human 消息样本', {
-          dataId: (sampleHuman as any).dataId,
-          appId: (sampleHuman as any).appId,
-          chatId: (sampleHuman as any).chatId,
-          time: (sampleHuman as any).time
-        });
-      }
-
-      const sampleAI = await MongoChatItem.findOne({
-        obj: 'AI',
-        time: { $gte: startDate, $lte: endDate }
-      }).lean();
-
-      if (sampleAI) {
-        addLog.debug('AI 消息样本', {
-          dataId: (sampleAI as any).dataId,
-          appId: (sampleAI as any).appId,
-          chatId: (sampleAI as any).chatId,
-          time: (sampleAI as any).time,
-          hasResponseData: !!(sampleAI as any).responseData,
-          responseDataLength: Array.isArray((sampleAI as any).responseData)
-            ? (sampleAI as any).responseData.length
-            : 0
-        });
-      }
-
-      // 使用 MongoDB 聚合管道提取数据
-      // 注意：根据数据结构，Human 和 AI 消息通过 chatId 和时间顺序关联
-      // 每个 Human 消息后面紧跟一个 AI 消息（如果调用成功）
-      const pipeline = [
-        // 1. 筛选 AI 消息和时间范围（直接从 AI 消息开始，因为 AI 消息包含 responseData）
+      // 1. 按 _id 游标取出本批 AI 消息（仅取 _id，避免大偏移量与多余数据传输）
+      const batchItems = await MongoChatItem.find(
         {
-          $match: {
-            obj: 'AI',
-            time: { $gte: startDate, $lte: endDate }
-          }
+          obj: 'AI',
+          time: { $gte: startDate, $lte: endDate },
+          ...(lastId ? { _id: { $gt: lastId } } : {})
         },
-        // 2. 关联应用信息（包含 modules 字段用于提取 model）
+        '_id'
+      )
+        .sort({ _id: 1 })
+        .limit(limit)
+        .lean();
+
+      if (batchItems.length === 0) {
+        return { logs: [], scannedCount: 0, lastId: null };
+      }
+
+      const itemIds = batchItems.map((item) => item._id as Types.ObjectId);
+      const nextLastId = itemIds[itemIds.length - 1];
+
+      addLog.debug('本批 AI 消息', {
+        count: itemIds.length,
+        firstId: String(itemIds[0]),
+        lastId: String(nextLastId)
+      });
+
+      // 2. 使用聚合管道提取节点调用明细
+      // 当前版本节点响应存放在 chat_item_responses 集合（data 字段），
+      // 旧版本存放在 chatitems.responseData 数组，这里做兼容合并。
+      const pipeline: any[] = [
+        { $match: { _id: { $in: itemIds } } },
+        { $sort: { _id: 1 } },
+        // 关联节点响应（当前结构：chat_item_responses.data）
         {
           $lookup: {
-            from: 'apps',
+            from: ChatItemResponseCollectionName,
+            let: { appId: '$appId', chatId: '$chatId', dataId: '$dataId' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ['$appId', '$$appId'] },
+                      { $eq: ['$chatId', '$$chatId'] },
+                      { $eq: ['$chatItemDataId', '$$dataId'] }
+                    ]
+                  }
+                }
+              },
+              { $sort: { _id: 1 } }
+            ],
+            as: 'responseDocs'
+          }
+        },
+        // 关联应用信息（apps.modules 为草稿工作流，仅作兜底）
+        {
+          $lookup: {
+            from: AppCollectionName,
             localField: 'appId',
             foreignField: '_id',
             as: 'appInfo'
           }
         },
-        // 3. 关联会话信息
+        // 关联会话信息（集合名 chats，并加 appId 约束，避免跨应用 chatId 冲突）
         {
           $lookup: {
-            from: 'chat',
-            localField: 'chatId',
-            foreignField: 'chatId',
+            from: chatCollectionName,
+            let: { appId: '$appId', chatId: '$chatId' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [{ $eq: ['$appId', '$$appId'] }, { $eq: ['$chatId', '$$chatId'] }]
+                  }
+                }
+              },
+              { $project: { source: 1, sourceName: 1, appVersionId: 1 } }
+            ],
             as: 'chatInfo'
           }
         },
-        // 4. 展开数组
+        { $unwind: { path: '$appInfo', preserveNullAndEmptyArrays: true } },
+        { $unwind: { path: '$chatInfo', preserveNullAndEmptyArrays: true } },
+        // 关联会话实际运行的版本工作流（model 兜底优先使用）
         {
-          $unwind: { path: '$appInfo', preserveNullAndEmptyArrays: true }
+          $lookup: {
+            from: AppVersionCollectionName,
+            localField: 'chatInfo.appVersionId',
+            foreignField: '_id',
+            as: 'appVersionInfo'
+          }
         },
+        { $unwind: { path: '$appVersionInfo', preserveNullAndEmptyArrays: true } },
+        // 合并新旧节点响应，并确定 model 兜底使用的节点列表
         {
-          $unwind: { path: '$chatInfo', preserveNullAndEmptyArrays: true }
-        },
-        // 5. 展开 responseData 数组
-        {
-          $unwind: { path: '$responseData', preserveNullAndEmptyArrays: true }
-        },
-        // 6. 只保留 chat 类别且包含模型信息的记录
-        // chat 类别的 moduleType: chatNode, classifyQuestion, contentExtract, tools, queryExtension
-        {
-          $match: {
-            //'responseData.model': { $exists: true, $ne: null },
-            'responseData.moduleType': {
-              $in: [
-                'chatNode',
-                'classifyQuestion',
-                'contentExtract',
-                'tools',
-                'cfr' // queryExtension 的实际值是 'cfr'
+          $addFields: {
+            responseData: {
+              $concatArrays: [
+                {
+                  $map: {
+                    input: { $ifNull: ['$responseDocs', []] },
+                    as: 'responseDoc',
+                    in: { $ifNull: ['$$responseDoc.data', null] }
+                  }
+                },
+                { $ifNull: ['$responseData', []] }
+              ]
+            },
+            nodesForModel: {
+              $cond: [
+                { $gt: [{ $size: { $ifNull: ['$appVersionInfo.nodes', []] } }, 0] },
+                '$appVersionInfo.nodes',
+                { $ifNull: ['$nodesForModel', []] }
               ]
             }
           }
         },
-        // 7. 投影所需字段
+        // 展开节点响应，只保留可采集的节点类型
+        { $unwind: { path: '$responseData' } },
+        {
+          $match: {
+            //'responseData.model': { $exists: true, $ne: null },
+            'responseData.moduleType': {
+              $in: COLLECTABLE_MODULE_TYPES
+            }
+          }
+        },
+        // 3. 投影所需字段
         {
           $project: {
             // 使用 responseData.id 作为唯一的 callId
             callId: '$responseData.id',
             appId: { $toString: '$appId' },
             appName: '$appInfo.name',
-            // 当 model 为空时，从 appInfo.modules 中根据 nodeId 提取
+            // 当 model 为空时，从运行时版本节点（nodesForModel）中根据 nodeId 提取
             // 1. 先尝试使用 responseData.model
             // 2. 如果为空，从 modules 数组中找到匹配 nodeId 的 module
             // 3. 从该 module 的 inputs 数组中找到 key 为 'model' 的项
@@ -264,7 +320,7 @@ export class DataCapCollect {
                         $arrayElemAt: [
                           {
                             $filter: {
-                              input: { $ifNull: ['$appInfo.modules', []] },
+                              input: { $ifNull: ['$nodesForModel', []] },
                               as: 'module',
                               cond: { $eq: ['$$module.nodeId', '$responseData.nodeId'] }
                             }
@@ -317,7 +373,7 @@ export class DataCapCollect {
                         $arrayElemAt: [
                           {
                             $filter: {
-                              input: { $ifNull: ['$appInfo.modules', []] },
+                              input: { $ifNull: ['$nodesForModel', []] },
                               as: 'module',
                               cond: { $eq: ['$$module.nodeId', '$responseData.nodeId'] }
                             }
@@ -540,7 +596,7 @@ export class DataCapCollect {
               responseDataModel: '$responseData.model',
               responseDataModelType: { $type: '$responseData.model' },
               hasAppInfo: { $ne: ['$appInfo', null] },
-              appModulesCount: { $size: { $ifNull: ['$appInfo.modules', []] } },
+              nodesForModelCount: { $size: { $ifNull: ['$nodesForModel', []] } },
               // 显示匹配的 module 信息
               matchedModuleInfo: {
                 $let: {
@@ -549,7 +605,7 @@ export class DataCapCollect {
                       $arrayElemAt: [
                         {
                           $filter: {
-                            input: { $ifNull: ['$appInfo.modules', []] },
+                            input: { $ifNull: ['$nodesForModel', []] },
                             as: 'module',
                             cond: { $eq: ['$$module.nodeId', '$responseData.nodeId'] }
                           }
@@ -608,14 +664,14 @@ export class DataCapCollect {
               }
             }
           }
-        },
-        // 8. 分页
-        { $skip: skip },
-        { $limit: limit }
+        }
       ];
 
       // 执行聚合查询
-      addLog.debug('执行聚合查询', { skip, limit });
+      addLog.debug('执行聚合查询', {
+        messageCount: itemIds.length,
+        limit
+      });
       const results = await MongoChatItem.aggregate(pipeline).exec();
 
       addLog.debug('聚合查询结果', {
@@ -660,10 +716,14 @@ export class DataCapCollect {
       // 转换结果为 ModelCallLog 格式
       const logs: ModelCallLog[] = results.map((doc: any) => this.transformDocument(doc));
 
-      return logs;
+      return {
+        logs,
+        scannedCount: itemIds.length,
+        lastId: nextLastId
+      };
     } catch (error) {
       addLog.error(
-        `批次数据提取失败 - skip: ${skip}, limit: ${limit}`,
+        `批次数据提取失败 - lastId: ${lastId ? String(lastId) : 'null'}, limit: ${limit}`,
         error instanceof Error ? error : new Error(String(error))
       );
       throw error;
@@ -687,7 +747,7 @@ export class DataCapCollect {
         responseDataModel: doc._debug.responseDataModel,
         responseDataModelType: doc._debug.responseDataModelType,
         hasAppInfo: doc._debug.hasAppInfo,
-        appModulesCount: doc._debug.appModulesCount
+        nodesForModelCount: doc._debug.nodesForModelCount
       };
 
       if (doc._debug.matchedModuleInfo) {
@@ -764,17 +824,16 @@ export class DataCapCollect {
   }
 
   /**
-   * 获取指定时间范围内的记录总数（用于进度估算）
+   * 获取指定时间范围内的节点响应总数（用于进度估算）
+   * 节点响应已从 chatitems.responseData 迁移到 chat_item_responses 集合
    * @param startDate 开始时间
    * @param endDate 结束时间
-   * @returns 记录总数
+   * @returns 记录总数（含不可采集的节点类型，为上限估算值）
    */
   async getRecordCount(startDate: Date, endDate: Date): Promise<number> {
     try {
-      const count = await MongoChatItem.countDocuments({
-        obj: 'AI',
-        time: { $gte: startDate, $lte: endDate },
-        responseData: { $exists: true, $ne: [] }
+      const count = await MongoChatItemResponse.countDocuments({
+        time: { $gte: startDate, $lte: endDate }
       });
 
       return count;

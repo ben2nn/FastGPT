@@ -23,6 +23,8 @@ export interface OverviewStatistics {
   totalCalls: number; // 总调用次数
   totalTokens: number; // 总 Token 数
   totalPoints: number; // 总积分消耗
+  totalDuration: number; // 总耗时（秒）
+  avgDuration: number; // 平均每次调用耗时（秒）
   successRate: number; // 成功率（百分比）
   avgTokensPerCall: number; // 平均每次调用的 Token 数
   timeRange: {
@@ -137,6 +139,8 @@ export interface StatisticsListItem {
   callCount: number;
   totalTokens: number;
   totalPoints: number;
+  totalDuration: number; // 总耗时（秒）
+  avgDuration: number; // 平均每次调用耗时（秒）
   successRate: number;
   avgTokensPerCall: number;
 }

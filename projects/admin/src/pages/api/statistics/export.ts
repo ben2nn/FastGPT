@@ -58,13 +58,23 @@ function convertToCSV(data: any[], type: ExportType): string {
 
   switch (type) {
     case 'overview':
-      headers = ['总调用次数', '总Token数', '总积分消耗', '成功率(%)', '平均每次调用Token数'];
+      headers = [
+        '总调用次数',
+        '总Token数',
+        '总积分消耗',
+        '总耗时(秒)',
+        '平均耗时(秒)',
+        '成功率(%)',
+        '平均每次调用Token数'
+      ];
       const overview = data[0] as OverviewStatistics;
       rows = [
         [
           overview.totalCalls.toString(),
           overview.totalTokens.toString(),
           overview.totalPoints.toFixed(2),
+          overview.totalDuration.toFixed(2),
+          overview.avgDuration.toFixed(2),
           overview.successRate.toFixed(2),
           overview.avgTokensPerCall.toFixed(2)
         ]

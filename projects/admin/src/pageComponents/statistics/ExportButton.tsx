@@ -27,6 +27,8 @@ const convertToCSV = (data: StatisticsListItem[]): string => {
     '调用次数',
     '总Tokens',
     '总积分消耗',
+    '总耗时(秒)',
+    '平均耗时(秒)',
     '调用成功率(%)',
     '平均Tokens数'
   ];
@@ -39,6 +41,8 @@ const convertToCSV = (data: StatisticsListItem[]): string => {
     item.callCount.toString(),
     item.totalTokens.toString(),
     item.totalPoints.toFixed(2),
+    item.totalDuration.toFixed(2),
+    item.avgDuration.toFixed(2),
     item.successRate.toFixed(2),
     Math.round(item.avgTokensPerCall).toString()
   ]);

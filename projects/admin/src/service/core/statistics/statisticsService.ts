@@ -129,6 +129,8 @@ export class StatisticsService {
         total_calls: string;
         total_tokens: string;
         total_points: string;
+        total_duration: string;
+        avg_duration: string;
         success_rate: string;
         avg_tokens_per_call: string;
       }>(query);
@@ -139,6 +141,8 @@ export class StatisticsService {
           totalCalls: 0,
           totalTokens: 0,
           totalPoints: 0,
+          totalDuration: 0,
+          avgDuration: 0,
           successRate: 0,
           avgTokensPerCall: 0,
           timeRange: {
@@ -154,6 +158,8 @@ export class StatisticsService {
         totalCalls: parseInt(row.total_calls, 10),
         totalTokens: parseInt(row.total_tokens, 10),
         totalPoints: parseFloat(row.total_points),
+        totalDuration: parseFloat(row.total_duration),
+        avgDuration: parseFloat(row.avg_duration),
         successRate: parseFloat(row.success_rate),
         avgTokensPerCall: parseFloat(row.avg_tokens_per_call),
         timeRange: {
@@ -366,6 +372,8 @@ export class StatisticsService {
           call_count: string;
           total_tokens: string;
           total_points: string;
+          total_duration: string;
+          avg_duration: string;
           success_rate: string;
           avg_tokens_per_call: string;
         }>(listQuery),
@@ -381,6 +389,8 @@ export class StatisticsService {
         callCount: parseInt(row.call_count, 10),
         totalTokens: parseInt(row.total_tokens, 10),
         totalPoints: parseFloat(row.total_points),
+        totalDuration: parseFloat(row.total_duration),
+        avgDuration: parseFloat(row.avg_duration),
         successRate: parseFloat(row.success_rate),
         avgTokensPerCall: parseFloat(row.avg_tokens_per_call)
       }));

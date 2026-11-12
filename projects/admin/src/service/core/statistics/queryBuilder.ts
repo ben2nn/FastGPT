@@ -127,6 +127,8 @@ export class QueryBuilder {
         COUNT(*) as total_calls,
         COALESCE(SUM(total_tokens), 0) as total_tokens,
         COALESCE(SUM(total_points), 0) as total_points,
+        COALESCE(SUM(running_time), 0) as total_duration,
+        COALESCE(AVG(running_time), 0) as avg_duration,
         COALESCE(
           COUNT(CASE WHEN call_status = 'success' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0),
           0
@@ -293,6 +295,8 @@ export class QueryBuilder {
         COUNT(*) as call_count,
         COALESCE(SUM(total_tokens), 0) as total_tokens,
         COALESCE(SUM(total_points), 0) as total_points,
+        COALESCE(SUM(running_time), 0) as total_duration,
+        COALESCE(AVG(running_time), 0) as avg_duration,
         COALESCE(
           COUNT(CASE WHEN call_status = 'success' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0),
           0
