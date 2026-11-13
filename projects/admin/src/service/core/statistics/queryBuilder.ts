@@ -51,6 +51,14 @@ export class QueryBuilder {
       paramIndex += appCondition.values.length;
     }
 
+    // 应用名称筛选（可选，模糊匹配）
+    if (filters.appName) {
+      const appNameCondition = this.buildAppNameFilter(filters.appName, paramIndex);
+      conditions.push(appNameCondition.clause);
+      values.push(...appNameCondition.values);
+      paramIndex += appNameCondition.values.length;
+    }
+
     // 模型筛选（可选）
     if (filters.modelName) {
       const modelCondition = this.buildModelFilter(filters.modelName, paramIndex);
@@ -94,6 +102,22 @@ export class QueryBuilder {
   buildAppFilter(appId: string, paramIndex: number): { clause: string; values: any[] } {
     const clause = `app_id = $${paramIndex}`;
     const values = [appId];
+    return { clause, values };
+  }
+
+  /**
+   * 转义 LIKE 通配符，避免用户输入被当作模式匹配
+   */
+  private escapeLikePattern(value: string): string {
+    return value.replace(/[\\%_]/g, '\\$&');
+  }
+
+  /**
+   * 构建应用名称筛选条件（模糊匹配）
+   */
+  buildAppNameFilter(appName: string, paramIndex: number): { clause: string; values: any[] } {
+    const clause = `app_name ILIKE $${paramIndex} ESCAPE '\\'`;
+    const values = [`%${this.escapeLikePattern(appName)}%`];
     return { clause, values };
   }
 

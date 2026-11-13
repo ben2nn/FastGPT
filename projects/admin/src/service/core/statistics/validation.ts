@@ -80,6 +80,11 @@ function validateQuerySchema(query: any): void {
     errors.push('appId: 应用ID不能为空');
   }
 
+  // 验证 appName
+  if (query.appName !== undefined && (!query.appName || typeof query.appName !== 'string')) {
+    errors.push('appName: 应用名称不能为空');
+  }
+
   // 验证 modelName
   if (query.modelName !== undefined && (!query.modelName || typeof query.modelName !== 'string')) {
     errors.push('modelName: 模型名称不能为空');
@@ -312,6 +317,7 @@ export function validateAndCleanQuery(query: any): StatisticsQuery {
       startTime: String(query.startTime || '').trim(),
       endTime: String(query.endTime || '').trim(),
       appId: query.appId ? String(query.appId).trim() : undefined,
+      appName: query.appName ? String(query.appName).trim() : undefined,
       modelName: query.modelName ? String(query.modelName).trim() : undefined,
       callStatus: query.callStatus ? String(query.callStatus).trim() : undefined,
       pageNum: query.pageNum ? Number(query.pageNum) : undefined,
