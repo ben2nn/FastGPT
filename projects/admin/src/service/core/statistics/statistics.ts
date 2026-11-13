@@ -155,6 +155,29 @@ export interface StatisticsListResponse {
   pageSize: number;
 }
 
+// ==================== 使用场景映射 ====================
+
+/**
+ * 使用场景（工作流节点类型）中文名称映射
+ * key 与 FlowNodeTypeEnum 的实际值一致，对应 model_call_logs.usage_scenario
+ */
+export const usageScenarioLabels: Record<string, string> = {
+  chatNode: 'AI 对话',
+  classifyQuestion: '问题分类',
+  contentExtract: '内容提取',
+  tools: '工具调用',
+  cfr: '问题优化',
+  datasetSearchNode: '知识库搜索'
+};
+
+/**
+ * 获取使用场景的中文名称，未知类型原样返回
+ */
+export function getUsageScenarioLabel(usageScenario?: string | null): string {
+  if (!usageScenario) return '-';
+  return usageScenarioLabels[usageScenario] || usageScenario;
+}
+
 // ==================== 数据导出类型 ====================
 
 /**

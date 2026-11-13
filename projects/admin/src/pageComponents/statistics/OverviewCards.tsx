@@ -1,6 +1,6 @@
 /**
  * 总览卡片组件
- * 展示模型调用统计的总览数据，包括总调用次数、总 Token 数、总积分消耗、成功率和平均 Token 数
+ * 展示模型调用统计的总览数据，包括总调用次数、总 Token 数、成功率、平均 Token 数以及耗时
  */
 
 import React, { useMemo } from 'react';
@@ -153,7 +153,6 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
       return {
         totalCalls: '0',
         totalTokens: '0',
-        totalPoints: '0',
         totalDuration: '0s',
         avgDuration: '0s',
         successRate: '0%',
@@ -165,7 +164,6 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
     return {
       totalCalls: formatLargeNumber(data.totalCalls),
       totalTokens: formatLargeNumber(data.totalTokens),
-      totalPoints: formatDecimal(data.totalPoints, 2),
       totalDuration: formatDuration(data.totalDuration),
       avgDuration: formatDuration(data.avgDuration),
       successRate: `${formatDecimal(data.successRate, 2)}%`,
@@ -180,7 +178,7 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
         base: '1fr',
         md: 'repeat(2, 1fr)',
         lg: 'repeat(3, 1fr)',
-        xl: 'repeat(4, 1fr)'
+        xl: 'repeat(3, 1fr)'
       }}
       gap={4}
       w="100%"
@@ -203,16 +201,7 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
         isLoading={isLoading}
       />
 
-      {/* 卡片 3: 总积分消耗 */}
-      <StatCard
-        label="总积分消耗"
-        value={formattedData.totalPoints}
-        icon="support/bill/wallet"
-        helpText={data ? `¥${data.totalPoints.toFixed(2)}` : undefined}
-        isLoading={isLoading}
-      />
-
-      {/* 卡片 4: 调用成功率 */}
+      {/* 卡片 3: 调用成功率 */}
       <StatCard
         label="调用成功率"
         value={formattedData.successRate}
@@ -221,7 +210,7 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
         isLoading={isLoading}
       />
 
-      {/* 卡片 5: 平均每次调用 Token 数 */}
+      {/* 卡片 4: 平均每次调用 Token 数 */}
       <StatCard
         label="平均 Token 数"
         value={formattedData.avgTokensPerCall}
@@ -230,7 +219,7 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
         isLoading={isLoading}
       />
 
-      {/* 卡片 6: 总耗时 */}
+      {/* 卡片 5: 总耗时 */}
       <StatCard
         label="总耗时"
         value={formattedData.totalDuration}
@@ -239,7 +228,7 @@ const OverviewCards = ({ filters, onError }: OverviewCardsProps) => {
         isLoading={isLoading}
       />
 
-      {/* 卡片 7: 平均耗时 */}
+      {/* 卡片 6: 平均耗时 */}
       <StatCard
         label="平均耗时"
         value={formattedData.avgDuration}

@@ -9,6 +9,7 @@ import MyIcon from '@fastgpt/web/components/common/Icon';
 
 import { getStatisticsList } from '@/web/core/statistics/api';
 import type { StatisticsQuery, StatisticsListItem } from '@/service/core/statistics/statistics';
+import { getUsageScenarioLabel } from '@/service/core/statistics/statistics';
 
 interface ExportButtonProps {
   filters: StatisticsQuery;
@@ -36,7 +37,7 @@ const convertToCSV = (data: StatisticsListItem[]): string => {
   const rows = data.map((item) => [
     item.appName || item.appId,
     item.modelName,
-    item.usageScenario || '-',
+    getUsageScenarioLabel(item.usageScenario),
     item.callCount.toString(),
     item.totalTokens.toString(),
     item.totalDuration.toFixed(2),

@@ -20,6 +20,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getStatisticsList } from '@/web/core/statistics/api';
 import type { StatisticsQuery, StatisticsListItem } from '@/service/core/statistics/statistics';
+import { getUsageScenarioLabel } from '@/service/core/statistics/statistics';
 
 interface StatisticsListProps {
   filters: StatisticsQuery;
@@ -190,7 +191,7 @@ const StatisticsList: React.FC<StatisticsListProps> = ({ filters }) => {
                       <Text>{item.modelName}</Text>
                     </Td>
                     <Td>
-                      <Text>{item.usageScenario || '-'}</Text>
+                      <Text>{getUsageScenarioLabel(item.usageScenario)}</Text>
                     </Td>
                     <Td isNumeric>
                       <Text>{formatNumber(item.callCount)}</Text>
