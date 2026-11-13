@@ -12,7 +12,7 @@ async function handler(_req: ApiRequestProps, res: ApiResponseType) {
   const dbConnected = await testConnection();
 
   return res.status(200).json({
-    system: 'AI基础管理后台',
+    system: 'DejaxAI管理后台',
     version: process.env.npm_package_version || '1.0.0',
     initialization: {
       status: initStatus.status,

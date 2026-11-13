@@ -27,7 +27,7 @@ interface StatisticsListProps {
 
 /**
  * 统计列表组件
- * 显示智能体、模型、使用场景、调用次数、总tokens、总积分消耗、总耗时、平均耗时、调用成功率、平均tokens数
+ * 显示智能体、模型、使用场景、调用次数、总tokens、总耗时、平均耗时、调用成功率、平均tokens数
  */
 const StatisticsList: React.FC<StatisticsListProps> = ({ filters }) => {
   const [pageNum, setPageNum] = useState(1);
@@ -53,11 +53,6 @@ const StatisticsList: React.FC<StatisticsListProps> = ({ filters }) => {
   // 格式化百分比
   const formatPercentage = (num: number): string => {
     return `${num.toFixed(2)}%`;
-  };
-
-  // 格式化积分
-  const formatPoints = (num: number): string => {
-    return num.toFixed(2);
   };
 
   // 格式化耗时（秒）
@@ -168,9 +163,6 @@ const StatisticsList: React.FC<StatisticsListProps> = ({ filters }) => {
                     总Tokens
                   </Th>
                   <Th fontSize="md" fontWeight="bold" color="blue.700" isNumeric>
-                    总积分消耗
-                  </Th>
-                  <Th fontSize="md" fontWeight="bold" color="blue.700" isNumeric>
                     总耗时
                   </Th>
                   <Th fontSize="md" fontWeight="bold" color="blue.700" isNumeric>
@@ -205,9 +197,6 @@ const StatisticsList: React.FC<StatisticsListProps> = ({ filters }) => {
                     </Td>
                     <Td isNumeric>
                       <Text>{formatNumber(item.totalTokens)}</Text>
-                    </Td>
-                    <Td isNumeric>
-                      <Text>{formatPoints(item.totalPoints)}</Text>
                     </Td>
                     <Td isNumeric>
                       <Text>{formatDuration(item.totalDuration)}</Text>

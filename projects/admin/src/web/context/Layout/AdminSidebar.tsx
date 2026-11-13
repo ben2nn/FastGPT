@@ -125,7 +125,7 @@ export default function AdminSidebar() {
       {/* 品牌区 */}
       <Flex align="center" p={6}>
         <Text color="white" fontWeight="bold" fontSize="lg">
-          AI基础管理后台
+          DejaxAI管理后台
         </Text>
       </Flex>
 

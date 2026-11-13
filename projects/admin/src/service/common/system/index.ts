@@ -18,7 +18,7 @@ const defaultFeConfigs = {
   show_git: true,
   isPlus: true,
   docUrl: 'https://doc.fastgpt.io',
-  systemTitle: 'AI基础管理后台',
+  systemTitle: 'DejaxAI管理后台',
   uploadFileMaxSize: Number(process.env.UPLOAD_FILE_MAX_SIZE || 1000),
   uploadFileMaxAmount: Number(process.env.UPLOAD_FILE_MAX_AMOUNT || 1000)
 };
