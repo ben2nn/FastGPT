@@ -177,7 +177,9 @@ export class DataCapCollect {
         return { logs: [], scannedCount: 0, lastId: null };
       }
 
-      const itemIds = batchItems.map((item) => item._id as Types.ObjectId);
+      // 注意：service 的 Mongo 模型注册了 post(/^find/) 中间件，会把 _id 转为字符串，
+      // 而聚合管道不会做类型转换，这里必须显式转回 ObjectId。
+      const itemIds = batchItems.map((item) => new Types.ObjectId(String(item._id)));
       const nextLastId = itemIds[itemIds.length - 1];
 
       addLog.debug('本批 AI 消息', {

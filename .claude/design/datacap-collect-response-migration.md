@@ -209,3 +209,25 @@ MongoChatItemResponse.countDocuments({ time: { $gte: startDate, $lte: endDate } 
   - `datasetSearchNode` 响应被正确过滤；
   - `source` / `sourceName` 正确关联（集合名 `chats` 修复生效）；
   - model 兜底取到运行时版本节点（`runtime-model`，而非草稿 `draft-model`）。
+
+### 6.1 修正：`find` 返回的 `_id` 是字符串
+
+首次上线后出现「查询有数据但采集 0 条」。原因是 `packages/service/common/mongo/index.ts`
+的 `addCommonMiddleware` 注册了 `schema.post(/^find/)`，会把返回文档的 `_id` 及所有 ObjectId
+字段转成**字符串**（`lean()` 同样生效）。而聚合管道不会做类型转换：
+
+```ts
+const itemIds = batchItems.map((item) => item._id); // string[]
+{ $match: { _id: { $in: itemIds } } }             // ObjectId vs string → 永远不匹配
+```
+
+修复方式：显式转回 ObjectId。
+
+```ts
+const itemIds = batchItems.map((item) => new Types.ObjectId(String(item._id)));
+```
+
+已用 mongoose + mongodb-memory-server 复现验证：`$in` 字符串返回 `[]`，`$in` ObjectId 返回 1 条。
+
+> 注意：该中间件仅影响 `find` 系列（含 `lean`），`aggregate` 不经过它。凡是用 `find` 拿到
+> `_id` 再回传给聚合/`$in`/`$lookup` 的地方都需要手动转回 ObjectId。
