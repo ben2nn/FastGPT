@@ -43,7 +43,7 @@ export class QueryBuilder {
     values.push(...timeCondition.values);
     paramIndex += timeCondition.values.length;
 
-    // 应用筛选（可选）
+    // 应用筛选（可选，支持多值，命中任一即返回）
     if (filters.appId) {
       const appCondition = this.buildAppFilter(filters.appId, paramIndex);
       conditions.push(appCondition.clause);
@@ -59,7 +59,7 @@ export class QueryBuilder {
       paramIndex += appNameCondition.values.length;
     }
 
-    // 模型ID筛选（可选，精确匹配）
+    // 模型ID筛选（可选，支持多值，命中任一即返回）
     if (filters.modelId) {
       const modelIdCondition = this.buildModelIdFilter(filters.modelId, paramIndex);
       conditions.push(modelIdCondition.clause);
@@ -105,10 +105,13 @@ export class QueryBuilder {
   }
 
   /**
-   * 构建应用筛选条件
+   * 构建应用筛选条件（多值，命中任一即返回）
+   *
+   * 使用 `= ANY($n)` 单数组参数：pg 驱动将 JS 数组序列化为 Postgres 数组，
+   * 每个条件仍只占 1 个参数序号，调用方无需调整序号推进逻辑。
    */
-  buildAppFilter(appId: string, paramIndex: number): { clause: string; values: any[] } {
-    const clause = `app_id = $${paramIndex}`;
+  buildAppFilter(appId: string[], paramIndex: number): { clause: string; values: any[] } {
+    const clause = `app_id = ANY($${paramIndex})`;
     const values = [appId];
     return { clause, values };
   }
@@ -130,10 +133,12 @@ export class QueryBuilder {
   }
 
   /**
-   * 构建模型ID筛选条件（精确匹配）
+   * 构建模型ID筛选条件（多值，命中任一即返回）
+   *
+   * 使用 `= ANY($n)` 单数组参数，语义同 buildAppFilter。
    */
-  buildModelIdFilter(modelId: string, paramIndex: number): { clause: string; values: any[] } {
-    const clause = `model_id = $${paramIndex}`;
+  buildModelIdFilter(modelId: string[], paramIndex: number): { clause: string; values: any[] } {
+    const clause = `model_id = ANY($${paramIndex})`;
     const values = [modelId];
     return { clause, values };
   }

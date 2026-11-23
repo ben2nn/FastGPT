@@ -22,8 +22,8 @@ import { StatisticsError, StatisticsErrorCode } from '@/service/core/statistics/
 export type ModelStatisticsQueryParams = {
   startTime: string; // 开始时间（ISO 8601 格式）
   endTime: string; // 结束时间（ISO 8601 格式）
-  appId?: string; // 可选：应用ID筛选
-  modelId?: string; // 可选：模型ID筛选（精确匹配）
+  appId?: string | string[]; // 可选：应用ID筛选（支持多值：逗号分隔或重复参数）
+  modelId?: string | string[]; // 可选：模型ID筛选（精确匹配，支持多值）
   callStatus?: string; // 可选：调用状态筛选
   pageNum?: string; // 分页页码（字符串类型，需要转换）
   pageSize?: string; // 每页数量（字符串类型，需要转换）

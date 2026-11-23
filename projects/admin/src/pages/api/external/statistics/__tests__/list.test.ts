@@ -1,6 +1,7 @@
 /**
  * 对外统计列表 API 单元测试
  * mock NextAPI 包装、认证与统计服务，直接驱动 handler 验证状态码与响应结构
+ * 覆盖：认证、参数校验（时间/分页/多值 ID）、方法限制、错误不泄露、响应结构
  */
 
 import { NextApiResponse } from 'next';
@@ -43,7 +44,7 @@ const mockGetList = statisticsService.getStatisticsList as jest.Mock;
 
 function makeReq(
   method: string,
-  query: Record<string, string> = {},
+  query: Record<string, any> = {},
   headers: Record<string, string> = {}
 ): any {
   return { method, query, headers, url: '/api/external/statistics/list', setHeader: jest.fn() };
@@ -201,5 +202,112 @@ describe('GET /api/external/statistics/list', () => {
     expect(payload.code).toBe('DATABASE_ERROR');
     expect(JSON.stringify(payload)).not.toContain('relation');
     expect(JSON.stringify(payload)).not.toContain('does not exist');
+  });
+
+  describe('appId/modelId 多值筛选', () => {
+    const authKey = { id: 'k1', keyPrefix: 'dek_abc...' };
+
+    it('appId 逗号分隔多值返回 200 且筛选参数归一化为数组', async () => {
+      mockAuth.mockResolvedValue(authKey);
+      mockGetList.mockResolvedValueOnce(successList);
+
+      const res = makeRes();
+      await handler(makeReq('GET', { ...validQuery, appId: 'appA,appB' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockGetList).toHaveBeenCalledWith(
+        expect.objectContaining({ appId: ['appA', 'appB'] })
+      );
+    });
+
+    it('modelId 逗号分隔多值返回 200 且筛选参数归一化为数组', async () => {
+      mockAuth.mockResolvedValue(authKey);
+      mockGetList.mockResolvedValueOnce(successList);
+
+      const res = makeRes();
+      await handler(makeReq('GET', { ...validQuery, modelId: 'gpt-4o,gpt-4o-mini' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockGetList).toHaveBeenCalledWith(
+        expect.objectContaining({ modelId: ['gpt-4o', 'gpt-4o-mini'] })
+      );
+    });
+
+    it('重复参数（数组取值）返回 200 且归一化去重', async () => {
+      mockAuth.mockResolvedValue(authKey);
+      mockGetList.mockResolvedValueOnce(successList);
+
+      const res = makeRes();
+      // HTTP 层重复参数在 Next.js 中解析为数组
+      await handler(makeReq('GET', { ...validQuery, appId: ['appA', 'appB', 'appA'] }), res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockGetList).toHaveBeenCalledWith(
+        expect.objectContaining({ appId: ['appA', 'appB'] })
+      );
+    });
+
+    it('单值 appId 行为不变（归一化为单元素数组）', async () => {
+      mockAuth.mockResolvedValue(authKey);
+      mockGetList.mockResolvedValueOnce(successList);
+
+      const res = makeRes();
+      await handler(makeReq('GET', { ...validQuery, appId: 'appA' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockGetList).toHaveBeenCalledWith(expect.objectContaining({ appId: ['appA'] }));
+    });
+
+    it('appId 含空白取值返回 400 与 INVALID_FILTER_PARAM', async () => {
+      mockAuth.mockResolvedValue(authKey);
+
+      const res = makeRes();
+      await handler(makeReq('GET', { ...validQuery, appId: 'appA,,appB' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'INVALID_FILTER_PARAM' })
+      );
+      expect(mockGetList).not.toHaveBeenCalled();
+    });
+
+    it('appId 超过 50 个取值返回 400 与 INVALID_FILTER_PARAM', async () => {
+      mockAuth.mockResolvedValue(authKey);
+
+      const ids = Array.from({ length: 51 }, (_, i) => `app-${i}`);
+      const res = makeRes();
+      await handler(makeReq('GET', { ...validQuery, appId: ids.join(',') }), res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'INVALID_FILTER_PARAM' })
+      );
+      expect(mockGetList).not.toHaveBeenCalled();
+    });
+
+    it('多值与其他筛选条件组合返回 200（参数内 OR、参数间 AND）', async () => {
+      mockAuth.mockResolvedValue(authKey);
+      mockGetList.mockResolvedValueOnce(successList);
+
+      const res = makeRes();
+      await handler(
+        makeReq('GET', {
+          ...validQuery,
+          appId: 'appA,appB',
+          modelId: 'gpt-4o,gpt-4o-mini',
+          appName: '客服'
+        }),
+        res
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockGetList).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appId: ['appA', 'appB'],
+          modelId: ['gpt-4o', 'gpt-4o-mini'],
+          appName: '客服'
+        })
+      );
+    });
   });
 });

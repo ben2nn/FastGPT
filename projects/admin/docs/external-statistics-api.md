@@ -33,9 +33,9 @@ Authorization: Bearer <你的API Key>
 |---|---|---|
 | `startTime` | 是 | 开始时间，ISO 8601 格式（如 `2026-01-01T00:00:00+08:00`）；不带时区偏移时按业务时区（Asia/Shanghai）解析 |
 | `endTime` | 是 | 结束时间，ISO 8601 格式；略晚于当前时间会收敛到当前时间 |
-| `appId` | 否 | 应用 ID，**精确匹配** |
+| `appId` | 否 | 应用 ID，**精确匹配**，支持多值（逗号分隔如 `appId=a,b` 或重复参数 `appId=a&appId=b`），命中任一即返回 |
 | `appName` | 否 | 应用名称，**模糊匹配**（不区分大小写的包含匹配） |
-| `modelId` | 否 | 模型 ID，**精确匹配** |
+| `modelId` | 否 | 模型 ID，**精确匹配**，支持多值（语法同 `appId`），命中任一即返回 |
 | `modelName` | 否 | 模型名称，**模糊匹配**（不区分大小写的包含匹配） |
 | `pageNum` | 否 | 页码，正整数，默认 `1` |
 | `pageSize` | 否 | 每页数量，1–100，默认 `20` |
@@ -44,7 +44,11 @@ Authorization: Bearer <你的API Key>
 
 - 时间区间必填，开始时间必须早于结束时间，区间最长 365 天
 - 模糊匹配中的 `%`、`_` 等字符按字面值匹配，不作为通配符
-- 多个筛选条件同时传入时为「与」关系
+- 多个筛选条件同时传入时为「与」关系；同一参数的多个取值之间为「或」关系（命中任一即返回）
+- `appId`/`modelId` 多值规则：
+  - 逗号 `,` 为分隔符，ID 本身不含逗号；每个取值自动去除首尾空白
+  - 取值不能为空（如 `appId=a,,b` 或纯空白返回 400 `INVALID_FILTER_PARAM`）
+  - 单个参数最多 50 个取值，超过返回 400 `INVALID_FILTER_PARAM`
 
 ### 响应结构
 
@@ -101,6 +105,7 @@ Authorization: Bearer <你的API Key>
 |---|---|---|
 | 400 | `INVALID_TIME_RANGE` | 时间格式非法、开始时间晚于/等于结束时间、区间超过 365 天、开始时间在未来、其他参数格式错误（见 `details.errors`） |
 | 400 | `INVALID_PAGINATION` | `pageNum` 或 `pageSize` 非法（如 `pageSize` > 100） |
+| 400 | `INVALID_FILTER_PARAM` | `appId`/`modelId` 多值取值非法：取值为空白、或取值数量超过 50 |
 | 401 | `UNAUTHORIZED` | API Key 缺失、格式错误、无效或已禁用 |
 | 405 | `METHOD_NOT_ALLOWED` | 非 GET 请求 |
 | 500 | `DATABASE_ERROR` | 服务内部错误（不泄露内部细节） |
@@ -143,6 +148,21 @@ curl -s -G "https://<管理后台地址>/api/external/statistics/list" \
   --data-urlencode "pageSize=50" \
   -H "Authorization: Bearer dek_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
+
+### 按多个应用 + 多个模型筛选（多值，命中任一即返回）
+
+返回「应用 A 或 B」且「模型 X 或 Y」的统计数据：
+
+```bash
+curl -s -G "https://<管理后台地址>/api/external/statistics/list" \
+  --data-urlencode "startTime=2026-11-16T00:00:00+08:00" \
+  --data-urlencode "endTime=2026-11-23T00:00:00+08:00" \
+  --data-urlencode "appId=6712abc...,6712def..." \
+  --data-urlencode "modelId=gpt-4o,gpt-4o-mini" \
+  -H "Authorization: Bearer dek_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+```
+
+等价的重复参数写法：`appId=6712abc...&appId=6712def...&modelId=gpt-4o&modelId=gpt-4o-mini`
 
 ### 认证失败示例（401）
 

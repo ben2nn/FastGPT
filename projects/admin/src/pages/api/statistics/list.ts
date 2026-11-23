@@ -23,9 +23,9 @@ import { StatisticsError, StatisticsErrorCode } from '@/service/core/statistics/
 export type StatisticsListQueryParams = {
   startTime: string;
   endTime: string;
-  appId?: string;
+  appId?: string | string[]; // 支持多值：逗号分隔或重复参数，校验层归一化为数组
   appName?: string;
-  modelId?: string;
+  modelId?: string | string[]; // 支持多值：逗号分隔或重复参数，校验层归一化为数组
   modelName?: string;
   callStatus?: string;
   pageNum?: string;

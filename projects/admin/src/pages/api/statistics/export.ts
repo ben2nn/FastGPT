@@ -40,9 +40,9 @@ export type ExportQueryParams = {
   endTime: string;
   format: ExportFormat;
   exportType: ExportType;
-  appId?: string;
+  appId?: string | string[]; // 支持多值：逗号分隔或重复参数
   appName?: string;
-  modelId?: string;
+  modelId?: string | string[]; // 支持多值：逗号分隔或重复参数
   modelName?: string;
   callStatus?: string;
 };

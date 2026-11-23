@@ -1,6 +1,6 @@
 /**
  * QueryBuilder 单元测试
- * 覆盖：时间范围条件、modelId 精确筛选、modelName/appName 模糊匹配与通配符转义
+ * 覆盖：时间范围条件、appId/modelId 多值精确筛选（= ANY）、modelName/appName 模糊匹配与通配符转义
  */
 
 import { QueryBuilder } from '@/service/core/statistics/queryBuilder';
@@ -45,27 +45,87 @@ describe('QueryBuilder', () => {
     });
   });
 
-  describe('buildWhereClause - modelId 精确筛选', () => {
-    it('生成 model_id = $n 精确条件', () => {
+  describe('buildWhereClause - appId/modelId 多值精确筛选', () => {
+    it('modelId 单值生成 model_id = ANY($n) 条件，参数为数组', () => {
       const { clause, values } = builder.buildWhereClause({
         ...baseFilters,
-        modelId: 'gpt-4o-mini'
+        modelId: ['gpt-4o-mini']
       });
 
-      expect(clause).toContain('model_id = $3');
-      expect(values).toEqual([baseFilters.startTime, baseFilters.endTime, 'gpt-4o-mini']);
+      expect(clause).toContain('model_id = ANY($3)');
+      expect(clause).not.toMatch(/model_id = \$3/);
+      expect(values).toEqual([baseFilters.startTime, baseFilters.endTime, ['gpt-4o-mini']]);
     });
 
-    it('modelId 与其他条件组合时参数序号正确', () => {
+    it('modelId 多值生成 model_id = ANY($n) 条件，参数为完整数组', () => {
       const { clause, values } = builder.buildWhereClause({
         ...baseFilters,
-        appId: 'app123',
-        modelId: 'model-a'
+        modelId: ['gpt-4o', 'gpt-4o-mini']
       });
 
-      expect(clause).toContain('app_id = $3');
-      expect(clause).toContain('model_id = $4');
-      expect(values).toEqual([baseFilters.startTime, baseFilters.endTime, 'app123', 'model-a']);
+      expect(clause).toContain('model_id = ANY($3)');
+      expect(values).toEqual([
+        baseFilters.startTime,
+        baseFilters.endTime,
+        ['gpt-4o', 'gpt-4o-mini']
+      ]);
+    });
+
+    it('appId/modelId 多值组合时参数序号正确（每条件占 1 个序号）', () => {
+      const { clause, values } = builder.buildWhereClause({
+        ...baseFilters,
+        appId: ['app-a', 'app-b'],
+        modelId: ['model-a', 'model-b']
+      });
+
+      expect(clause).toContain('app_id = ANY($3)');
+      expect(clause).toContain('model_id = ANY($4)');
+      expect(values).toEqual([
+        baseFilters.startTime,
+        baseFilters.endTime,
+        ['app-a', 'app-b'],
+        ['model-a', 'model-b']
+      ]);
+    });
+
+    it('多值与 appName/modelName/callStatus 组合时参数序号连续', () => {
+      const { clause, values } = builder.buildWhereClause({
+        ...baseFilters,
+        appId: ['app-a'],
+        appName: '客服',
+        modelId: ['model-a', 'model-b'],
+        modelName: 'gpt',
+        callStatus: 'success'
+      });
+
+      expect(clause).toContain('app_id = ANY($3)');
+      expect(clause).toContain("app_name ILIKE $4 ESCAPE '\\'");
+      expect(clause).toContain('model_id = ANY($5)');
+      expect(clause).toContain("model_name ILIKE $6 ESCAPE '\\'");
+      expect(clause).toContain('call_status = $7');
+      expect(values).toEqual([
+        baseFilters.startTime,
+        baseFilters.endTime,
+        ['app-a'],
+        '%客服%',
+        ['model-a', 'model-b'],
+        '%gpt%',
+        'success'
+      ]);
+    });
+  });
+
+  describe('buildAppFilter / buildModelIdFilter - 直接构建', () => {
+    it('buildAppFilter 多值生成 ANY 条件与单数组参数', () => {
+      const result = builder.buildAppFilter(['app-a', 'app-b'], 1);
+      expect(result.clause).toBe('app_id = ANY($1)');
+      expect(result.values).toEqual([['app-a', 'app-b']]);
+    });
+
+    it('buildModelIdFilter 单值生成 ANY 条件，参数序号正确', () => {
+      const result = builder.buildModelIdFilter(['model-a'], 3);
+      expect(result.clause).toBe('model_id = ANY($3)');
+      expect(result.values).toEqual([['model-a']]);
     });
   });
 

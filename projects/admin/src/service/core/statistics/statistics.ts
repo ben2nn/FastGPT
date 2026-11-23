@@ -6,9 +6,9 @@
 export interface StatisticsQuery {
   startTime: string; // ISO 8601 格式
   endTime: string; // ISO 8601 格式
-  appId?: string; // 可选的应用ID筛选
+  appId?: string[]; // 可选的应用ID筛选（支持多值，校验层已归一化为数组）
   appName?: string; // 可选的应用名称筛选（模糊匹配）
-  modelId?: string; // 可选的模型ID筛选（精确匹配）
+  modelId?: string[]; // 可选的模型ID筛选（精确匹配，支持多值，校验层已归一化为数组）
   modelName?: string; // 可选的模型名称筛选（模糊匹配）
   callStatus?: string; // 可选的状态筛选
   pageNum?: number; // 分页页码
@@ -209,6 +209,7 @@ export enum StatisticsErrorCode {
   INVALID_TIME_RANGE = 'INVALID_TIME_RANGE',
   TIME_RANGE_TOO_LARGE = 'TIME_RANGE_TOO_LARGE',
   INVALID_PAGINATION = 'INVALID_PAGINATION',
+  INVALID_FILTER_PARAM = 'INVALID_FILTER_PARAM',
   QUERY_TIMEOUT = 'QUERY_TIMEOUT',
   DATABASE_ERROR = 'DATABASE_ERROR',
   UNAUTHORIZED = 'UNAUTHORIZED',

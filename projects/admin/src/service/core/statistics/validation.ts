@@ -26,6 +26,71 @@ const MAX_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
 /** 匹配带时区偏移的时间字符串（Z 或 ±HH:mm / ±HHmm） */
 const TIMEZONE_OFFSET_REGEX = /(z|[+-]\d{2}:?\d{2})$/i;
 
+/** appId/modelId 多值筛选的单参数取值上限 */
+export const MAX_ID_FILTER_VALUES = 50;
+
+/**
+ * 解析 appId/modelId 多值筛选参数
+ *
+ * 支持两种传参语法（可混用）：
+ * - 逗号分隔：`appId=a,b,c`（HTTP 层为字符串）
+ * - 重复参数：`appId=a&appId=b`（HTTP 层为数组）
+ *
+ * 解析规则：
+ * - 每个取值独立 trim
+ * - trim 后为空的取值视为非法（抛 INVALID_FILTER_PARAM）
+ * - 去重并保持首次出现顺序
+ * - 取值数量超过 MAX_ID_FILTER_VALUES 抛 INVALID_FILTER_PARAM
+ * - 未传或整体为空字符串视同未传（返回 undefined）
+ *
+ * @param param 参数名（用于错误消息）
+ * @param raw 原始值（string | string[] | undefined）
+ * @returns 归一化后的取值数组，未传时为 undefined
+ */
+export function parseIdFilterValues(
+  param: 'appId' | 'modelId',
+  raw: string | string[] | undefined
+): string[] | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  // 展开为片段序列：字符串按逗号分割，数组逐元素分割后合并（混合语法）
+  const parts = (Array.isArray(raw) ? raw : [raw]).flatMap((item) => String(item).split(','));
+
+  // 整体为空字符串视同未传（兼容既有 `appId=` 行为）
+  const hasAnyValue = parts.some((p) => p.length > 0);
+  if (!hasAnyValue) {
+    return undefined;
+  }
+
+  // 逐项 trim；空白取值非法
+  const trimmed = parts.map((p) => p.trim());
+  if (trimmed.some((p) => !p)) {
+    throw new StatisticsError(StatisticsErrorCode.INVALID_FILTER_PARAM, `${param}: 取值不能为空`, {
+      param
+    });
+  }
+
+  // 去重，保持首次出现顺序
+  const deduped: string[] = [];
+  for (const value of trimmed) {
+    if (!deduped.includes(value)) {
+      deduped.push(value);
+    }
+  }
+
+  if (deduped.length > MAX_ID_FILTER_VALUES) {
+    throw new StatisticsError(
+      StatisticsErrorCode.INVALID_FILTER_PARAM,
+      `${param}: 取值数量不能超过 ${MAX_ID_FILTER_VALUES}`,
+      { param, count: deduped.length, max: MAX_ID_FILTER_VALUES }
+    );
+  }
+
+  return deduped;
+}
+
 /**
  * 将时间字符串解析为绝对时刻
  *
@@ -52,9 +117,9 @@ export function parseTimeToDayjs(value: string): dayjs.Dayjs {
  * 验证规则：
  * - startTime: 必填，ISO 8601 格式的日期时间字符串
  * - endTime: 必填，ISO 8601 格式的日期时间字符串
- * - appId: 可选，非空字符串
+ * - appId: 可选，多值数组（string[]，元素非空字符串）
  * - appName: 可选，非空字符串
- * - modelId: 可选，非空字符串
+ * - modelId: 可选，多值数组（string[]，元素非空字符串）
  * - modelName: 可选，非空字符串
  * - callStatus: 可选，非空字符串
  * - pageNum: 可选，正整数，默认 1
@@ -77,9 +142,14 @@ function validateQuerySchema(query: any): void {
     errors.push('endTime: 结束时间必须是有效的 ISO 8601 格式');
   }
 
-  // 验证 appId
-  if (query.appId !== undefined && (!query.appId || typeof query.appId !== 'string')) {
-    errors.push('appId: 应用ID不能为空');
+  // 验证 appId（多值数组；parseIdFilterValues 已保证元素非空，此处防御性校验）
+  if (query.appId !== undefined) {
+    if (
+      !Array.isArray(query.appId) ||
+      query.appId.some((v: string) => typeof v !== 'string' || !v)
+    ) {
+      errors.push('appId: 应用ID不能为空');
+    }
   }
 
   // 验证 appName
@@ -87,9 +157,14 @@ function validateQuerySchema(query: any): void {
     errors.push('appName: 应用名称不能为空');
   }
 
-  // 验证 modelId
-  if (query.modelId !== undefined && (!query.modelId || typeof query.modelId !== 'string')) {
-    errors.push('modelId: 模型ID不能为空');
+  // 验证 modelId（多值数组；parseIdFilterValues 已保证元素非空，此处防御性校验）
+  if (query.modelId !== undefined) {
+    if (
+      !Array.isArray(query.modelId) ||
+      query.modelId.some((v: string) => typeof v !== 'string' || !v)
+    ) {
+      errors.push('modelId: 模型ID不能为空');
+    }
   }
 
   // 验证 modelName
@@ -329,29 +404,33 @@ export function calculateGranularity(
  */
 export function validateAndCleanQuery(query: any): StatisticsQuery {
   try {
-    // 1. 数据类型转换
+    // 1. 多值 ID 参数解析（appId/modelId：逗号分隔/重复参数 → string[]，非法取值在此抛出）
+    const appId = parseIdFilterValues('appId', query.appId);
+    const modelId = parseIdFilterValues('modelId', query.modelId);
+
+    // 2. 数据类型转换
     const cleanedQuery = {
       startTime: String(query.startTime || '').trim(),
       endTime: String(query.endTime || '').trim(),
-      appId: query.appId ? String(query.appId).trim() : undefined,
+      appId,
       appName: query.appName ? String(query.appName).trim() : undefined,
-      modelId: query.modelId ? String(query.modelId).trim() : undefined,
+      modelId,
       modelName: query.modelName ? String(query.modelName).trim() : undefined,
       callStatus: query.callStatus ? String(query.callStatus).trim() : undefined,
       pageNum: query.pageNum ? Number(query.pageNum) : undefined,
       pageSize: query.pageSize ? Number(query.pageSize) : undefined
     };
 
-    // 2. 进行基本验证
+    // 3. 进行基本验证
     validateQuerySchema(cleanedQuery);
 
-    // 3. 验证时间范围（返回业务时区、带偏移的归一化时间）
+    // 4. 验证时间范围（返回业务时区、带偏移的归一化时间）
     const { startTime, endTime } = validateTimeRange(cleanedQuery.startTime, cleanedQuery.endTime);
 
-    // 4. 验证分页参数
+    // 5. 验证分页参数
     const { pageNum, pageSize } = validatePagination(cleanedQuery.pageNum, cleanedQuery.pageSize);
 
-    // 5. 返回清洗后的参数
+    // 6. 返回清洗后的参数
     return {
       ...cleanedQuery,
       startTime,

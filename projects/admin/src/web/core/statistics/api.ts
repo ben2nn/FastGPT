@@ -17,6 +17,22 @@ import type {
 } from '@/service/core/statistics/statistics';
 
 /**
+ * 将查询参数归一化为 HTTP 查询串形态
+ *
+ * appId/modelId 在 StatisticsQuery 中为 string[]（多值筛选），HTTP 传输统一使用
+ * 逗号分隔语法（`appId=a,b`）。数组直接交给 axios 默认序列化会产生 `appId[]=a`
+ * 形式（键名带方括号），后端无法识别，故此处显式转换。
+ * 单值数组转换后与既有线上格式完全一致（`['app123']` → `'app123'`）。
+ */
+function toHttpQuery(params: StatisticsQuery): Record<string, string | number | undefined> {
+  return {
+    ...params,
+    appId: params.appId?.length ? params.appId.join(',') : undefined,
+    modelId: params.modelId?.length ? params.modelId.join(',') : undefined
+  };
+}
+
+/**
  * 获取总览统计数据
  *
  * @param params 查询参数
@@ -30,7 +46,7 @@ import type {
  * });
  */
 export const getOverviewStatistics = (params: StatisticsQuery): Promise<OverviewStatistics> => {
-  return GET<OverviewStatistics>('/statistics/overview', params);
+  return GET<OverviewStatistics>('/statistics/overview', toHttpQuery(params));
 };
 
 /**
@@ -48,7 +64,7 @@ export const getOverviewStatistics = (params: StatisticsQuery): Promise<Overview
  * });
  */
 export const getAppStatistics = (params: StatisticsQuery): Promise<AppStatisticsResponse> => {
-  return GET<AppStatisticsResponse>('/statistics/by-app', params);
+  return GET<AppStatisticsResponse>('/statistics/by-app', toHttpQuery(params));
 };
 
 /**
@@ -66,7 +82,7 @@ export const getAppStatistics = (params: StatisticsQuery): Promise<AppStatistics
  * });
  */
 export const getModelStatistics = (params: StatisticsQuery): Promise<ModelStatisticsResponse> => {
-  return GET<ModelStatisticsResponse>('/statistics/by-model', params);
+  return GET<ModelStatisticsResponse>('/statistics/by-model', toHttpQuery(params));
 };
 
 /**
@@ -86,7 +102,7 @@ export const getTrendStatistics = (
   params: StatisticsQuery & { granularity?: 'day' | 'week' | 'month' }
 ): Promise<TrendStatisticsResponse> => {
   console.log('[getTrendStatistics] 请求参数:', params);
-  return GET<TrendStatisticsResponse>('/statistics/trend', params)
+  return GET<TrendStatisticsResponse>('/statistics/trend', toHttpQuery(params))
     .then((data) => {
       console.log('[getTrendStatistics] 响应数据:', data);
       return data;
@@ -110,7 +126,7 @@ export const getTrendStatistics = (
  * });
  */
 export const getStatusStatistics = (params: StatisticsQuery): Promise<StatusStatisticsResponse> => {
-  return GET<StatusStatisticsResponse>('/statistics/status', params);
+  return GET<StatusStatisticsResponse>('/statistics/status', toHttpQuery(params));
 };
 
 /**
@@ -128,7 +144,7 @@ export const getStatusStatistics = (params: StatisticsQuery): Promise<StatusStat
  * });
  */
 export const getStatisticsList = (params: StatisticsQuery): Promise<StatisticsListResponse> => {
-  return GET<StatisticsListResponse>('/statistics/list', params);
+  return GET<StatisticsListResponse>('/statistics/list', toHttpQuery(params));
 };
 
 /**
@@ -164,9 +180,12 @@ export const exportStatistics = async (
     queryParams.append('format', format);
     queryParams.append('exportType', exportType);
 
-    // 添加可选参数
-    if (params.appId) {
-      queryParams.append('appId', params.appId);
+    // 添加可选参数（appId/modelId 为多值数组，HTTP 使用逗号分隔语法）
+    if (params.appId?.length) {
+      queryParams.append('appId', params.appId.join(','));
+    }
+    if (params.modelId?.length) {
+      queryParams.append('modelId', params.modelId.join(','));
     }
     if (params.modelName) {
       queryParams.append('modelName', params.modelName);

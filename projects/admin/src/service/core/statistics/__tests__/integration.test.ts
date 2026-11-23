@@ -1,7 +1,7 @@
 /**
  * 统计查询集成测试
  * 覆盖：validateAndCleanQuery 清洗结果 → QueryBuilder 生成 SQL 参数的完整链路
- * 验证内部 API 与对外接口共用查询构建后，modelId 精确筛选与 modelName 模糊匹配行为一致
+ * 验证内部 API 与对外接口共用查询构建后，appId/modelId 多值筛选与名称模糊匹配行为一致
  */
 
 import { QueryBuilder } from '@/service/core/statistics/queryBuilder';
@@ -14,7 +14,7 @@ describe('统计查询集成：validation → queryBuilder', () => {
     builder = new QueryBuilder();
   });
 
-  it('modelId + modelName 模糊组合筛选生成正确的 SQL 参数', () => {
+  it('modelId 单值 + modelName 模糊组合筛选生成正确的 SQL 参数', () => {
     const validated = validateAndCleanQuery({
       startTime: '2026-01-01T00:00:00+08:00',
       endTime: '2026-01-31T23:59:59+08:00',
@@ -24,16 +24,41 @@ describe('统计查询集成：validation → queryBuilder', () => {
 
     const { clause, values } = builder.buildWhereClause(validated);
 
-    expect(clause).toContain('model_id = $3');
+    // 单值经校验层归一化为数组，SQL 仍只占 1 个参数序号
+    expect(validated.modelId).toEqual(['gpt-4o-mini']);
+    expect(clause).toContain('model_id = ANY($3)');
     expect(clause).toContain("model_name ILIKE $4 ESCAPE '\\'");
-    expect(values).toEqual([validated.startTime, validated.endTime, 'gpt-4o-mini', '%4o%']);
+    expect(values).toEqual([validated.startTime, validated.endTime, ['gpt-4o-mini'], '%4o%']);
   });
 
-  it('全量筛选条件（appId/appName/modelId/modelName/callStatus）参数序号连续', () => {
+  it('appId/modelId 逗号分隔多值生成 ANY 条件且参数序号连续', () => {
     const validated = validateAndCleanQuery({
       startTime: '2026-01-01T00:00:00+08:00',
       endTime: '2026-01-31T23:59:59+08:00',
-      appId: 'app-1',
+      appId: 'app-1,app-2',
+      modelId: 'gpt-4o,gpt-4o-mini'
+    });
+
+    expect(validated.appId).toEqual(['app-1', 'app-2']);
+    expect(validated.modelId).toEqual(['gpt-4o', 'gpt-4o-mini']);
+
+    const { clause, values } = builder.buildWhereClause(validated);
+
+    expect(clause).toContain('app_id = ANY($3)');
+    expect(clause).toContain('model_id = ANY($4)');
+    expect(values).toEqual([
+      validated.startTime,
+      validated.endTime,
+      ['app-1', 'app-2'],
+      ['gpt-4o', 'gpt-4o-mini']
+    ]);
+  });
+
+  it('全量筛选条件（appId/appName/modelId/modelName/callStatus 多值组合）参数序号连续', () => {
+    const validated = validateAndCleanQuery({
+      startTime: '2026-01-01T00:00:00+08:00',
+      endTime: '2026-01-31T23:59:59+08:00',
+      appId: ['app-1', 'app-2'],
       appName: '客服',
       modelId: 'gpt-4o',
       modelName: 'gpt',
@@ -46,26 +71,27 @@ describe('统计查询集成：validation → queryBuilder', () => {
 
     // 时间(2) + appId + appName + modelId + modelName + callStatus = 7 个参数
     expect(values).toHaveLength(7);
-    expect(clause).toContain('app_id = $3');
+    expect(clause).toContain('app_id = ANY($3)');
     expect(clause).toContain("app_name ILIKE $4 ESCAPE '\\'");
-    expect(clause).toContain('model_id = $5');
+    expect(clause).toContain('model_id = ANY($5)');
     expect(clause).toContain("model_name ILIKE $6 ESCAPE '\\'");
     expect(clause).toContain('call_status = $7');
     expect(values).toEqual([
       validated.startTime,
       validated.endTime,
-      'app-1',
+      ['app-1', 'app-2'],
       '%客服%',
-      'gpt-4o',
+      ['gpt-4o'],
       '%gpt%',
       'success'
     ]);
   });
 
-  it('经校验清洗的参数直接可用于统计列表查询（含分页）', () => {
+  it('经校验清洗的参数直接可用于统计列表查询（含分页，多值不占额外序号）', () => {
     const validated = validateAndCleanQuery({
       startTime: '2026-01-01T00:00:00+08:00',
       endTime: '2026-01-31T23:59:59+08:00',
+      appId: 'app-1,app-2',
       modelId: 'gpt-4o',
       pageNum: '2',
       pageSize: '50'
@@ -73,8 +99,8 @@ describe('统计查询集成：validation → queryBuilder', () => {
 
     const { text, values } = builder.buildStatisticsListQuery(validated);
 
-    // 时间(2) + modelId = 3 个筛选参数，LIMIT/OFFSET 为 $4/$5
-    expect(text).toContain('LIMIT $4 OFFSET $5');
+    // 时间(2) + appId + modelId = 4 个筛选参数，LIMIT/OFFSET 为 $5/$6
+    expect(text).toContain('LIMIT $5 OFFSET $6');
     expect(values.slice(-2)).toEqual([50, 50]);
   });
 
@@ -82,6 +108,7 @@ describe('统计查询集成：validation → queryBuilder', () => {
     const raw = {
       startTime: '2026-01-01T00:00:00+08:00',
       endTime: '2026-01-31T23:59:59+08:00',
+      appId: 'app-1,app-2',
       appName: '客服',
       modelName: 'gpt'
     };

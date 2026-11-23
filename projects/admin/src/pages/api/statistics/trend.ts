@@ -25,9 +25,9 @@ import { StatisticsError, StatisticsErrorCode } from '@/service/core/statistics/
 export type TrendStatisticsQueryParams = {
   startTime: string; // 开始时间（ISO 8601 格式）
   endTime: string; // 结束时间（ISO 8601 格式）
-  appId?: string; // 可选：应用ID筛选
+  appId?: string | string[]; // 可选：应用ID筛选（支持多值：逗号分隔或重复参数）
   modelName?: string; // 可选：模型名称筛选
-  modelId?: string; // 可选：模型ID筛选（精确匹配）
+  modelId?: string | string[]; // 可选：模型ID筛选（精确匹配，支持多值）
   callStatus?: string; // 可选：调用状态筛选
   granularity?: string; // 可选：时间粒度（day/week/month）
 };
