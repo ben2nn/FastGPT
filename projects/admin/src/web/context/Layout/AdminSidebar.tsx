@@ -61,6 +61,13 @@ const menuItems: MenuItem[] = [
     activeLinks: ['/dataset']
   },
   {
+    label: 'API 密钥',
+    icon: 'support/outlink/apikeyFill',
+    activeIcon: 'support/outlink/apikeyFill',
+    path: '/keys',
+    activeLinks: ['/keys']
+  },
+  {
     label: '备份还原',
     icon: 'common/download',
     activeIcon: 'common/download',

@@ -53,6 +53,8 @@ export function parseTimeToDayjs(value: string): dayjs.Dayjs {
  * - startTime: 必填，ISO 8601 格式的日期时间字符串
  * - endTime: 必填，ISO 8601 格式的日期时间字符串
  * - appId: 可选，非空字符串
+ * - appName: 可选，非空字符串
+ * - modelId: 可选，非空字符串
  * - modelName: 可选，非空字符串
  * - callStatus: 可选，非空字符串
  * - pageNum: 可选，正整数，默认 1
@@ -83,6 +85,11 @@ function validateQuerySchema(query: any): void {
   // 验证 appName
   if (query.appName !== undefined && (!query.appName || typeof query.appName !== 'string')) {
     errors.push('appName: 应用名称不能为空');
+  }
+
+  // 验证 modelId
+  if (query.modelId !== undefined && (!query.modelId || typeof query.modelId !== 'string')) {
+    errors.push('modelId: 模型ID不能为空');
   }
 
   // 验证 modelName
@@ -128,9 +135,19 @@ function validateQuerySchema(query: any): void {
   }
 
   if (errors.length > 0) {
-    throw new StatisticsError(StatisticsErrorCode.INVALID_TIME_RANGE, '查询参数验证失败', {
-      errors
-    });
+    // 按错误类型分类错误码：纯分页错误返回 INVALID_PAGINATION，其余返回 INVALID_TIME_RANGE
+    const isPaginationOnly = errors.every(
+      (e) => e.startsWith('pageNum') || e.startsWith('pageSize')
+    );
+    throw new StatisticsError(
+      isPaginationOnly
+        ? StatisticsErrorCode.INVALID_PAGINATION
+        : StatisticsErrorCode.INVALID_TIME_RANGE,
+      '查询参数验证失败',
+      {
+        errors
+      }
+    );
   }
 }
 
@@ -318,6 +335,7 @@ export function validateAndCleanQuery(query: any): StatisticsQuery {
       endTime: String(query.endTime || '').trim(),
       appId: query.appId ? String(query.appId).trim() : undefined,
       appName: query.appName ? String(query.appName).trim() : undefined,
+      modelId: query.modelId ? String(query.modelId).trim() : undefined,
       modelName: query.modelName ? String(query.modelName).trim() : undefined,
       callStatus: query.callStatus ? String(query.callStatus).trim() : undefined,
       pageNum: query.pageNum ? Number(query.pageNum) : undefined,

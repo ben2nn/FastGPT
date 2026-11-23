@@ -367,6 +367,7 @@ export class StatisticsService {
         this.executeQuery<{
           app_id: string;
           app_name: string;
+          model_id: string;
           model_name: string;
           usage_scenario: string;
           call_count: string;
@@ -384,6 +385,7 @@ export class StatisticsService {
       const list = listResult.rows.map((row) => ({
         appId: row.app_id,
         appName: row.app_name || '',
+        modelId: row.model_id,
         modelName: row.model_name,
         usageScenario: row.usage_scenario,
         callCount: parseInt(row.call_count, 10),

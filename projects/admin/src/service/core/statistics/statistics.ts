@@ -7,8 +7,9 @@ export interface StatisticsQuery {
   startTime: string; // ISO 8601 格式
   endTime: string; // ISO 8601 格式
   appId?: string; // 可选的应用ID筛选
-  appName?: string; // 可选的应用名称筛选
-  modelName?: string; // 可选的模型筛选
+  appName?: string; // 可选的应用名称筛选（模糊匹配）
+  modelId?: string; // 可选的模型ID筛选（精确匹配）
+  modelName?: string; // 可选的模型名称筛选（模糊匹配）
   callStatus?: string; // 可选的状态筛选
   pageNum?: number; // 分页页码
   pageSize?: number; // 每页数量
@@ -134,6 +135,7 @@ export interface StatusStatisticsResponse {
 export interface StatisticsListItem {
   appId: string;
   appName: string;
+  modelId: string;
   modelName: string;
   usageScenario?: string; // 使用场景
   callCount: number;

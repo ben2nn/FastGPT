@@ -23,6 +23,7 @@ export type AppStatisticsQueryParams = {
   startTime: string; // 开始时间（ISO 8601 格式）
   endTime: string; // 结束时间（ISO 8601 格式）
   modelName?: string; // 可选：模型名称筛选
+  modelId?: string; // 可选：模型ID筛选（精确匹配）
   callStatus?: string; // 可选：调用状态筛选
   pageNum?: string; // 分页页码（字符串类型，需要转换）
   pageSize?: string; // 每页数量（字符串类型，需要转换）

@@ -59,7 +59,15 @@ export class QueryBuilder {
       paramIndex += appNameCondition.values.length;
     }
 
-    // 模型筛选（可选）
+    // 模型ID筛选（可选，精确匹配）
+    if (filters.modelId) {
+      const modelIdCondition = this.buildModelIdFilter(filters.modelId, paramIndex);
+      conditions.push(modelIdCondition.clause);
+      values.push(...modelIdCondition.values);
+      paramIndex += modelIdCondition.values.length;
+    }
+
+    // 模型名称筛选（可选，模糊匹配）
     if (filters.modelName) {
       const modelCondition = this.buildModelFilter(filters.modelName, paramIndex);
       conditions.push(modelCondition.clause);
@@ -122,11 +130,20 @@ export class QueryBuilder {
   }
 
   /**
-   * 构建模型筛选条件
+   * 构建模型ID筛选条件（精确匹配）
+   */
+  buildModelIdFilter(modelId: string, paramIndex: number): { clause: string; values: any[] } {
+    const clause = `model_id = $${paramIndex}`;
+    const values = [modelId];
+    return { clause, values };
+  }
+
+  /**
+   * 构建模型名称筛选条件（模糊匹配）
    */
   buildModelFilter(modelName: string, paramIndex: number): { clause: string; values: any[] } {
-    const clause = `model_name = $${paramIndex}`;
-    const values = [modelName];
+    const clause = `model_name ILIKE $${paramIndex} ESCAPE '\\'`;
+    const values = [`%${this.escapeLikePattern(modelName)}%`];
     return { clause, values };
   }
 
@@ -311,9 +328,10 @@ export class QueryBuilder {
     const offset = (pageNum - 1) * pageSize;
 
     const text = `
-      SELECT 
+      SELECT
         app_id,
         app_name,
+        model_id,
         model_name,
         usage_scenario,
         COUNT(*) as call_count,
@@ -328,7 +346,7 @@ export class QueryBuilder {
         COALESCE(AVG(total_tokens), 0) as avg_tokens_per_call
       FROM model_call_logs
       ${clause}
-      GROUP BY app_id, app_name, model_name, usage_scenario
+      GROUP BY app_id, app_name, model_id, model_name, usage_scenario
       ORDER BY app_id ASC,call_count DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -345,10 +363,10 @@ export class QueryBuilder {
     const text = `
       SELECT COUNT(*) as total
       FROM (
-        SELECT app_id, model_name
+        SELECT app_id, model_id, model_name
         FROM model_call_logs
         ${clause}
-        GROUP BY app_id, model_name
+        GROUP BY app_id, model_id, model_name
       ) as subquery
     `;
 

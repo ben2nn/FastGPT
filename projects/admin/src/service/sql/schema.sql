@@ -36,6 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_app_id ON model_call_logs(app_id);
 CREATE INDEX IF NOT EXISTS idx_chat_id ON model_call_logs(chat_id);
 CREATE INDEX IF NOT EXISTS idx_data_id ON model_call_logs(data_id);
 CREATE INDEX IF NOT EXISTS idx_model_name ON model_call_logs(model_name);
+CREATE INDEX IF NOT EXISTS idx_model_id ON model_call_logs(model_id);
 CREATE INDEX IF NOT EXISTS idx_call_status ON model_call_logs(call_status);
 CREATE INDEX IF NOT EXISTS idx_model_category ON model_call_logs(model_category);
 
@@ -91,3 +92,20 @@ CREATE INDEX IF NOT EXISTS idx_task_executions_task_id ON task_executions(task_i
 CREATE INDEX IF NOT EXISTS idx_task_executions_status ON task_executions(status);
 CREATE INDEX IF NOT EXISTS idx_task_executions_start_time ON task_executions(start_time DESC);
 CREATE INDEX IF NOT EXISTS idx_task_executions_composite ON task_executions(task_id, start_time DESC);
+
+-- ============================================
+-- 4. 对外 API 密钥表
+-- ============================================
+CREATE TABLE IF NOT EXISTS api_keys (
+  id VARCHAR(50) PRIMARY KEY,
+  key_hash VARCHAR(64) UNIQUE NOT NULL,
+  key_prefix VARCHAR(16) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_used_at TIMESTAMP
+);
+
+-- API 密钥表索引
+CREATE INDEX IF NOT EXISTS idx_api_keys_enabled ON api_keys(enabled);

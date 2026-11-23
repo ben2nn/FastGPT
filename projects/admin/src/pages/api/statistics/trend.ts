@@ -27,6 +27,7 @@ export type TrendStatisticsQueryParams = {
   endTime: string; // 结束时间（ISO 8601 格式）
   appId?: string; // 可选：应用ID筛选
   modelName?: string; // 可选：模型名称筛选
+  modelId?: string; // 可选：模型ID筛选（精确匹配）
   callStatus?: string; // 可选：调用状态筛选
   granularity?: string; // 可选：时间粒度（day/week/month）
 };

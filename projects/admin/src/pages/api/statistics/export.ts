@@ -41,6 +41,8 @@ export type ExportQueryParams = {
   format: ExportFormat;
   exportType: ExportType;
   appId?: string;
+  appName?: string;
+  modelId?: string;
   modelName?: string;
   callStatus?: string;
 };

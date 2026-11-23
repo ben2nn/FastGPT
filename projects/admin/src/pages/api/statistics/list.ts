@@ -24,6 +24,8 @@ export type StatisticsListQueryParams = {
   startTime: string;
   endTime: string;
   appId?: string;
+  appName?: string;
+  modelId?: string;
   modelName?: string;
   callStatus?: string;
   pageNum?: string;
