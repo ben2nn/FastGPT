@@ -390,6 +390,90 @@ describe('DataCapCollect 拆行采集', () => {
   });
 });
 
+describe('unknown 数据过滤（未实际调用大模型不采集）', () => {
+  let collector: DataCapCollect;
+
+  beforeAll(() => {
+    collector = new DataCapCollect();
+  });
+
+  it('chat 节点：模型 unknown 且无 token 消耗 -> 不产生记录', async () => {
+    mockBatch([
+      makeChatDoc({
+        modelId: 'unknown',
+        modelName: 'unknown',
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        callStatus: 'error'
+      })
+    ]);
+
+    const logs = await collector.extractCallLogs(
+      new Date('2026-01-01T00:00:00Z'),
+      new Date('2026-01-02T00:00:00Z'),
+      100
+    );
+
+    expect(logs).toHaveLength(0);
+  });
+
+  it('chat 节点：模型 unknown 但有 token 消耗（真实调用、归因缺失）-> 保留', async () => {
+    mockBatch([
+      makeChatDoc({
+        modelId: 'unknown',
+        modelName: 'unknown',
+        inputTokens: 10,
+        outputTokens: 0,
+        totalTokens: 10
+      })
+    ]);
+
+    const logs = await collector.extractCallLogs(
+      new Date('2026-01-01T00:00:00Z'),
+      new Date('2026-01-02T00:00:00Z'),
+      100
+    );
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0].modelId).toBe('unknown');
+    expect(logs[0].totalTokens).toBe(10);
+  });
+
+  it('搜索节点：向量模型缺失且无任何 token 消耗 -> 不采集任何行', async () => {
+    mockBatch([
+      makeSearchDoc({
+        embeddingModel: null,
+        embeddingTokens: 0,
+        rerankModel: null,
+        reRankInputTokens: 0,
+        queryExtensionResult: null,
+        deepSearchResult: null
+      })
+    ]);
+
+    const logs = await collector.extractCallLogs(
+      new Date('2026-01-01T00:00:00Z'),
+      new Date('2026-01-02T00:00:00Z'),
+      100
+    );
+
+    expect(logs).toHaveLength(0);
+  });
+
+  it('搜索节点：重排模型缺失但有 tokens -> 保留 unknown 重排行（既有行为）', async () => {
+    mockBatch([makeSearchDoc({ rerankModel: null, reRankInputTokens: 50 })]);
+
+    const logs = await collector.extractCallLogs(
+      new Date('2026-01-01T00:00:00Z'),
+      new Date('2026-01-02T00:00:00Z'),
+      100
+    );
+
+    expect(logs.some((l) => l.callId === 'resp-1:rerank' && l.modelId === 'unknown')).toBe(true);
+  });
+});
+
 describe('批次断连重试', () => {
   let collector: DataCapCollect;
   const startDate = new Date('2026-01-01T00:00:00Z');

@@ -963,13 +963,27 @@ export class DataCapCollect {
       callStatus = 'timeout';
     }
 
+    const resolvedModelId = String(doc.modelId || 'unknown');
+    const resolvedTotalTokens = Number(doc.totalTokens || 0);
+
+    // 模型归因为 unknown 且无 token 消耗：说明本次并未实际调用大模型（如工具调用前置失败），
+    // 不采集该类数据（查询层另有兜底排除）
+    if (resolvedModelId === 'unknown' && resolvedTotalTokens === 0) {
+      addLog.debug('跳过未实际调用大模型的记录（模型归因 unknown 且无 token 消耗）', {
+        callId: doc.callId,
+        moduleType: doc.moduleType,
+        callStatus
+      });
+      return [];
+    }
+
     return [
       {
         callId: String(doc.callId || ''),
         appId: String(doc.appId || ''),
         appName: String(doc.appName || ''),
         // 当 model 为空时使用 'unknown'
-        modelId: String(doc.modelId || 'unknown'),
+        modelId: resolvedModelId,
         modelName: String(doc.modelName || 'unknown'),
         callTimestamp:
           doc.callTimestamp instanceof Date ? doc.callTimestamp : new Date(doc.callTimestamp),
@@ -1006,7 +1020,8 @@ export class DataCapCollect {
    *
    * 约定（见 openspec change embedding-rerank-statistics design D2-D4）：
    * - call_id 子键：`${responseData.id}:embedding|:rerank|:ext_llm|:deep_llm`，保证唯一与幂等
-   * - 模型名取自调用时快照，不查当前模型配置；缺失时记 'unknown'
+   * - 模型名取自调用时快照，不查当前模型配置；缺失时记 'unknown'，
+   *   但「unknown 且无 token 消耗」的行表示未实际调用大模型，不采集
    * - 积分记 0（节点合计积分不可按模型拆分，当前部署积分恒为 0）
    * - runningTime（节点级总耗时）仅记在向量行
    * - 状态判定：有 errorText 判 error；节点超时（runningTime>30s 且全部模型无 token 消耗）判
@@ -1087,7 +1102,16 @@ export class DataCapCollect {
       rows.push(buildRow('deep_llm', deep.model, 'chat', deepInput, deepOutput, false));
     }
 
-    return rows;
+    // 模型归因 unknown 且无 token 消耗：未实际调用大模型，不采集（查询层另有兜底排除）
+    const collected = rows.filter((row) => !(row.modelId === 'unknown' && row.totalTokens === 0));
+    if (collected.length !== rows.length) {
+      addLog.debug('搜索节点存在未实际调用大模型的行，已跳过', {
+        callId: responseId,
+        skipped: rows.length - collected.length
+      });
+    }
+
+    return collected;
   }
 
   /**
