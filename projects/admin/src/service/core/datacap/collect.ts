@@ -11,7 +11,8 @@ import {
 } from '@fastgpt/service/core/chat/constants';
 import { AppCollectionName } from '@fastgpt/service/core/app/schema';
 import { AppVersionCollectionName } from '@fastgpt/service/core/app/version/schema';
-import { Types } from '@fastgpt/service/common/mongo';
+import { connectionMongo, Types, waitForMongoReady } from '@fastgpt/service/common/mongo';
+import { delay } from '@fastgpt/global/common/system/utils';
 import type { ModelCallLog, DataCapStats } from '@/types/datacap';
 import { SystemError, ErrorType } from '@/service/common/errors';
 import { addLog } from '@fastgpt/service/common/system/log';
@@ -34,6 +35,66 @@ const COLLECTABLE_MODULE_TYPES = [
   'cfr',
   'datasetSearchNode'
 ];
+
+/** 批次级重试的默认最大尝试次数（含首次执行） */
+const DEFAULT_BATCH_MAX_ATTEMPTS = 5;
+/** 重试前等待 MongoDB 重连就绪的最长时间 */
+const BATCH_RETRY_READY_TIMEOUT_MS = 30000;
+const BATCH_RETRY_BASE_DELAY_MS = 1000;
+const BATCH_RETRY_MAX_DELAY_MS = 16000;
+
+/** 网络/连接类错误的 driver Error.name */
+const RETRYABLE_ERROR_NAMES = new Set([
+  'MongoNetworkError',
+  'MongoNetworkTimeoutError',
+  'MongoNotConnectedError',
+  'MongoServerSelectionError',
+  'MongoTopologyClosedError'
+]);
+
+/** MongoDB 服务端错误码：连接中断、节点宕机、副本集状态变化 */
+const RETRYABLE_ERROR_CODES = new Set([
+  6, // HostUnreachable
+  89, // NetworkTimeout
+  91, // ShutdownInProgress
+  11600, // InterruptedAtShutdown
+  11601, // Interrupted
+  11602 // InterruptedDueToReplStateChange
+]);
+
+const RETRYABLE_ERROR_MESSAGES = [
+  'operation was interrupted',
+  'connection was closed',
+  'connection closed',
+  'topology is closed',
+  'not connected',
+  'connection reset'
+];
+
+/**
+ * 判断错误是否由连接中断引起、值得重试
+ *
+ * cursor 的 getMore 不是 driver retryable read 的范围：连接一断，正在执行的聚合并发
+ * 直接失败（线上表现为 "Executor error during getMore :: caused by :: operation was interrupted"）。
+ * 这类错误可以通过重新执行整个批次恢复；数据/逻辑错误则不能重试，否则把 bug 当断连。
+ */
+export const isRetryableMongoError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+
+  const err = error as { name?: string; code?: unknown; message?: string };
+
+  if (err.name && RETRYABLE_ERROR_NAMES.has(err.name)) return true;
+
+  if (typeof err.code === 'number' && RETRYABLE_ERROR_CODES.has(err.code)) return true;
+
+  const message = typeof err.message === 'string' ? err.message.toLowerCase() : '';
+  return RETRYABLE_ERROR_MESSAGES.some((pattern) => message.includes(pattern));
+};
+
+const getBatchMaxAttempts = (): number => {
+  const configured = parseInt(process.env.EXTRACTION_BATCH_MAX_ATTEMPTS || '', 10);
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_BATCH_MAX_ATTEMPTS;
+};
 
 type ExtractBatchResult = {
   logs: ModelCallLog[];
@@ -105,9 +166,19 @@ export class DataCapCollect {
           logs,
           scannedCount,
           lastId: nextLastId
-        } = await this.extractBatch(startDate, endDate, lastId, effectiveBatchSize);
+        } = await this.extractBatchWithRetry(
+          startDate,
+          endDate,
+          lastId,
+          effectiveBatchSize,
+          batchNumber
+        );
 
         allLogs.push(...logs);
+
+        // 每批成功后立即反映进度：失败时统计能显示已处理量，而不是恒为 0
+        this.stats.totalRecords = allLogs.length;
+        this.stats.successRecords = allLogs.length;
 
         if (scannedCount < effectiveBatchSize || !nextLastId) {
           hasMore = false;
@@ -116,8 +187,6 @@ export class DataCapCollect {
         }
       }
 
-      this.stats.totalRecords = allLogs.length;
-      this.stats.successRecords = allLogs.length;
       this.stats.executionTime = Date.now() - startTime;
 
       addLog.info('数据提取完成', {
@@ -143,6 +212,61 @@ export class DataCapCollect {
         `数据提取失败: ${error instanceof Error ? error.message : String(error)}`,
         error instanceof Error ? error : undefined
       );
+    }
+  }
+
+  /**
+   * 带重试的批次提取
+   *
+   * 聚合游标的 getMore 不受 driver retryable reads 保护，连接一旦中断即整批失败。
+   * 由于分页基于 _id 游标、批次边界幂等，可安全地用同一 lastId 重新执行本批。
+   * 仅连接类错误重试；数据/逻辑错误立即抛出。
+   */
+  private async extractBatchWithRetry(
+    startDate: Date,
+    endDate: Date,
+    lastId: Types.ObjectId | null,
+    limit: number,
+    batchNumber: number
+  ): Promise<ExtractBatchResult> {
+    const maxAttempts = getBatchMaxAttempts();
+    let attempt = 0;
+
+    for (;;) {
+      try {
+        return await this.extractBatch(startDate, endDate, lastId, limit);
+      } catch (error) {
+        attempt++;
+
+        if (attempt >= maxAttempts || !isRetryableMongoError(error)) {
+          throw error;
+        }
+
+        // 先等 driver/自动重连恢复连接，再按指数退避重试同一批次
+        const ready = await waitForMongoReady(
+          connectionMongo.connection,
+          BATCH_RETRY_READY_TIMEOUT_MS
+        );
+        const delayMs = Math.min(
+          BATCH_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1),
+          BATCH_RETRY_MAX_DELAY_MS
+        );
+
+        addLog.warn(
+          `批次 ${batchNumber} 提取失败（连接类错误），准备第 ${attempt}/${maxAttempts - 1} 次重试`,
+          {
+            lastId: lastId ? String(lastId) : null,
+            limit,
+            connectionReady: ready,
+            delayMs,
+            error: error instanceof Error ? error.message : String(error)
+          }
+        );
+
+        if (delayMs > 0) {
+          await delay(delayMs);
+        }
+      }
     }
   }
 
@@ -251,6 +375,21 @@ export class DataCapCollect {
             as: 'chatInfo'
           }
         },
+        // apps 文档中的草稿 modules 不参与后续计算，只保留 name。
+        // 在 unwind 之前裁剪，避免整份应用文档被复制到每条节点响应上放大内存。
+        // 注：不使用 $lookup 的 pipeline + $project，因为 MongoDB 4.4 不支持
+        // localField/foreignField 与 pipeline 组合（部署允许降级到 4.4）。
+        {
+          $addFields: {
+            appInfo: {
+              $map: {
+                input: '$appInfo',
+                as: 'app',
+                in: { name: '$$app.name' }
+              }
+            }
+          }
+        },
         { $unwind: { path: '$appInfo', preserveNullAndEmptyArrays: true } },
         { $unwind: { path: '$chatInfo', preserveNullAndEmptyArrays: true } },
         // 关联会话实际运行的版本工作流（model 兜底优先使用）
@@ -260,6 +399,18 @@ export class DataCapCollect {
             localField: 'chatInfo.appVersionId',
             foreignField: '_id',
             as: 'appVersionInfo'
+          }
+        },
+        // 版本文档其余字段不参与计算，只保留 nodes；同样在 unwind 前裁剪
+        {
+          $addFields: {
+            appVersionInfo: {
+              $map: {
+                input: '$appVersionInfo',
+                as: 'version',
+                in: { nodes: '$$version.nodes' }
+              }
+            }
           }
         },
         { $unwind: { path: '$appVersionInfo', preserveNullAndEmptyArrays: true } },
@@ -689,7 +840,7 @@ export class DataCapCollect {
         messageCount: itemIds.length,
         limit
       });
-      const results = await MongoChatItem.aggregate(pipeline).exec();
+      const results = await MongoChatItem.aggregate(pipeline).option({ allowDiskUse: true }).exec();
 
       addLog.debug('聚合查询结果', {
         count: results.length,

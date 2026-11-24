@@ -19,17 +19,18 @@ describe('QueryBuilder', () => {
   });
 
   describe('buildWhereClause - 基础行为', () => {
-    it('仅时间范围时 WHERE 只含时间条件，参数从 $1 开始', () => {
+    it('仅时间范围时 WHERE 含时间条件与 unknown 排除，参数从 $1 开始', () => {
       const { clause, values } = builder.buildWhereClause(baseFilters);
 
       expect(clause).toContain('call_timestamp >= $1');
       expect(clause).toContain('call_timestamp <= $2');
+      expect(clause).toContain("model_id <> 'unknown'");
       expect(clause).not.toContain('app_id');
-      expect(clause).not.toContain('model_id');
+      expect(clause).not.toContain('model_category');
       expect(values).toEqual([baseFilters.startTime, baseFilters.endTime]);
     });
 
-    it('所有可选条件均不传时不改变 WHERE 基础结构', () => {
+    it('所有可选条件均不传时 WHERE 为基础条件（时间 + unknown 排除）', () => {
       const { clause, values } = builder.buildWhereClause({
         ...baseFilters,
         appId: undefined,
@@ -40,8 +41,18 @@ describe('QueryBuilder', () => {
       });
 
       const conditions = clause.replace('WHERE ', '').split(' AND ');
-      expect(conditions).toHaveLength(2);
+      expect(conditions).toHaveLength(3);
       expect(values).toHaveLength(2);
+    });
+
+    it('unknown 排除条件不占用参数序号（后续参数编号不受影响）', () => {
+      const { clause, values } = builder.buildWhereClause({
+        ...baseFilters,
+        appId: ['app-a']
+      });
+
+      expect(clause).toContain('app_id = ANY($3)');
+      expect(values).toEqual([baseFilters.startTime, baseFilters.endTime, ['app-a']]);
     });
   });
 

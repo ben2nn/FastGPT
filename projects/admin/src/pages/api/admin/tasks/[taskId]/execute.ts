@@ -13,7 +13,6 @@ import { NextAPI } from '@/service/middleware/entry';
 import { authAdmin } from '@/service/support/permission/auth';
 import { getTaskManager } from '@/service/core/task/instance';
 import { TaskError, TaskErrorType } from '@/service/common/errors';
-import type { TaskResult } from '@/types/task';
 
 /**
  * 查询参数类型
@@ -35,7 +34,10 @@ export type TaskExecuteBody = {
 export type TaskExecuteResponse = {
   success: boolean;
   taskId: string;
-  result: TaskResult;
+  /** 本次运行的执行记录 ID（前端轮询执行详情用） */
+  executionId: number;
+  /** 受理状态：任务已在后台执行 */
+  status: 'running';
   message: string;
 };
 
@@ -101,22 +103,32 @@ async function handler(
     });
 
     try {
-      const result = await taskManager.executeTask(taskId, params);
+      // 异步受理：同步段完成后立即返回 202，执行在后台继续
+      const { executionId, done } = await taskManager.startExecution(taskId, params);
+
+      // 后台执行结果不阻塞响应；失败仅记录日志（终态已写入执行记录）
+      done.catch((error) => {
+        addLog.error(
+          `[TaskExecuteAPI] 后台执行失败 (taskId: ${taskId}, executionId: ${executionId})`,
+          error as Error
+        );
+      });
 
       const response: TaskExecuteResponse = {
-        success: result.success,
+        success: true,
         taskId,
-        result,
-        message: result.success ? '任务执行成功' : '任务执行失败'
+        executionId,
+        status: 'running',
+        message: '任务已提交执行'
       };
 
-      addLog.info('[TaskExecuteAPI] 任务执行完成', {
+      addLog.info('[TaskExecuteAPI] 任务已受理', {
         taskId,
-        success: result.success,
+        executionId,
         duration: `${Date.now() - startTime}ms`
       });
 
-      return res.status(200).json(response);
+      return res.status(202).json(response);
     } catch (error) {
       if (error instanceof TaskError) {
         addLog.error('[TaskExecuteAPI] 任务执行失败', {

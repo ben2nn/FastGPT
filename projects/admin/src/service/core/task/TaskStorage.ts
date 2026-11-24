@@ -3,7 +3,7 @@
  * 负责任务配置和执行历史的数据库操作
  */
 
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { addLog } from '@fastgpt/service/common/system/log';
 import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 import type {
@@ -14,6 +14,15 @@ import type {
   QueryOptions
 } from '@/types/task';
 import { TaskError, TaskErrorType } from '@/service/common/errors';
+
+/** 已持有的任务锁：锁 Id 与持有该会话连接的客户端（必须同连接解锁） */
+export interface HeldTaskLock {
+  lockId: number;
+  client: PoolClient;
+}
+
+/** 服务重启导致执行中断时写入的错误信息 */
+export const RECOVERY_INTERRUPTED_MESSAGE = '服务重启，执行中断（可重新执行）';
 
 /**
  * 任务存储类
@@ -460,9 +469,14 @@ export class TaskStorage {
   /**
    * 获取任务锁
    * 使用 PostgreSQL 的 advisory lock 实现分布式锁
-   * 返回 true 表示成功获取锁，false 表示锁已被占用
+   *
+   * 注意：pg_try_advisory_lock 是**会话级**锁，锁属于获取它的那条连接。
+   * 因此成功时必须返回持有连接（不归还连接池），由调用方在整个执行周期内持有，
+   * 结束后通过 releaseLock 在**同一连接**上解锁。
+   *
+   * @returns 锁已持有则返回 { lockId, client }；锁被占用返回 null
    */
-  async acquireLock(taskId: string): Promise<boolean> {
+  async acquireLock(taskId: string): Promise<HeldTaskLock | null> {
     const client = await this.pool.connect();
 
     try {
@@ -470,45 +484,119 @@ export class TaskStorage {
       const lockId = this.hashTaskId(taskId);
 
       // 尝试获取 advisory lock（非阻塞）
-      // pg_try_advisory_lock 返回 true 表示成功获取锁，false 表示锁已被占用
       const result = await client.query('SELECT pg_try_advisory_lock($1) as acquired', [lockId]);
-
       const acquired = result.rows[0].acquired;
 
-      if (acquired) {
-        addLog.info(`任务锁已获取: ${taskId} (lockId: ${lockId})`);
-      } else {
+      if (!acquired) {
+        client.release();
         addLog.warn(`任务锁获取失败，任务正在运行: ${taskId}`);
+        return null;
       }
 
-      return acquired;
+      addLog.info(`任务锁已获取: ${taskId} (lockId: ${lockId})`);
+      return { lockId, client };
     } catch (error) {
+      client.release();
       addLog.error(`获取任务锁失败: ${taskId}`, error as Error);
       throw new TaskError(TaskErrorType.DATABASE_ERROR, `获取任务锁失败: ${taskId}`, error);
+    }
+  }
+
+  /**
+   * 释放任务锁
+   * 必须在持有连接上解锁（会话级锁），解锁后归还连接。
+   * 释放失败仅记录告警，不抛出（避免掩盖执行结果）。
+   */
+  async releaseLock(held: HeldTaskLock): Promise<void> {
+    try {
+      const result = await held.client.query('SELECT pg_advisory_unlock($1) as released', [
+        held.lockId
+      ]);
+
+      if (result.rows[0]?.released) {
+        addLog.info(`任务锁已释放 (lockId: ${held.lockId})`);
+      } else {
+        addLog.warn(`任务锁释放失败：当前会话未持有该锁 (lockId: ${held.lockId})`);
+      }
+    } catch (error) {
+      addLog.error(`释放任务锁失败 (lockId: ${held.lockId})`, error as Error);
+    } finally {
+      held.client.release();
+    }
+  }
+
+  /**
+   * 探测任务锁是否可获取（获取后立即释放）
+   * 用于重启恢复时判断「是否有实例正在执行该任务」
+   */
+  async probeLock(taskId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+
+    try {
+      const lockId = this.hashTaskId(taskId);
+      const result = await client.query('SELECT pg_try_advisory_lock($1) as acquired', [lockId]);
+
+      if (!result.rows[0]?.acquired) {
+        return false;
+      }
+
+      await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
+      return true;
+    } catch (error) {
+      addLog.error(`探测任务锁失败: ${taskId}`, error as Error);
+      throw new TaskError(TaskErrorType.DATABASE_ERROR, `探测任务锁失败: ${taskId}`, error);
     } finally {
       client.release();
     }
   }
 
   /**
-   * 释放任务锁
+   * 恢复遗留的 running 执行记录（服务启动时调用）
+   *
+   * 对每条 running 记录按任务维度加锁：
+   * - 加锁成功：没有任何实例在执行该任务（多为本服务重启遗留），标记为 failed 并释放
+   * - 加锁失败：其他实例仍在执行，保持原状态，避免误杀
+   *
+   * @returns 被标记为 failed 的记录数
    */
-  async releaseLock(taskId: string): Promise<void> {
-    const client = await this.pool.connect();
+  async recoverStaleExecutions(): Promise<number> {
+    let recoveredCount = 0;
 
     try {
-      // 将任务 ID 转换为数字
-      const lockId = this.hashTaskId(taskId);
+      // 按任务去重，避免重复加锁
+      const runningTasksResult = await this.pool.query(
+        'SELECT DISTINCT task_id FROM task_executions WHERE status = $1',
+        ['running']
+      );
+      const taskIds: string[] = runningTasksResult.rows.map((row) => row.task_id);
 
-      // 释放 advisory lock
-      await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
+      for (const taskId of taskIds) {
+        const held = await this.acquireLock(taskId);
+        if (!held) {
+          addLog.info(`任务仍由其他实例执行，跳过遗留记录恢复: ${taskId}`);
+          continue;
+        }
 
-      addLog.info(`任务锁已释放: ${taskId} (lockId: ${lockId})`);
+        try {
+          const result = await this.pool.query(
+            `UPDATE task_executions
+             SET status = $1, end_time = $2, error_message = $3
+             WHERE task_id = $4 AND status = $5`,
+            ['failed', new Date(), RECOVERY_INTERRUPTED_MESSAGE, taskId, 'running']
+          );
+
+          recoveredCount += result.rowCount || 0;
+          addLog.warn(`遗留 running 记录已标记失败: ${taskId} (${result.rowCount || 0} 条)`);
+        } finally {
+          await this.releaseLock(held);
+        }
+      }
+
+      addLog.info(`遗留执行记录恢复完成，共标记 ${recoveredCount} 条`);
+      return recoveredCount;
     } catch (error) {
-      addLog.error(`释放任务锁失败: ${taskId}`, error as Error);
-      throw new TaskError(TaskErrorType.DATABASE_ERROR, `释放任务锁失败: ${taskId}`, error);
-    } finally {
-      client.release();
+      addLog.error('恢复遗留执行记录失败', error as Error);
+      throw new TaskError(TaskErrorType.DATABASE_ERROR, '恢复遗留执行记录失败', error);
     }
   }
 

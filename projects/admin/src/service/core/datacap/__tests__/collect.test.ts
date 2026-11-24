@@ -33,11 +33,26 @@ jest.mock('@fastgpt/service/core/app/version/schema', () => ({
   AppVersionCollectionName: 'app_versions'
 }));
 
+jest.mock('@fastgpt/service/common/mongo', () => {
+  const mongoose = jest.requireActual('mongoose');
+  return {
+    Types: mongoose.Types,
+    connectionMongo: { connection: { readyState: 1 } },
+    waitForMongoReady: jest.fn(async () => true)
+  };
+});
+
+jest.mock('@fastgpt/global/common/system/utils', () => ({
+  delay: jest.fn(async () => undefined)
+}));
+
 import { MongoChatItem } from '@fastgpt/service/core/chat/chatItemSchema';
+import { waitForMongoReady } from '@fastgpt/service/common/mongo';
 import { DataCapCollect } from '@/service/core/datacap/collect';
 
 const mockFind = MongoChatItem.find as jest.Mock;
 const mockAggregate = MongoChatItem.aggregate as jest.Mock;
+const mockWaitForMongoReady = waitForMongoReady as jest.Mock;
 
 /**
  * 构造 find 链式调用与 aggregate 返回值,驱动 extractCallLogs 走完单批次
@@ -52,9 +67,34 @@ function mockBatch(docs: any[]) {
       })
     })
   });
-  // collect.ts 以 MongoChatItem.aggregate(pipeline).exec() 执行聚合
+  // collect.ts 以 MongoChatItem.aggregate(pipeline).option(...).exec() 执行聚合
   mockAggregate.mockReturnValue({
-    exec: async () => docs
+    option: () => ({
+      exec: async () => docs
+    })
+  });
+}
+
+/** 构造一次聚合调用的返回值/抛出 */
+function aggregateCall(handler: () => Promise<any[]>) {
+  return {
+    option: () => ({
+      exec: handler
+    })
+  };
+}
+
+/** 构造一批 AI 消息 id（不关心内容） */
+function mockFindBatch(count: number) {
+  const items = Array.from({ length: count }, (_, i) => ({
+    _id: (i + 1).toString(16).padStart(24, '0')
+  }));
+  mockFind.mockReturnValue({
+    sort: () => ({
+      limit: () => ({
+        lean: async () => items
+      })
+    })
   });
 }
 
@@ -347,5 +387,91 @@ describe('DataCapCollect 拆行采集', () => {
 
       expect(second.map((l) => l.callId)).toEqual(first.map((l) => l.callId));
     });
+  });
+});
+
+describe('批次断连重试', () => {
+  let collector: DataCapCollect;
+  const startDate = new Date('2026-01-01T00:00:00Z');
+  const endDate = new Date('2026-01-02T00:00:00Z');
+
+  beforeAll(() => {
+    collector = new DataCapCollect();
+  });
+
+  beforeEach(() => {
+    mockFind.mockReset();
+    mockAggregate.mockReset();
+    mockWaitForMongoReady.mockReset();
+    mockWaitForMongoReady.mockResolvedValue(true);
+  });
+
+  it('getMore 被中断时用同一游标重试本批，最终成功', async () => {
+    mockBatch([makeChatDoc()]);
+    mockAggregate.mockReset();
+    mockAggregate
+      .mockReturnValueOnce(
+        aggregateCall(async () => {
+          throw new Error(
+            'Executor error during getMore :: caused by :: operation was interrupted'
+          );
+        })
+      )
+      .mockReturnValueOnce(aggregateCall(async () => [makeChatDoc()]));
+
+    const logs = await collector.extractCallLogs(startDate, endDate, 100);
+
+    expect(logs).toHaveLength(1);
+    // 首次失败 + 重试成功 = 2 次聚合，游标未前进
+    expect(mockAggregate).toHaveBeenCalledTimes(2);
+    expect(mockFind).toHaveBeenCalledTimes(2);
+  });
+
+  it('非连接类错误不重试，立即抛出', async () => {
+    mockBatch([makeChatDoc()]);
+    mockAggregate.mockReset();
+    mockAggregate.mockReturnValue(
+      aggregateCall(async () => {
+        throw new TypeError('程序逻辑错误');
+      })
+    );
+
+    await expect(collector.extractCallLogs(startDate, endDate, 100)).rejects.toThrow(
+      /数据提取失败/
+    );
+    expect(mockAggregate).toHaveBeenCalledTimes(1);
+  });
+
+  it('连接持续不可用时至多重试到上限，再抛出', async () => {
+    mockBatch([makeChatDoc()]);
+    mockAggregate.mockReset();
+    mockAggregate.mockReturnValue(
+      aggregateCall(async () => {
+        throw new Error('connection was closed');
+      })
+    );
+
+    await expect(collector.extractCallLogs(startDate, endDate, 100)).rejects.toThrow(
+      /数据提取失败/
+    );
+    // 默认最多 5 次尝试
+    expect(mockAggregate).toHaveBeenCalledTimes(5);
+    expect(mockWaitForMongoReady).toHaveBeenCalledTimes(4);
+  });
+
+  it('失败时统计反映已成功批次的进度，而不是 0', async () => {
+    mockFindBatch(2);
+    mockAggregate.mockReturnValueOnce(aggregateCall(async () => [makeChatDoc()])).mockReturnValue(
+      aggregateCall(async () => {
+        throw new Error('Executor error during getMore :: caused by :: operation was interrupted');
+      })
+    );
+
+    await expect(collector.extractCallLogs(startDate, endDate, 2)).rejects.toThrow(/数据提取失败/);
+
+    const stats = await collector.getDataCapStats();
+    expect(stats.totalRecords).toBe(1);
+    expect(stats.successRecords).toBe(1);
+    expect(stats.failedRecords).toBe(0);
   });
 });

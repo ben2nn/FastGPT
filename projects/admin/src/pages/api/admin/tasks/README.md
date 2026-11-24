@@ -157,9 +157,11 @@ Content-Type: application/json
 }
 ```
 
-### 4. 手动执行任务
+### 4. 手动执行任务（异步受理）
 
-手动立即执行指定任务，可选择性传入参数覆盖默认参数。
+手动提交指定任务，可选择性传入参数覆盖默认参数。
+
+**异步受理语义**：接口完成校验、加锁并创建执行记录后立即返回 `202 Accepted`，任务在后台继续执行；调用方通过执行详情/历史接口轮询结果。同一任务在同一时刻只允许一个执行实例（运行中提交返回 409）。
 
 **请求**:
 ```
@@ -181,21 +183,18 @@ Content-Type: application/json
 **请求体**:
 - `params` (object, 可选): 任务参数，覆盖默认参数
 
-**响应**:
+**响应**（HTTP 202 Accepted）:
 ```json
 {
   "success": true,
   "taskId": "data-process",
-  "result": {
-    "success": true,
-    "data": {
-      "processedCount": 1500
-    },
-    "message": "数据处理完成"
-  },
-  "message": "任务执行成功"
+  "executionId": 123,
+  "status": "running",
+  "message": "任务已提交执行"
 }
 ```
+
+> 后续状态请轮询 `GET /api/admin/tasks/executions/:executionId` 或查询执行历史，直至 `status` 变为 `success` / `failed`。
 
 **错误响应**:
 
@@ -207,16 +206,15 @@ Content-Type: application/json
 }
 ```
 
-任务执行失败:
+执行失败（后台终态，通过执行详情查看，不影响受理响应）:
 ```json
 {
-  "success": false,
-  "taskId": "data-process",
-  "result": {
-    "success": false,
-    "message": "数据处理失败: 数据库连接超时"
-  },
-  "message": "任务执行失败"
+  "execution": {
+    "id": 123,
+    "status": "failed",
+    "errorMessage": "执行失败（共 1 次尝试，已重试 0 次）: ...",
+    "executionTimeMs": 53210
+  }
 }
 ```
 

@@ -106,6 +106,21 @@ describe('StatisticsService 行映射', () => {
       expect(listCall?.[0]).toContain('model_category = ANY($3)');
       expect(listCall?.[1][2]).toEqual(['embedding', 'rerank']);
     });
+
+    it('列表与总数 SQL 默认排除 unknown 模型数据', async () => {
+      mockListQueries([]);
+
+      await service.getStatisticsList(filters);
+
+      const listCall = mockQuery.mock.calls.find(
+        ([text]: [string]) => !text.includes('as subquery')
+      );
+      const countCall = mockQuery.mock.calls.find(([text]: [string]) =>
+        text.includes('as subquery')
+      );
+      expect(listCall?.[0]).toContain("model_id <> 'unknown'");
+      expect(countCall?.[0]).toContain("model_id <> 'unknown'");
+    });
   });
 
   describe('getModelStatistics', () => {

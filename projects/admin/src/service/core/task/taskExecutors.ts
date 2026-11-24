@@ -27,7 +27,12 @@ export async function dataProcessExecutor(params: Record<string, any>): Promise<
     const startDate = new Date(startTime);
     const endDate = new Date(endTime);
 
-    // 2. 清理时间区间内的数据
+    // 2. 先从 MongoDB 提取数据
+    // 提取成功后才清理旧数据：提取失败时不删除，保留上一次的统计结果，避免报表空窗
+    addLog.info('开始从 MongoDB 提取数据');
+    const logs = await dataCapCollect.extractCallLogs(startDate, endDate, batchSize);
+
+    // 3. 清理时间区间内的旧数据
     addLog.info('开始清理时间区间内的旧数据');
     const deletedCount = await deleteByTimeRange(startDate, endDate);
     addLog.info('旧数据清理完成', {
@@ -35,10 +40,6 @@ export async function dataProcessExecutor(params: Record<string, any>): Promise<
       startTime,
       endTime
     });
-
-    // 3. 使用 DataCapCollect 提取数据
-    addLog.info('开始从 MongoDB 提取数据');
-    const logs = await dataCapCollect.extractCallLogs(startDate, endDate, batchSize);
 
     // 4. 获取提取统计信息
     const extractStats = await dataCapCollect.getDataCapStats();

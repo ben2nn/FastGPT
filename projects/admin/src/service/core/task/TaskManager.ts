@@ -9,7 +9,7 @@ import { parseExpression } from 'cron-parser';
 import type { Pool } from 'pg';
 import { addLog } from '@fastgpt/service/common/system/log';
 
-import { TaskStorage } from './TaskStorage';
+import { TaskStorage, type HeldTaskLock } from './TaskStorage';
 import { ParameterParser } from './ParameterParser';
 import { DEFAULT_TIMEZONE } from '@/web/common/constants';
 
@@ -97,6 +97,13 @@ export class TaskManager {
       }
 
       addLog.info(`任务管理器初始化完成，共加载 ${this.configs.size} 个任务`);
+
+      // 恢复重启前遗留的 running 执行记录（标记失败，可重跑）
+      try {
+        await this.storage.recoverStaleExecutions();
+      } catch (error) {
+        addLog.error('遗留执行记录恢复失败（不影响任务管理器启动）', error as Error);
+      }
     } catch (error) {
       addLog.error('任务管理器初始化失败', error as Error);
       throw error;
@@ -235,23 +242,31 @@ export class TaskManager {
   }
 
   /**
-   * 执行任务（定时或手动）
+   * 异步受理任务执行（同步段）
+   *
+   * 完成校验、并发查重、加锁与执行记录创建后立即返回：
+   * - executionId：本次运行的执行记录 ID（前端轮询用）
+   * - done：后台执行 Promise（重试/超时/终态写入/释放锁），调用方不应 await
+   *   （手动执行 API 需要立即返回；cron 与内部调用可 await）
    */
-  async executeTask(taskId: string, params?: Record<string, any>): Promise<TaskResult> {
+  async startExecution(
+    taskId: string,
+    params?: Record<string, any>
+  ): Promise<{ executionId: number; done: Promise<TaskResult> }> {
     const config = this.configs.get(taskId);
 
     if (!config) {
       throw new TaskError(TaskErrorType.CONFIG_NOT_FOUND, `任务配置不存在: ${taskId}`);
     }
 
-    // 并发控制：检查任务是否正在运行
+    // 并发控制：本进程内查重
     if (this.runningTasks.has(taskId)) {
       throw new TaskError(TaskErrorType.TASK_ALREADY_RUNNING, `任务正在运行中: ${taskId}`);
     }
 
-    // 尝试获取任务锁
-    const lockAcquired = await this.storage.acquireLock(taskId);
-    if (!lockAcquired) {
+    // 尝试获取任务锁（会话级锁，持有连接至执行结束）
+    const held = await this.storage.acquireLock(taskId);
+    if (!held) {
       throw new TaskError(
         TaskErrorType.TASK_ALREADY_RUNNING,
         `任务正在运行中（锁已被占用）: ${taskId}`
@@ -261,108 +276,14 @@ export class TaskManager {
     // 标记任务为运行中
     this.runningTasks.add(taskId);
 
-    try {
-      // 执行任务（带重试机制）
-      return await this.executeTaskWithRetry(taskId, config, params);
-    } finally {
-      // 释放任务锁
-      await this.storage.releaseLock(taskId);
-
-      // 移除运行标记
-      this.runningTasks.delete(taskId);
-    }
-  }
-
-  /**
-   * 执行任务（带重试机制）
-   */
-  private async executeTaskWithRetry(
-    taskId: string,
-    config: TaskConfig,
-    params?: Record<string, any>
-  ): Promise<TaskResult> {
-    const maxRetries = config.retryCount || 0;
-    const retryInterval = config.retryInterval || 60000; // 默认 1 分钟
-    let lastError: unknown;
-
-    // 尝试执行任务（初次执行 + 重试）
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      const isRetry = attempt > 0;
-
-      try {
-        // 如果是重试，等待重试间隔
-        if (isRetry) {
-          addLog.info(`任务重试 (${attempt}/${maxRetries}): ${taskId} - ${config.name}`, {
-            retryInterval
-          });
-          await this.sleep(retryInterval);
-        }
-
-        // 执行单次任务
-        const result = await this.executeSingleTask(taskId, config, params, attempt, maxRetries);
-
-        // 执行成功，返回结果
-        if (result.success) {
-          if (isRetry) {
-            addLog.info(`任务重试成功: ${taskId} (重试次数: ${attempt})`);
-          }
-          return result;
-        }
-
-        // 执行失败但返回了结果（非异常），记录并继续重试
-        lastError = new Error(result.message || '任务执行失败');
-        addLog.warn(`任务执行失败: ${taskId} (尝试 ${attempt + 1}/${maxRetries + 1})`, {
-          message: result.message
-        });
-      } catch (error) {
-        lastError = error;
-        addLog.error(
-          `任务执行异常: ${taskId} (尝试 ${attempt + 1}/${maxRetries + 1})`,
-          error as Error
-        );
-
-        // 如果是最后一次尝试，抛出错误
-        if (attempt === maxRetries) {
-          break;
-        }
-      }
-    }
-
-    // 所有重试都失败，抛出最后的错误
-    addLog.error(`任务最终失败: ${taskId} (已重试 ${maxRetries} 次)`);
-    throw new TaskError(
-      TaskErrorType.TASK_EXECUTION_FAILED,
-      `任务执行失败（已重试 ${maxRetries} 次）: ${taskId}`,
-      lastError
-    );
-  }
-
-  /**
-   * 执行单次任务
-   */
-  private async executeSingleTask(
-    taskId: string,
-    config: TaskConfig,
-    params: Record<string, any> | undefined,
-    attemptNumber: number,
-    maxRetries: number
-  ): Promise<TaskResult> {
     const startTime = new Date();
-    let executionId: number | null = null;
 
     try {
-      // 解析任务参数
       const executionParams = params || config.defaultParams || {};
       const parsedParams = this.paramParser.parse(executionParams);
 
-      const logPrefix = attemptNumber > 0 ? `[重试 ${attemptNumber}/${maxRetries}] ` : '';
-      addLog.info(`${logPrefix}开始执行任务: ${taskId} - ${config.name}`, {
-        params: parsedParams,
-        attempt: attemptNumber
-      });
-
-      // 创建执行记录
-      executionId = await this.storage.createExecution({
+      // 受理时创建唯一执行记录（一次运行一条）
+      const executionId = await this.storage.createExecution({
         taskId: config.id,
         taskName: config.name,
         startTime,
@@ -370,54 +291,220 @@ export class TaskManager {
         params: parsedParams
       });
 
-      // 执行任务（带超时控制）
-      const maxExecutionTime = config.maxExecutionTime || 3600000; // 默认 1 小时
-      const result = await this.executeWithTimeout(
-        config.executor(parsedParams),
-        maxExecutionTime,
-        taskId
-      );
-
-      // 计算执行时间
-      const endTime = new Date();
-      const executionTimeMs = endTime.getTime() - startTime.getTime();
-
-      // 更新执行记录
-      await this.storage.updateExecution(executionId, {
-        endTime,
-        status: result.success ? 'success' : 'failed',
-        result,
-        executionTimeMs,
-        errorMessage: result.success ? undefined : result.message
+      addLog.info(`任务已受理: ${taskId} - ${config.name} (executionId: ${executionId})`, {
+        params: parsedParams
       });
 
-      addLog.info(`${logPrefix}任务执行完成: ${taskId}`, {
-        success: result.success,
-        executionTimeMs,
-        attempt: attemptNumber
-      });
-
-      return result;
+      const done = this.runExecution(taskId, config, parsedParams, executionId, startTime, held);
+      return { executionId, done };
     } catch (error) {
-      const endTime = new Date();
-      const executionTimeMs = endTime.getTime() - startTime.getTime();
-
-      // 提取详细的错误信息
-      const errorInfo = this.extractErrorInfo(error);
-
-      // 更新执行记录为失败
-      if (executionId) {
-        await this.storage.updateExecution(executionId, {
-          endTime,
-          status: 'failed',
-          errorMessage: errorInfo.fullMessage,
-          executionTimeMs
-        });
-      }
-
-      // 重新抛出错误，由上层处理重试
+      // 受理失败：回滚运行标记与锁
+      this.runningTasks.delete(taskId);
+      await this.storage.releaseLock(held);
       throw error;
     }
+  }
+
+  /**
+   * 后台执行主体：执行重试循环，结束时释放在内存标记与任务锁
+   */
+  private async runExecution(
+    taskId: string,
+    config: TaskConfig,
+    parsedParams: Record<string, any>,
+    executionId: number,
+    startTime: Date,
+    held: HeldTaskLock
+  ): Promise<TaskResult> {
+    try {
+      return await this.executeTaskWithRetry(taskId, config, parsedParams, executionId, startTime);
+    } finally {
+      this.runningTasks.delete(taskId);
+      await this.storage.releaseLock(held);
+    }
+  }
+
+  /**
+   * 执行任务（等待完成版本）
+   * 定时触发与内部调用使用；手动执行 API 不应使用（请用 startExecution）
+   */
+  async executeTask(taskId: string, params?: Record<string, any>): Promise<TaskResult> {
+    const { done } = await this.startExecution(taskId, params);
+    return done;
+  }
+
+  /**
+   * 执行任务（带重试机制）
+   * 所有尝试复用同一条执行记录（executionId），不再为每次尝试创建新记录
+   */
+  private async executeTaskWithRetry(
+    taskId: string,
+    config: TaskConfig,
+    parsedParams: Record<string, any>,
+    executionId: number,
+    startTime: Date
+  ): Promise<TaskResult> {
+    const maxRetries = config.retryCount || 0;
+    const retryInterval = config.retryInterval || 60000; // 默认 1 分钟
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const isRetry = attempt > 0;
+
+      try {
+        if (isRetry) {
+          addLog.info(`任务重试 (${attempt}/${maxRetries}): ${taskId} - ${config.name}`, {
+            retryInterval
+          });
+          await this.sleep(retryInterval);
+        }
+
+        // 执行单次尝试（仅执行器 + 超时控制，不写记录）
+        const result = await this.executeAttempt(config, parsedParams, taskId);
+
+        if (result.success) {
+          const attempts = attempt + 1;
+          const endTime = new Date();
+          const executionTimeMs = endTime.getTime() - startTime.getTime();
+          const finalResult: TaskResult = {
+            ...result,
+            metadata: { ...(result.metadata || {}), attempts }
+          };
+
+          await this.persistExecutionResult(executionId, {
+            endTime,
+            status: 'success',
+            result: finalResult,
+            executionTimeMs
+          });
+
+          addLog.info(`任务执行完成: ${taskId}`, {
+            success: true,
+            attempts,
+            executionTimeMs
+          });
+
+          return finalResult;
+        }
+
+        // 返回失败结果（非异常）：记录本次失败信息，继续重试
+        lastError = new Error(result.message || '任务执行失败');
+        await this.recordAttemptFailure(
+          executionId,
+          attempt,
+          maxRetries,
+          result.message || '任务执行失败'
+        );
+        addLog.warn(`任务执行失败: ${taskId} (尝试 ${attempt + 1}/${maxRetries + 1})`, {
+          message: result.message
+        });
+      } catch (error) {
+        lastError = error;
+        const errorInfo = this.extractErrorInfo(error);
+        await this.recordAttemptFailure(
+          executionId,
+          attempt,
+          maxRetries,
+          errorInfo.fullMessage,
+          true
+        );
+        addLog.error(
+          `任务执行异常: ${taskId} (尝试 ${attempt + 1}/${maxRetries + 1})`,
+          error as Error
+        );
+      }
+    }
+
+    // 所有尝试均失败：写入终态并抛出
+    const endTime = new Date();
+    const executionTimeMs = endTime.getTime() - startTime.getTime();
+    const errorMessage = this.extractErrorInfo(lastError).fullMessage;
+    const attemptsText = `执行失败（共 ${maxRetries + 1} 次尝试，已重试 ${maxRetries} 次）`;
+
+    await this.persistExecutionResult(executionId, {
+      endTime,
+      status: 'failed',
+      errorMessage: `${attemptsText}: ${errorMessage}`,
+      executionTimeMs
+    });
+
+    addLog.error(`任务最终失败: ${taskId} (已重试 ${maxRetries} 次)`);
+
+    if (lastError instanceof TaskError) {
+      throw new TaskError(lastError.type, `${attemptsText}: ${lastError.message}`, lastError);
+    }
+    throw new TaskError(
+      TaskErrorType.TASK_EXECUTION_FAILED,
+      `${attemptsText}: ${taskId}`,
+      lastError
+    );
+  }
+
+  /**
+   * 记录一次尝试失败（执行记录保持 running，错误信息带尝试序号）
+   */
+  private async recordAttemptFailure(
+    executionId: number,
+    attempt: number,
+    maxRetries: number,
+    message: string,
+    isException = false
+  ): Promise<void> {
+    try {
+      await this.storage.updateExecution(executionId, {
+        errorMessage: `[尝试 ${attempt + 1}/${maxRetries + 1}] ${message}`
+      });
+    } catch (error) {
+      addLog.error(`记录尝试失败信息失败 (executionId: ${executionId})`, error as Error);
+    }
+  }
+
+  /**
+   * 写入执行记录终态
+   * 失败重试一次（瞬时数据库错误），仍失败则记录错误日志但不抛出（避免掩盖执行结果）；
+   * 记录可能停留在 running，由下次服务启动的遗留记录恢复收敛
+   */
+  private async persistExecutionResult(
+    executionId: number,
+    updates: Parameters<TaskStorage['updateExecution']>[1]
+  ): Promise<void> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await this.storage.updateExecution(executionId, updates);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          addLog.warn(`写入执行记录终态失败，200ms 后重试 (executionId: ${executionId})`, {
+            error: error instanceof Error ? error.message : String(error)
+          });
+          await this.sleep(200);
+        }
+      }
+    }
+
+    addLog.error(
+      `写入执行记录终态失败（已重试 1 次，记录可能停留在 running，服务重启后自动收敛） (executionId: ${executionId})`,
+      lastError as Error
+    );
+  }
+
+  /**
+   * 执行单次尝试（仅执行器与超时控制）
+   */
+  private async executeAttempt(
+    config: TaskConfig,
+    parsedParams: Record<string, any>,
+    taskId: string
+  ): Promise<TaskResult> {
+    const maxExecutionTime = config.maxExecutionTime || 3600000; // 默认 1 小时
+    addLog.info(`开始执行任务: ${taskId} - ${config.name}`, {
+      params: parsedParams
+    });
+
+    return this.executeWithTimeout(config.executor(parsedParams), maxExecutionTime, taskId);
   }
 
   /**

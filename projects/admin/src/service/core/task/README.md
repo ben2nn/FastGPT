@@ -74,14 +74,15 @@ await taskManager.startAll();
 ### 3. 手动执行任务
 
 ```typescript
-// 使用默认参数执行
-const result = await taskManager.executeTask('my-task');
-
-// 使用自定义参数执行
-const result = await taskManager.executeTask('my-task', {
+// 异步受理（手动执行 API 使用）：立即返回 executionId，执行在后台继续
+const { executionId, done } = await taskManager.startExecution('my-task', {
   startTime: new Date('2024-01-01'),
   endTime: new Date('2024-01-02')
 });
+done.catch((error) => console.error('后台执行失败', error)); // 勿 await
+
+// 等待完成（定时触发/内部调用使用）
+const result = await taskManager.executeTask('my-task');
 ```
 
 ## 任务配置说明
@@ -204,8 +205,11 @@ await taskManager.startTask('my-task');
 taskManager.stopTask('my-task');
 ```
 
+#### startExecution(taskId: string, params?: Record<string, any>): Promise<{ executionId: number; done: Promise<TaskResult> }>
+异步受理任务：同步完成校验/查重/加锁/创建执行记录后返回 executionId 与后台执行 Promise（重试、超时、终态写入、释放锁）。
+
 #### executeTask(taskId: string, params?: Record<string, any>): Promise<TaskResult>
-执行任务（定时或手动）。
+等待任务执行完成（startExecution 的 await 包装，供定时触发与内部调用使用）。
 
 ```typescript
 const result = await taskManager.executeTask('my-task', {

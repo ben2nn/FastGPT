@@ -91,16 +91,17 @@ export type ExecutionHistoryResponse = {
 };
 
 /**
- * 任务执行结果
+ * 手动执行受理响应
+ * 接口异步受理：提交后立即返回，执行在后台继续，通过 getExecutionDetail 轮询状态
  */
 export type TaskExecutionResult = {
+  success: boolean;
+  taskId: string;
+  /** 本次运行的执行记录 ID */
   executionId: number;
-  result: {
-    success: boolean;
-    data?: any;
-    message?: string;
-    metadata?: Record<string, any>;
-  };
+  /** 受理状态 */
+  status: 'running';
+  message: string;
 };
 
 /**

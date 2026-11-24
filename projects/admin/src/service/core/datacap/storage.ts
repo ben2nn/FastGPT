@@ -10,9 +10,51 @@ import { getPostgresPool } from '@/service/common/postgres';
 import type { ModelCallLog, InsertResult } from '@/types/datacap';
 import { SystemError, ErrorType } from '@/service/common/errors';
 
+/** INSERT 每行的列参数个数 */
+const INSERT_COLUMNS_PER_ROW = 19;
+/**
+ * PostgreSQL wire protocol 的 Bind 消息中参数个数是 Int16，上限 65535。
+ * 直接把大结果集拼成单条 INSERT 会回绕（420,440 行 × 19 = 7,988,360 → 7,988,360 mod 65,536 = 58,504，
+ * 即线上报错 "bind message has 58504 parameter formats"）。3000 行 × 19 = 57,000，留足余量。
+ */
+const INSERT_CHUNK_ROWS = 3000;
+/** 逐条兜底时最多保留的错误样本数，避免整批失败时错误对象撑爆内存 */
+const MAX_ERROR_SAMPLES = 100;
+
+const INSERT_COLUMNS_SQL = `call_id, app_id, app_name, model_id, model_name,
+        call_timestamp, call_status, chat_id, data_id,
+        input_tokens, output_tokens, total_tokens, total_points,
+        source, source_name, model_category, usage_scenario, running_time, error_text`;
+
+/** 单条记录对应的 19 个列值（顺序与 INSERT_COLUMNS_SQL 一致） */
+function buildRowValues(log: ModelCallLog): any[] {
+  return [
+    log.callId,
+    log.appId,
+    log.appName || null,
+    log.modelId,
+    log.modelName,
+    log.callTimestamp,
+    log.callStatus || null,
+    log.chatId,
+    log.dataId || null,
+    log.inputTokens || 0,
+    log.outputTokens || 0,
+    log.totalTokens || 0,
+    log.totalPoints || 0,
+    log.source || null,
+    log.sourceName || null,
+    log.modelCategory || 'chat',
+    log.usageScenario || null,
+    log.runningTime || null,
+    log.errorText || null
+  ];
+}
+
 /**
  * 批量插入调用记录
- * 使用参数化查询防止 SQL 注入，通过事务确保数据一致性
+ * 按 PostgreSQL 参数上限分片，每片一个事务；某片失败只回滚该片并转为逐条插入。
+ * 依赖 call_id 唯一约束 + ON CONFLICT DO NOTHING，重复执行幂等。
  */
 export async function batchInsertLogs(logs: ModelCallLog[]): Promise<InsertResult> {
   if (logs.length === 0) {
@@ -33,73 +75,44 @@ export async function batchInsertLogs(logs: ModelCallLog[]): Promise<InsertResul
   };
 
   const client = await pool.connect();
+  const chunkCount = Math.ceil(logs.length / INSERT_CHUNK_ROWS);
 
   try {
-    addLog.info(`开始批量插入 ${logs.length} 条记录`);
+    addLog.info(
+      `开始批量插入 ${logs.length} 条记录（分 ${chunkCount} 片，每片最多 ${INSERT_CHUNK_ROWS} 条）`
+    );
 
-    // 开始事务，确保数据一致性
-    await client.query('BEGIN');
+    for (let i = 0; i < chunkCount; i++) {
+      const chunk = logs.slice(i * INSERT_CHUNK_ROWS, (i + 1) * INSERT_CHUNK_ROWS);
 
-    // 构建批量插入的 SQL 语句
-    const values: any[] = [];
-    const placeholders: string[] = [];
-    let paramIndex = 1;
+      try {
+        const inserted = await insertChunk(client, chunk);
+        result.successCount += inserted;
+        result.duplicateCount += chunk.length - inserted;
+        addLog.debug(`第 ${i + 1}/${chunkCount} 片插入完成`, {
+          rows: chunk.length,
+          inserted,
+          duplicate: chunk.length - inserted
+        });
+      } catch (error) {
+        addLog.error(
+          `第 ${i + 1}/${chunkCount} 片批量插入失败，事务已回滚，转为逐条插入（本片 ${chunk.length} 条）`,
+          error as Error
+        );
 
-    for (let i = 0; i < logs.length; i++) {
-      const log = logs[i];
-
-      // 为每条记录创建占位符 ($1, $2, ..., $18)
-      const rowPlaceholders = [];
-      for (let j = 0; j < 19; j++) {
-        rowPlaceholders.push(`$${paramIndex++}`);
+        const fallback = await fallbackInsertOneByOne(chunk, client);
+        result.successCount += fallback.successCount;
+        result.duplicateCount += fallback.duplicateCount;
+        result.failedCount += fallback.failedCount;
+        result.errors.push(...fallback.errors);
       }
-      placeholders.push(`(${rowPlaceholders.join(', ')})`);
 
-      // 添加参数值
-      values.push(
-        log.callId,
-        log.appId,
-        log.appName || null,
-        log.modelId,
-        log.modelName,
-        log.callTimestamp,
-        log.callStatus || null,
-        log.chatId,
-        log.dataId || null,
-        log.inputTokens || 0,
-        log.outputTokens || 0,
-        log.totalTokens || 0,
-        log.totalPoints || 0,
-        log.source || null,
-        log.sourceName || null,
-        log.modelCategory || 'chat',
-        log.usageScenario || null,
-        log.runningTime || null,
-        log.errorText || null
-      );
+      if ((i + 1) % 10 === 0 || i + 1 === chunkCount) {
+        addLog.info(
+          `插入进度 ${i + 1}/${chunkCount}：成功 ${result.successCount}，重复 ${result.duplicateCount}，失败 ${result.failedCount}`
+        );
+      }
     }
-
-    // 执行批量插入
-    // ON CONFLICT 实现重复记录检测（基于 call_id 唯一约束）
-    const insertSql = `
-      INSERT INTO model_call_logs (
-        call_id, app_id, app_name, model_id, model_name,
-        call_timestamp, call_status, chat_id, data_id,
-        input_tokens, output_tokens, total_tokens, total_points,
-        source, source_name, model_category, usage_scenario, running_time, error_text
-      ) VALUES ${placeholders.join(', ')}
-      ON CONFLICT (call_id) DO NOTHING
-      RETURNING call_id
-    `;
-
-    const insertResult = await client.query(insertSql, values);
-
-    // 统计插入结果
-    result.successCount = insertResult.rowCount || 0;
-    result.duplicateCount = logs.length - result.successCount;
-
-    // 提交事务
-    await client.query('COMMIT');
 
     addLog.info('批量插入完成', {
       success: result.successCount,
@@ -108,22 +121,50 @@ export async function batchInsertLogs(logs: ModelCallLog[]): Promise<InsertResul
     });
 
     return result;
-  } catch (error) {
-    // 错误处理：回滚事务以保证数据一致性
-    await client.query('ROLLBACK');
-    addLog.error('批量插入失败，事务已回滚', error as Error);
-
-    // 如果批量插入失败，尝试逐条插入以获取详细错误信息
-    addLog.info('尝试逐条插入以识别问题记录');
-    return await fallbackInsertOneByOne(logs, client);
   } finally {
     client.release();
   }
 }
 
 /**
+ * 执行单个分片的批量插入（独立事务）
+ * @returns 实际插入的行数（冲突跳过的不计入）
+ */
+async function insertChunk(client: PoolClient, chunk: ModelCallLog[]): Promise<number> {
+  const values: any[] = [];
+  const placeholders: string[] = [];
+  let paramIndex = 1;
+
+  for (const log of chunk) {
+    const rowPlaceholders: string[] = [];
+    for (let j = 0; j < INSERT_COLUMNS_PER_ROW; j++) {
+      rowPlaceholders.push(`$${paramIndex++}`);
+    }
+    placeholders.push(`(${rowPlaceholders.join(', ')})`);
+    values.push(...buildRowValues(log));
+  }
+
+  // 不使用 RETURNING：只依赖 rowCount，避免服务端为整片结果构造返回集
+  const insertSql = `
+    INSERT INTO model_call_logs (${INSERT_COLUMNS_SQL})
+    VALUES ${placeholders.join(', ')}
+    ON CONFLICT (call_id) DO NOTHING
+  `;
+
+  await client.query('BEGIN');
+  try {
+    const insertResult = await client.query(insertSql, values);
+    await client.query('COMMIT');
+    return insertResult.rowCount || 0;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  }
+}
+
+/**
  * 降级方案：逐条插入记录
- * 当批量插入失败时使用，可以获取每条记录的详细错误信息
+ * 仅对失败的分片调用，可以获取每条记录的详细错误信息
  */
 async function fallbackInsertOneByOne(
   logs: ModelCallLog[],
@@ -141,42 +182,15 @@ async function fallbackInsertOneByOne(
     await client.query('BEGIN');
 
     const insertSql = `
-      INSERT INTO model_call_logs (
-        call_id, app_id, app_name, model_id, model_name,
-        call_timestamp, call_status, chat_id, data_id,
-        input_tokens, output_tokens, total_tokens, total_points,
-        source, source_name, model_category, usage_scenario, running_time, error_text
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      INSERT INTO model_call_logs (${INSERT_COLUMNS_SQL})
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       ON CONFLICT (call_id) DO NOTHING
-      RETURNING id
     `;
 
     // 逐条插入
     for (const log of logs) {
       try {
-        const values = [
-          log.callId,
-          log.appId,
-          log.appName || null,
-          log.modelId,
-          log.modelName,
-          log.callTimestamp,
-          log.callStatus || null,
-          log.chatId,
-          log.dataId || null,
-          log.inputTokens || 0,
-          log.outputTokens || 0,
-          log.totalTokens || 0,
-          log.totalPoints || 0,
-          log.source || null,
-          log.sourceName || null,
-          log.modelCategory || 'chat',
-          log.usageScenario || null,
-          log.runningTime || null,
-          log.errorText || null
-        ];
-
-        const insertResult = await client.query(insertSql, values);
+        const insertResult = await client.query(insertSql, buildRowValues(log));
 
         if (insertResult.rowCount && insertResult.rowCount > 0) {
           result.successCount++;
@@ -186,10 +200,12 @@ async function fallbackInsertOneByOne(
         }
       } catch (error) {
         result.failedCount++;
-        result.errors.push({
-          callId: log.callId,
-          error: (error as Error).message
-        });
+        if (result.errors.length < MAX_ERROR_SAMPLES) {
+          result.errors.push({
+            callId: log.callId,
+            error: (error as Error).message
+          });
+        }
         addLog.error(`插入记录失败 (callId: ${log.callId})`, error as Error);
       }
     }
@@ -206,7 +222,7 @@ async function fallbackInsertOneByOne(
     return result;
   } catch (error) {
     // 回滚事务
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     addLog.error('逐条插入也失败', error as Error);
     throw new SystemError(
       ErrorType.DATA_INSERTION_ERROR,

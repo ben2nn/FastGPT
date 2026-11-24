@@ -43,6 +43,10 @@ export class QueryBuilder {
     values.push(...timeCondition.values);
     paramIndex += timeCondition.values.length;
 
+    // 全量统计口径：排除模型归因失败（unknown）的数据
+    // 历史遗留行（如删模型配置期间产生的调用）不参与任何统计计算，但保留在库中
+    conditions.push(`model_id <> 'unknown'`);
+
     // 应用筛选（可选，支持多值，命中任一即返回）
     if (filters.appId) {
       const appCondition = this.buildAppFilter(filters.appId, paramIndex);
