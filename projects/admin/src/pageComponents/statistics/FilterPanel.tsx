@@ -7,6 +7,8 @@ import {
   Select,
   FormControl,
   FormLabel,
+  Checkbox,
+  CheckboxGroup,
   HStack,
   VStack
 } from '@chakra-ui/react';
@@ -18,7 +20,8 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 import ExportButton from './ExportButton';
-import type { StatisticsQuery } from '@/service/core/statistics/statistics';
+import type { ModelCategory, StatisticsQuery } from '@/service/core/statistics/statistics';
+import { modelCategoryLabels } from '@/service/core/statistics/statistics';
 import {
   formatToTimeZoneInput,
   getNowInTimeZone,
@@ -34,6 +37,9 @@ const CALL_STATUS_OPTIONS = [
   { label: '失败', value: 'failed' },
   { label: '超时', value: 'timeout' }
 ] as const;
+
+/** 模型类别全部取值（多选，默认全选 = 不过滤） */
+const ALL_MODEL_CATEGORIES: ModelCategory[] = ['chat', 'embedding', 'rerank'];
 
 interface FilterPanelProps {
   onFilterChange: (filters: StatisticsQuery) => void;
@@ -66,7 +72,24 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   });
   const [appName, setAppName] = useState<string>(initialFilters.appName || '');
   const [modelName, setModelName] = useState<string>(initialFilters.modelName || '');
+  const [modelCategories, setModelCategories] = useState<string[]>(
+    initialFilters.modelCategory?.length ? initialFilters.modelCategory : ALL_MODEL_CATEGORIES
+  );
   const [callStatus, setCallStatus] = useState<string>(initialFilters.callStatus || '');
+
+  /**
+   * 构造 modelCategory 筛选值
+   * 全选或不选都视为"全部类别"（不传参数），仅部分选中时传递所选类别
+   */
+  const buildModelCategoryFilter = useCallback((): ModelCategory[] | undefined => {
+    const selected = modelCategories.filter((c): c is ModelCategory =>
+      (ALL_MODEL_CATEGORIES as string[]).includes(c)
+    );
+    if (selected.length === 0 || selected.length === ALL_MODEL_CATEGORIES.length) {
+      return undefined;
+    }
+    return selected;
+  }, [modelCategories]);
 
   // 自动刷新状态
   const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
@@ -114,13 +137,17 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       if (modelName.trim()) {
         filters.modelName = modelName.trim();
       }
+      const modelCategory = buildModelCategoryFilter();
+      if (modelCategory) {
+        filters.modelCategory = modelCategory;
+      }
       if (callStatus) {
         filters.callStatus = callStatus;
       }
 
       onFilterChange(filters);
     },
-    [appName, modelName, callStatus, onFilterChange]
+    [appName, modelName, buildModelCategoryFilter, callStatus, onFilterChange]
   );
 
   /**
@@ -141,12 +168,24 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     if (modelName.trim()) {
       filters.modelName = modelName.trim();
     }
+    const modelCategory = buildModelCategoryFilter();
+    if (modelCategory) {
+      filters.modelCategory = modelCategory;
+    }
     if (callStatus) {
       filters.callStatus = callStatus;
     }
 
     onFilterChange(filters);
-  }, [startTime, endTime, appName, modelName, callStatus, onFilterChange]);
+  }, [
+    startTime,
+    endTime,
+    appName,
+    modelName,
+    buildModelCategoryFilter,
+    callStatus,
+    onFilterChange
+  ]);
 
   /**
    * 重置筛选条件
@@ -159,6 +198,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     setEndTime(now.format('YYYY-MM-DDTHH:mm'));
     setAppName('');
     setModelName('');
+    setModelCategories(ALL_MODEL_CATEGORIES);
     setCallStatus('');
 
     // 触发筛选（业务时区、带偏移的 ISO 字符串）
@@ -229,12 +269,24 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     if (modelName.trim()) {
       filters.modelName = modelName.trim();
     }
+    const modelCategory = buildModelCategoryFilter();
+    if (modelCategory) {
+      filters.modelCategory = modelCategory;
+    }
     if (callStatus) {
       filters.callStatus = callStatus;
     }
 
     return filters;
-  }, [startTime, endTime, appName, modelName, callStatus, isTimeRangeValid]);
+  }, [
+    startTime,
+    endTime,
+    appName,
+    modelName,
+    buildModelCategoryFilter,
+    callStatus,
+    isTimeRangeValid
+  ]);
 
   return (
     <Box p={0}>
@@ -259,6 +311,22 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
             />
+          </FormControl>
+
+          <FormControl flex={1}>
+            <FormLabel fontSize="sm">模型类别（默认全部）</FormLabel>
+            <CheckboxGroup
+              value={modelCategories}
+              onChange={(values: (string | number)[]) => setModelCategories(values as string[])}
+            >
+              <HStack spacing={4} h="32px" align="center">
+                {ALL_MODEL_CATEGORIES.map((category) => (
+                  <Checkbox key={category} size="sm" value={category}>
+                    {modelCategoryLabels[category]}
+                  </Checkbox>
+                ))}
+              </HStack>
+            </CheckboxGroup>
           </FormControl>
         </Flex>
 

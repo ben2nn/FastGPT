@@ -26,11 +26,16 @@ const MAX_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
 /** 匹配带时区偏移的时间字符串（Z 或 ±HH:mm / ±HHmm） */
 const TIMEZONE_OFFSET_REGEX = /(z|[+-]\d{2}:?\d{2})$/i;
 
-/** appId/modelId 多值筛选的单参数取值上限 */
+/** appId/modelId/modelCategory 多值筛选的单参数取值上限 */
 export const MAX_ID_FILTER_VALUES = 50;
 
+/** 模型类别枚举（与 model_call_logs.model_category 取值一致） */
+export const MODEL_CATEGORY_VALUES = ['chat', 'embedding', 'rerank'] as const;
+
+export type ModelCategoryValue = (typeof MODEL_CATEGORY_VALUES)[number];
+
 /**
- * 解析 appId/modelId 多值筛选参数
+ * 解析 appId/modelId/modelCategory 多值筛选参数
  *
  * 支持两种传参语法（可混用）：
  * - 逗号分隔：`appId=a,b,c`（HTTP 层为字符串）
@@ -48,7 +53,7 @@ export const MAX_ID_FILTER_VALUES = 50;
  * @returns 归一化后的取值数组，未传时为 undefined
  */
 export function parseIdFilterValues(
-  param: 'appId' | 'modelId',
+  param: 'appId' | 'modelId' | 'modelCategory',
   raw: string | string[] | undefined
 ): string[] | undefined {
   if (raw === undefined) {
@@ -92,6 +97,35 @@ export function parseIdFilterValues(
 }
 
 /**
+ * 解析 modelCategory 多值筛选参数
+ *
+ * 复用 parseIdFilterValues 的多值语法与通用校验（trim/去重/空白拒绝/上限 50），
+ * 再对每个取值做枚举校验（chat/embedding/rerank），任一取值非法抛 INVALID_FILTER_PARAM。
+ *
+ * @param raw 原始值（string | string[] | undefined）
+ * @returns 归一化后的类别数组，未传时为 undefined
+ */
+export function parseModelCategoryFilter(
+  raw: string | string[] | undefined
+): ModelCategoryValue[] | undefined {
+  const values = parseIdFilterValues('modelCategory', raw);
+  if (values === undefined) {
+    return undefined;
+  }
+
+  const invalid = values.filter((v) => !(MODEL_CATEGORY_VALUES as readonly string[]).includes(v));
+  if (invalid.length > 0) {
+    throw new StatisticsError(
+      StatisticsErrorCode.INVALID_FILTER_PARAM,
+      `modelCategory: 取值非法（${invalid.join(', ')}），仅支持 ${MODEL_CATEGORY_VALUES.join('/')}`,
+      { param: 'modelCategory', invalid, allowed: [...MODEL_CATEGORY_VALUES] }
+    );
+  }
+
+  return values as ModelCategoryValue[];
+}
+
+/**
  * 将时间字符串解析为绝对时刻
  *
  * - 带时区偏移（如 `2026-11-12T17:15:07+08:00`、`...Z`）：按其偏移解析
@@ -121,6 +155,7 @@ export function parseTimeToDayjs(value: string): dayjs.Dayjs {
  * - appName: 可选，非空字符串
  * - modelId: 可选，多值数组（string[]，元素非空字符串）
  * - modelName: 可选，非空字符串
+ * - modelCategory: 可选，多值数组（chat/embedding/rerank 的任意子集）
  * - callStatus: 可选，非空字符串
  * - pageNum: 可选，正整数，默认 1
  * - pageSize: 可选，正整数，范围 1-100，默认 20
@@ -170,6 +205,16 @@ function validateQuerySchema(query: any): void {
   // 验证 modelName
   if (query.modelName !== undefined && (!query.modelName || typeof query.modelName !== 'string')) {
     errors.push('modelName: 模型名称不能为空');
+  }
+
+  // 验证 modelCategory（多值数组；parseModelCategoryFilter 已保证元素合法非空，此处防御性校验）
+  if (query.modelCategory !== undefined) {
+    if (
+      !Array.isArray(query.modelCategory) ||
+      query.modelCategory.some((v: string) => typeof v !== 'string' || !v)
+    ) {
+      errors.push('modelCategory: 模型类别不能为空');
+    }
   }
 
   // 验证 callStatus
@@ -407,6 +452,8 @@ export function validateAndCleanQuery(query: any): StatisticsQuery {
     // 1. 多值 ID 参数解析（appId/modelId：逗号分隔/重复参数 → string[]，非法取值在此抛出）
     const appId = parseIdFilterValues('appId', query.appId);
     const modelId = parseIdFilterValues('modelId', query.modelId);
+    // 模型类别多值解析 + 枚举校验（chat/embedding/rerank）
+    const modelCategory = parseModelCategoryFilter(query.modelCategory);
 
     // 2. 数据类型转换
     const cleanedQuery = {
@@ -416,6 +463,7 @@ export function validateAndCleanQuery(query: any): StatisticsQuery {
       appName: query.appName ? String(query.appName).trim() : undefined,
       modelId,
       modelName: query.modelName ? String(query.modelName).trim() : undefined,
+      modelCategory,
       callStatus: query.callStatus ? String(query.callStatus).trim() : undefined,
       pageNum: query.pageNum ? Number(query.pageNum) : undefined,
       pageSize: query.pageSize ? Number(query.pageSize) : undefined

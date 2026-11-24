@@ -17,15 +17,23 @@ import { SystemError, ErrorType } from '@/service/common/errors';
 import { addLog } from '@fastgpt/service/common/system/log';
 
 /**
- * 需要采集的节点类型。
- * 值对应 FlowNodeTypeEnum：
+ * 需要采集的节点类型(即统计口径:全部模型调用)。
+ * 值对应 FlowNodeTypeEnum:
  * - chatNode: AI 对话
  * - classifyQuestion: 问题分类
  * - contentExtract: 内容提取
  * - tools: Agent / 工具调用
- * - cfr: 问题优化（queryExtension 的实际枚举值）
+ * - cfr: 问题优化(queryExtension 的实际枚举值)
+ * - datasetSearchNode: 知识库搜索(向量/重排/搜索内 LLM 的消费方,拆行采集,见 expandSearchDocument)
  */
-const COLLECTABLE_MODULE_TYPES = ['chatNode', 'classifyQuestion', 'contentExtract', 'tools', 'cfr'];
+const COLLECTABLE_MODULE_TYPES = [
+  'chatNode',
+  'classifyQuestion',
+  'contentExtract',
+  'tools',
+  'cfr',
+  'datasetSearchNode'
+];
 
 type ExtractBatchResult = {
   logs: ModelCallLog[];
@@ -579,6 +587,13 @@ export class DataCapCollect {
             totalPoints: { $ifNull: ['$responseData.totalPoints', 0] },
             source: '$chatInfo.source',
             sourceName: '$chatInfo.sourceName',
+            // 知识库搜索节点的多模型用量原始字段(拆行采集,见 expandSearchDocument)
+            embeddingModel: '$responseData.embeddingModel',
+            embeddingTokens: '$responseData.embeddingTokens',
+            rerankModel: '$responseData.rerankModel',
+            reRankInputTokens: '$responseData.reRankInputTokens',
+            queryExtensionResult: '$responseData.queryExtensionResult',
+            deepSearchResult: '$responseData.deepSearchResult',
             // 新增字段：节点类型（使用场景）
             moduleType: '$responseData.moduleType',
             // 新增字段：模型类别（根据节点类型判断）
@@ -691,6 +706,10 @@ export class DataCapCollect {
       };
 
       results.forEach((doc: any) => {
+        // 搜索节点走拆行采集(模型取 embeddingModel 等专用字段),不参与此 model 提取统计
+        if (doc.moduleType === 'datasetSearchNode') {
+          return;
+        }
         if (doc.modelId === 'unknown') {
           modelStats.unknown++;
           // 记录前 3 个 unknown 的样本用于调试
@@ -715,8 +734,8 @@ export class DataCapCollect {
         unknownSamples: modelStats.unknownSamples
       });
 
-      // 转换结果为 ModelCallLog 格式
-      const logs: ModelCallLog[] = results.map((doc: any) => this.transformDocument(doc));
+      // 转换结果为 ModelCallLog 格式(搜索节点拆行为多行,其余节点单行)
+      const logs: ModelCallLog[] = results.flatMap((doc: any) => this.transformDocument(doc));
 
       return {
         logs,
@@ -734,10 +753,16 @@ export class DataCapCollect {
 
   /**
    * 转换 MongoDB 文档为 ModelCallLog 格式
+   * 知识库搜索节点拆行为多行(见 expandSearchDocument),其余节点单行
    * @param doc MongoDB 文档
-   * @returns ModelCallLog 对象
+   * @returns ModelCallLog 数组
    */
-  private transformDocument(doc: any): ModelCallLog {
+  private transformDocument(doc: any): ModelCallLog[] {
+    // 知识库搜索节点：按参与模型拆行采集
+    if (doc.moduleType === 'datasetSearchNode') {
+      return this.expandSearchDocument(doc);
+    }
+
     // 调试：记录 model 为 unknown 的情况
     if (doc.modelId === 'unknown' && doc._debug) {
       const debugInfo: any = {
@@ -787,34 +812,131 @@ export class DataCapCollect {
       callStatus = 'timeout';
     }
 
-    return {
-      callId: String(doc.callId || ''),
+    return [
+      {
+        callId: String(doc.callId || ''),
+        appId: String(doc.appId || ''),
+        appName: String(doc.appName || ''),
+        // 当 model 为空时使用 'unknown'
+        modelId: String(doc.modelId || 'unknown'),
+        modelName: String(doc.modelName || 'unknown'),
+        callTimestamp:
+          doc.callTimestamp instanceof Date ? doc.callTimestamp : new Date(doc.callTimestamp),
+        callStatus,
+        chatId: String(doc.chatId || ''),
+        dataId: doc.dataId ? String(doc.dataId) : undefined,
+        inputTokens: Number(doc.inputTokens || 0),
+        outputTokens: Number(doc.outputTokens || 0),
+        // 计算 totalTokens = inputTokens + outputTokens
+        totalTokens: Number(doc.totalTokens || 0),
+        totalPoints: Number(doc.totalPoints || 0),
+        source: doc.source ? String(doc.source) : undefined,
+        sourceName: doc.sourceName ? String(doc.sourceName) : undefined,
+        // 新增字段：模型类别
+        modelCategory: String(doc.modelCategory || 'chat'),
+        // 新增字段：使用场景（节点类型）
+        usageScenario: String(doc.moduleType || ''),
+        // 新增字段：运行时间（秒）
+        runningTime,
+        // 新增字段：错误信息文本
+        errorText: doc.errorText ? String(doc.errorText) : undefined
+      }
+    ];
+  }
+
+  /**
+   * 知识库搜索节点拆行采集
+   *
+   * 一条搜索节点响应按参与模型展开为 1~4 行 ModelCallLog：
+   * - 向量行（恒产生）：embeddingModel / embeddingTokens
+   * - 重排行：存在重排模型名或重排 tokens 时产生
+   * - 搜索内问题优化 LLM 行：queryExtensionResult 存在时产生
+   * - 深度搜索 LLM 行：deepSearchResult 存在时产生
+   *
+   * 约定（见 openspec change embedding-rerank-statistics design D2-D4）：
+   * - call_id 子键：`${responseData.id}:embedding|:rerank|:ext_llm|:deep_llm`，保证唯一与幂等
+   * - 模型名取自调用时快照，不查当前模型配置；缺失时记 'unknown'
+   * - 积分记 0（节点合计积分不可按模型拆分，当前部署积分恒为 0）
+   * - runningTime（节点级总耗时）仅记在向量行
+   * - 状态判定：有 errorText 判 error；节点超时（runningTime>30s 且全部模型无 token 消耗）判
+   *   timeout；否则按各模型自身 tokens 判断（>0 为 success，否则 error）
+   */
+  private expandSearchDocument(doc: any): ModelCallLog[] {
+    const responseId = String(doc.callId || '');
+    const runningTime = doc.runningTime ? Number(doc.runningTime) : undefined;
+    const errorText = doc.errorText ? String(doc.errorText) : undefined;
+
+    const ext = doc.queryExtensionResult || null;
+    const deep = doc.deepSearchResult || null;
+    const embeddingTokens = Number(doc.embeddingTokens || 0);
+    const reRankTokens = Number(doc.reRankInputTokens || 0);
+    const extInput = Number(ext?.inputTokens || 0);
+    const extOutput = Number(ext?.outputTokens || 0);
+    const deepInput = Number(deep?.inputTokens || 0);
+    const deepOutput = Number(deep?.outputTokens || 0);
+
+    // 节点级"无输出"：该响应内全部模型的 token 合计为 0
+    const nodeHasOutput =
+      embeddingTokens + reRankTokens + extInput + extOutput + deepInput + deepOutput > 0;
+    const isTimeout = Boolean(runningTime && runningTime > 30 && !nodeHasOutput);
+
+    const resolveCallStatus = (tokens: number): string => {
+      if (errorText) return 'error';
+      if (isTimeout) return 'timeout';
+      return tokens > 0 ? 'success' : 'error';
+    };
+
+    const buildRow = (
+      subKey: string,
+      modelName: string,
+      modelCategory: string,
+      inputTokens: number,
+      outputTokens: number,
+      withRunningTime: boolean
+    ): ModelCallLog => ({
+      callId: `${responseId}:${subKey}`,
       appId: String(doc.appId || ''),
       appName: String(doc.appName || ''),
-      // 当 model 为空时使用 'unknown'
-      modelId: String(doc.modelId || 'unknown'),
-      modelName: String(doc.modelName || 'unknown'),
+      modelId: String(modelName || 'unknown'),
+      modelName: String(modelName || 'unknown'),
       callTimestamp:
         doc.callTimestamp instanceof Date ? doc.callTimestamp : new Date(doc.callTimestamp),
-      callStatus,
+      callStatus: resolveCallStatus(inputTokens + outputTokens),
       chatId: String(doc.chatId || ''),
       dataId: doc.dataId ? String(doc.dataId) : undefined,
-      inputTokens: Number(doc.inputTokens || 0),
-      outputTokens: Number(doc.outputTokens || 0),
-      // 计算 totalTokens = inputTokens + outputTokens
-      totalTokens: Number(doc.totalTokens || 0),
-      totalPoints: Number(doc.totalPoints || 0),
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      totalPoints: 0,
       source: doc.source ? String(doc.source) : undefined,
       sourceName: doc.sourceName ? String(doc.sourceName) : undefined,
-      // 新增字段：模型类别
-      modelCategory: String(doc.modelCategory || 'chat'),
-      // 新增字段：使用场景（节点类型）
-      usageScenario: String(doc.moduleType || ''),
-      // 新增字段：运行时间（秒）
-      runningTime,
-      // 新增字段：错误信息文本
-      errorText: doc.errorText ? String(doc.errorText) : undefined
-    };
+      modelCategory,
+      usageScenario: 'datasetSearchNode',
+      runningTime: withRunningTime ? runningTime : undefined,
+      errorText
+    });
+
+    const rows: ModelCallLog[] = [];
+
+    // 1. 向量行（搜索执行即产生）
+    rows.push(buildRow('embedding', doc.embeddingModel, 'embedding', embeddingTokens, 0, true));
+
+    // 2. 重排行（存在重排模型名或重排 tokens 时产生）
+    if (doc.rerankModel || reRankTokens > 0) {
+      rows.push(buildRow('rerank', doc.rerankModel, 'rerank', reRankTokens, 0, false));
+    }
+
+    // 3. 搜索内问题优化 LLM 行
+    if (ext && (ext.model || extInput > 0 || extOutput > 0)) {
+      rows.push(buildRow('ext_llm', ext.model, 'chat', extInput, extOutput, false));
+    }
+
+    // 4. 深度搜索 LLM 行
+    if (deep && (deep.model || deepInput > 0 || deepOutput > 0)) {
+      rows.push(buildRow('deep_llm', deep.model, 'chat', deepInput, deepOutput, false));
+    }
+
+    return rows;
   }
 
   /**

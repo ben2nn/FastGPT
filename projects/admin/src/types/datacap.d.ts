@@ -19,7 +19,7 @@ export interface ModelCallLog {
   totalPoints: number; // 消耗积分
   source?: string; // 调用来源
   sourceName?: string; // 来源名称
-  modelCategory: string; // 模型类别（chat/embedding）
+  modelCategory: string; // 模型类别（chat/embedding/rerank）
   usageScenario: string; // 使用场景（classifyQuestion/chatNode/datasetSearchNode等）
   runningTime?: number; // 运行时间（秒）
   errorText?: string; // 错误信息文本

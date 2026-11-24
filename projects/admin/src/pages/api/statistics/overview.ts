@@ -25,6 +25,7 @@ export type OverviewQueryParams = {
   appId?: string | string[]; // 可选：应用ID筛选（支持多值：逗号分隔或重复参数）
   modelName?: string; // 可选：模型名称筛选
   modelId?: string | string[]; // 可选：模型ID筛选（精确匹配，支持多值）
+  modelCategory?: string | string[]; // 可选：模型类别筛选（chat/embedding/rerank，支持多值：逗号分隔或重复参数）
   callStatus?: string; // 可选：调用状态筛选
 };
 

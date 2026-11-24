@@ -26,6 +26,7 @@ export type ExternalStatisticsListQueryParams = {
   appId?: string | string[]; // 支持多值：逗号分隔或重复参数，校验层归一化为数组
   appName?: string;
   modelId?: string | string[]; // 支持多值：逗号分隔或重复参数，校验层归一化为数组
+  modelCategory?: string | string[]; // 可选：模型类别筛选（chat/embedding/rerank，支持多值：逗号分隔或重复参数）
   modelName?: string;
   callStatus?: string;
   pageNum?: string;

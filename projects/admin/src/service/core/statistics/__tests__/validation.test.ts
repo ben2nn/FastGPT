@@ -238,6 +238,87 @@ describe('validateAndCleanQuery', () => {
       expect(result.callStatus).toBe('success');
     });
   });
+
+  describe('modelCategory 多值枚举校验', () => {
+    it('单值归一化为数组', () => {
+      const result = validateAndCleanQuery({ ...baseQuery, modelCategory: 'embedding' });
+      expect(result.modelCategory).toEqual(['embedding']);
+    });
+
+    it('逗号分隔的多值被拆分为数组', () => {
+      const result = validateAndCleanQuery({ ...baseQuery, modelCategory: 'chat,rerank' });
+      expect(result.modelCategory).toEqual(['chat', 'rerank']);
+    });
+
+    it('重复参数（数组）与逗号混用时合并去重', () => {
+      const result = validateAndCleanQuery({
+        ...baseQuery,
+        modelCategory: ['chat,embedding', 'chat', 'rerank']
+      });
+      expect(result.modelCategory).toEqual(['chat', 'embedding', 'rerank']);
+    });
+
+    it('取值带首尾空白时 trim 后按枚举匹配', () => {
+      const result = validateAndCleanQuery({ ...baseQuery, modelCategory: ' chat , rerank ' });
+      expect(result.modelCategory).toEqual(['chat', 'rerank']);
+    });
+
+    it('未传 modelCategory 时结果中无该字段', () => {
+      const result = validateAndCleanQuery(baseQuery);
+      expect(result.modelCategory).toBeUndefined();
+    });
+
+    it('空字符串时视同未传（与 appId/modelId 行为一致）', () => {
+      const result = validateAndCleanQuery({ ...baseQuery, modelCategory: '' });
+      expect(result.modelCategory).toBeUndefined();
+    });
+
+    it('取值不在枚举内时报 INVALID_FILTER_PARAM', () => {
+      expectQueryErrorCode(
+        { ...baseQuery, modelCategory: 'voice' },
+        StatisticsErrorCode.INVALID_FILTER_PARAM,
+        '取值非法'
+      );
+    });
+
+    it('多值中任一枚举非法时报 INVALID_FILTER_PARAM', () => {
+      expectQueryErrorCode(
+        { ...baseQuery, modelCategory: 'chat,voice' },
+        StatisticsErrorCode.INVALID_FILTER_PARAM,
+        'voice'
+      );
+    });
+
+    it('空白取值时报 INVALID_FILTER_PARAM', () => {
+      expectQueryErrorCode(
+        { ...baseQuery, modelCategory: 'chat,,rerank' },
+        StatisticsErrorCode.INVALID_FILTER_PARAM,
+        '不能为空'
+      );
+    });
+
+    it('取值数量超过上限时报 INVALID_FILTER_PARAM', () => {
+      const values = Array.from({ length: MAX_ID_FILTER_VALUES + 1 }, (_, i) => `cat-${i}`);
+      expectQueryErrorCode(
+        { ...baseQuery, modelCategory: values.join(',') },
+        StatisticsErrorCode.INVALID_FILTER_PARAM,
+        '不能超过'
+      );
+    });
+
+    it('modelCategory 与其他条件组合时全部保留', () => {
+      const result = validateAndCleanQuery({
+        ...baseQuery,
+        appName: '客服',
+        modelCategory: 'embedding,rerank',
+        callStatus: 'success'
+      });
+
+      expect(result.appName).toBe('客服');
+      expect(result.modelCategory).toEqual(['embedding', 'rerank']);
+      expect(result.callStatus).toBe('success');
+    });
+  });
 });
 
 describe('validateTimeRange', () => {

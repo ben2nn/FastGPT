@@ -72,6 +72,7 @@ const successList = {
       appName: '客服机器人',
       modelId: 'gpt-4o',
       modelName: 'gpt-4o',
+      modelCategory: 'chat',
       usageScenario: 'chatNode',
       callCount: 10,
       totalTokens: 1000,
@@ -176,7 +177,8 @@ describe('GET /api/external/statistics/list', () => {
           expect.objectContaining({
             appId: 'app1',
             modelId: 'gpt-4o',
-            modelName: 'gpt-4o'
+            modelName: 'gpt-4o',
+            modelCategory: 'chat'
           })
         ])
       })
@@ -307,6 +309,86 @@ describe('GET /api/external/statistics/list', () => {
           modelId: ['gpt-4o', 'gpt-4o-mini'],
           appName: '客服'
         })
+      );
+    });
+  });
+
+  describe('modelCategory 多值筛选', () => {
+    const authKey = { id: 'k1', keyPrefix: 'dek_abc...' };
+
+    it('逗号分隔多值返回 200 且筛选参数归一化为数组', async () => {
+      mockAuth.mockResolvedValue(authKey);
+      mockGetList.mockResolvedValueOnce(successList);
+
+      const res = makeRes();
+      await handler(makeReq('GET', { ...validQuery, modelCategory: 'chat,embedding' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockGetList).toHaveBeenCalledWith(
+        expect.objectContaining({ modelCategory: ['chat', 'embedding'] })
+      );
+    });
+
+    it('重复参数（数组取值）返回 200 且归一化去重', async () => {
+      mockAuth.mockResolvedValue(authKey);
+      mockGetList.mockResolvedValueOnce(successList);
+
+      const res = makeRes();
+      await handler(
+        makeReq('GET', { ...validQuery, modelCategory: ['rerank', 'chat', 'rerank'] }),
+        res
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockGetList).toHaveBeenCalledWith(
+        expect.objectContaining({ modelCategory: ['rerank', 'chat'] })
+      );
+    });
+
+    it('与 appId/modelId 多值组合时一并透传（参数间 AND）', async () => {
+      mockAuth.mockResolvedValue(authKey);
+      mockGetList.mockResolvedValueOnce(successList);
+
+      const res = makeRes();
+      await handler(
+        makeReq('GET', {
+          ...validQuery,
+          appId: 'appA,appB',
+          modelCategory: 'embedding,rerank'
+        }),
+        res
+      );
+
+      expect(mockGetList).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appId: ['appA', 'appB'],
+          modelCategory: ['embedding', 'rerank']
+        })
+      );
+    });
+
+    it('非法枚举取值返回 400 与 INVALID_FILTER_PARAM', async () => {
+      mockAuth.mockResolvedValue(authKey);
+
+      const res = makeRes();
+      await handler(makeReq('GET', { ...validQuery, modelCategory: 'voice' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'INVALID_FILTER_PARAM' })
+      );
+      expect(mockGetList).not.toHaveBeenCalled();
+    });
+
+    it('空白取值返回 400 与 INVALID_FILTER_PARAM', async () => {
+      mockAuth.mockResolvedValue(authKey);
+
+      const res = makeRes();
+      await handler(makeReq('GET', { ...validQuery, modelCategory: 'chat,,embedding' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'INVALID_FILTER_PARAM' })
       );
     });
   });

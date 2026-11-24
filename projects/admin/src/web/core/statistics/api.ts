@@ -19,8 +19,8 @@ import type {
 /**
  * 将查询参数归一化为 HTTP 查询串形态
  *
- * appId/modelId 在 StatisticsQuery 中为 string[]（多值筛选），HTTP 传输统一使用
- * 逗号分隔语法（`appId=a,b`）。数组直接交给 axios 默认序列化会产生 `appId[]=a`
+ * appId/modelId/modelCategory 在 StatisticsQuery 中为数组（多值筛选），HTTP 传输统一
+ * 使用逗号分隔语法（`appId=a,b`）。数组直接交给 axios 默认序列化会产生 `appId[]=a`
  * 形式（键名带方括号），后端无法识别，故此处显式转换。
  * 单值数组转换后与既有线上格式完全一致（`['app123']` → `'app123'`）。
  */
@@ -28,7 +28,8 @@ function toHttpQuery(params: StatisticsQuery): Record<string, string | number | 
   return {
     ...params,
     appId: params.appId?.length ? params.appId.join(',') : undefined,
-    modelId: params.modelId?.length ? params.modelId.join(',') : undefined
+    modelId: params.modelId?.length ? params.modelId.join(',') : undefined,
+    modelCategory: params.modelCategory?.length ? params.modelCategory.join(',') : undefined
   };
 }
 
@@ -180,12 +181,15 @@ export const exportStatistics = async (
     queryParams.append('format', format);
     queryParams.append('exportType', exportType);
 
-    // 添加可选参数（appId/modelId 为多值数组，HTTP 使用逗号分隔语法）
+    // 添加可选参数（appId/modelId/modelCategory 为多值数组，HTTP 使用逗号分隔语法）
     if (params.appId?.length) {
       queryParams.append('appId', params.appId.join(','));
     }
     if (params.modelId?.length) {
       queryParams.append('modelId', params.modelId.join(','));
+    }
+    if (params.modelCategory?.length) {
+      queryParams.append('modelCategory', params.modelCategory.join(','));
     }
     if (params.modelName) {
       queryParams.append('modelName', params.modelName);

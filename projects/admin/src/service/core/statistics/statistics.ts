@@ -1,6 +1,14 @@
 // ==================== 统计查询参数类型 ====================
 
 /**
+ * 模型类别（与 model_call_logs.model_category 取值一致）
+ * - chat: 对话模型
+ * - embedding: 向量模型
+ * - rerank: 重排模型
+ */
+export type ModelCategory = 'chat' | 'embedding' | 'rerank';
+
+/**
  * 统计查询参数
  */
 export interface StatisticsQuery {
@@ -10,6 +18,7 @@ export interface StatisticsQuery {
   appName?: string; // 可选的应用名称筛选（模糊匹配）
   modelId?: string[]; // 可选的模型ID筛选（精确匹配，支持多值，校验层已归一化为数组）
   modelName?: string; // 可选的模型名称筛选（模糊匹配）
+  modelCategory?: ModelCategory[]; // 可选的模型类别筛选（支持多值，校验层已归一化为数组）
   callStatus?: string; // 可选的状态筛选
   pageNum?: number; // 分页页码
   pageSize?: number; // 每页数量
@@ -66,6 +75,7 @@ export interface AppStatisticsResponse {
 export interface ModelStatistics {
   modelId: string;
   modelName: string;
+  modelCategory: ModelCategory; // 模型类别（对话/向量/重排）
   callCount: number;
   totalTokens: number;
   avgTokensPerCall: number;
@@ -137,6 +147,7 @@ export interface StatisticsListItem {
   appName: string;
   modelId: string;
   modelName: string;
+  modelCategory: ModelCategory; // 模型类别（对话/向量/重排）
   usageScenario?: string; // 使用场景
   callCount: number;
   totalTokens: number;
@@ -178,6 +189,25 @@ export const usageScenarioLabels: Record<string, string> = {
 export function getUsageScenarioLabel(usageScenario?: string | null): string {
   if (!usageScenario) return '-';
   return usageScenarioLabels[usageScenario] || usageScenario;
+}
+
+// ==================== 模型类别映射 ====================
+
+/**
+ * 模型类别中文名称映射（用于前端展示与导出）
+ */
+export const modelCategoryLabels: Record<ModelCategory, string> = {
+  chat: '对话',
+  embedding: '向量',
+  rerank: '重排'
+};
+
+/**
+ * 获取模型类别的中文名称，未知类型原样返回（null 返回 '-'）
+ */
+export function getModelCategoryLabel(modelCategory?: string | null): string {
+  if (!modelCategory) return '-';
+  return modelCategoryLabels[modelCategory as ModelCategory] || modelCategory;
 }
 
 // ==================== 数据导出类型 ====================

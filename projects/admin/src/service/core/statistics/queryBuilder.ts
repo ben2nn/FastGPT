@@ -75,6 +75,14 @@ export class QueryBuilder {
       paramIndex += modelCondition.values.length;
     }
 
+    // 模型类别筛选（可选，支持多值，命中任一类别即返回）
+    if (filters.modelCategory) {
+      const categoryCondition = this.buildModelCategoryFilter(filters.modelCategory, paramIndex);
+      conditions.push(categoryCondition.clause);
+      values.push(...categoryCondition.values);
+      paramIndex += categoryCondition.values.length;
+    }
+
     // 状态筛选（可选）
     if (filters.callStatus) {
       const statusCondition = this.buildStatusFilter(filters.callStatus, paramIndex);
@@ -149,6 +157,21 @@ export class QueryBuilder {
   buildModelFilter(modelName: string, paramIndex: number): { clause: string; values: any[] } {
     const clause = `model_name ILIKE $${paramIndex} ESCAPE '\\'`;
     const values = [`%${this.escapeLikePattern(modelName)}%`];
+    return { clause, values };
+  }
+
+  /**
+   * 构建模型类别筛选条件（多值，命中任一类别即返回）
+   *
+   * 使用 `= ANY($n)` 单数组参数，语义同 buildAppFilter。
+   * 取值已在校验层限定为 chat/embedding/rerank 枚举子集。
+   */
+  buildModelCategoryFilter(
+    modelCategory: string[],
+    paramIndex: number
+  ): { clause: string; values: any[] } {
+    const clause = `model_category = ANY($${paramIndex})`;
+    const values = [modelCategory];
     return { clause, values };
   }
 
@@ -246,15 +269,16 @@ export class QueryBuilder {
     const offset = (pageNum - 1) * pageSize;
 
     const text = `
-      SELECT 
+      SELECT
         model_id,
         model_name,
+        model_category,
         COUNT(*) as call_count,
         COALESCE(SUM(total_tokens), 0) as total_tokens,
         COALESCE(AVG(total_tokens), 0) as avg_tokens_per_call
       FROM model_call_logs
       ${clause}
-      GROUP BY model_id, model_name
+      GROUP BY model_id, model_name, model_category
       ORDER BY call_count DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -338,6 +362,7 @@ export class QueryBuilder {
         app_name,
         model_id,
         model_name,
+        model_category,
         usage_scenario,
         COUNT(*) as call_count,
         COALESCE(SUM(total_tokens), 0) as total_tokens,
@@ -351,7 +376,7 @@ export class QueryBuilder {
         COALESCE(AVG(total_tokens), 0) as avg_tokens_per_call
       FROM model_call_logs
       ${clause}
-      GROUP BY app_id, app_name, model_id, model_name, usage_scenario
+      GROUP BY app_id, app_name, model_id, model_name, model_category, usage_scenario
       ORDER BY app_id ASC,call_count DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -361,6 +386,9 @@ export class QueryBuilder {
 
   /**
    * 构建统计列表总数查询
+   *
+   * 分组键必须与 buildStatisticsListQuery 完全一致（应用/应用名/模型/模型名/类别/场景），
+   * 否则同一「应用+模型」存在多个类别或场景时 total 会偏小，导致翻页/导出静默缺行。
    */
   buildStatisticsListCountQuery(filters: StatisticsQuery): SqlQuery {
     const { clause, values } = this.buildWhereClause(filters);
@@ -368,10 +396,10 @@ export class QueryBuilder {
     const text = `
       SELECT COUNT(*) as total
       FROM (
-        SELECT app_id, model_id, model_name
+        SELECT app_id, app_name, model_id, model_name, model_category, usage_scenario
         FROM model_call_logs
         ${clause}
-        GROUP BY app_id, model_id, model_name
+        GROUP BY app_id, app_name, model_id, model_name, model_category, usage_scenario
       ) as subquery
     `;
 

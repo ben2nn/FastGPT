@@ -17,7 +17,8 @@ import type {
   TrendStatisticsResponse,
   StatusStatisticsResponse,
   StatisticsListResponse,
-  TimeGranularity
+  TimeGranularity,
+  ModelCategory
 } from '@/service/core/statistics/statistics';
 import { StatisticsError, StatisticsErrorCode } from '@/service/core/statistics/statistics';
 
@@ -229,6 +230,7 @@ export class StatisticsService {
         this.executeQuery<{
           model_id: string;
           model_name: string;
+          model_category: string;
           call_count: string;
           total_tokens: string;
           avg_tokens_per_call: string;
@@ -240,6 +242,7 @@ export class StatisticsService {
       const list = listResult.rows.map((row) => ({
         modelId: row.model_id,
         modelName: row.model_name,
+        modelCategory: (row.model_category || 'chat') as ModelCategory,
         callCount: parseInt(row.call_count, 10),
         totalTokens: parseInt(row.total_tokens, 10),
         avgTokensPerCall: parseFloat(row.avg_tokens_per_call)
@@ -369,6 +372,7 @@ export class StatisticsService {
           app_name: string;
           model_id: string;
           model_name: string;
+          model_category: string;
           usage_scenario: string;
           call_count: string;
           total_tokens: string;
@@ -387,6 +391,7 @@ export class StatisticsService {
         appName: row.app_name || '',
         modelId: row.model_id,
         modelName: row.model_name,
+        modelCategory: (row.model_category || 'chat') as ModelCategory,
         usageScenario: row.usage_scenario,
         callCount: parseInt(row.call_count, 10),
         totalTokens: parseInt(row.total_tokens, 10),

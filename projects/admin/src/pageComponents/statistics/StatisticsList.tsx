@@ -20,7 +20,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getStatisticsList } from '@/web/core/statistics/api';
 import type { StatisticsQuery, StatisticsListItem } from '@/service/core/statistics/statistics';
-import { getUsageScenarioLabel } from '@/service/core/statistics/statistics';
+import { getUsageScenarioLabel, getModelCategoryLabel } from '@/service/core/statistics/statistics';
 
 interface StatisticsListProps {
   filters: StatisticsQuery;
@@ -155,6 +155,9 @@ const StatisticsList: React.FC<StatisticsListProps> = ({ filters }) => {
                     模型
                   </Th>
                   <Th fontSize="md" fontWeight="bold" color="blue.700">
+                    模型类别
+                  </Th>
+                  <Th fontSize="md" fontWeight="bold" color="blue.700">
                     使用场景
                   </Th>
                   <Th fontSize="md" fontWeight="bold" color="blue.700" isNumeric>
@@ -189,6 +192,9 @@ const StatisticsList: React.FC<StatisticsListProps> = ({ filters }) => {
                     </Td>
                     <Td>
                       <Text>{item.modelName}</Text>
+                    </Td>
+                    <Td>
+                      <Text>{getModelCategoryLabel(item.modelCategory)}</Text>
                     </Td>
                     <Td>
                       <Text>{getUsageScenarioLabel(item.usageScenario)}</Text>

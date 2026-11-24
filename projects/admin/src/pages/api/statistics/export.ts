@@ -20,6 +20,7 @@ import type {
   TrendStatisticsResponse,
   StatusStatisticsResponse
 } from '@/service/core/statistics/statistics';
+import { getModelCategoryLabel } from '@/service/core/statistics/statistics';
 import { StatisticsError, StatisticsErrorCode } from '@/service/core/statistics/statistics';
 
 /**
@@ -43,6 +44,7 @@ export type ExportQueryParams = {
   appId?: string | string[]; // 支持多值：逗号分隔或重复参数
   appName?: string;
   modelId?: string | string[]; // 支持多值：逗号分隔或重复参数
+  modelCategory?: string | string[]; // 可选：模型类别筛选（chat/embedding/rerank，支持多值：逗号分隔或重复参数）
   modelName?: string;
   callStatus?: string;
 };
@@ -96,10 +98,11 @@ function convertToCSV(data: any[], type: ExportType): string {
       break;
 
     case 'by-model':
-      headers = ['模型ID', '模型名称', '调用次数', '总Token数', '平均每次调用Token数'];
+      headers = ['模型ID', '模型名称', '模型类别', '调用次数', '总Token数', '平均每次调用Token数'];
       rows = data.map((item: any) => [
         item.modelId,
         item.modelName,
+        getModelCategoryLabel(item.modelCategory),
         item.callCount.toString(),
         item.totalTokens.toString(),
         item.avgTokensPerCall.toFixed(2)
@@ -393,6 +396,7 @@ async function handler(req: ApiRequestProps<{}, ExportQueryParams>, res: ApiResp
               endTime: validatedQuery.endTime,
               appId: validatedQuery.appId,
               modelName: validatedQuery.modelName,
+              modelCategory: validatedQuery.modelCategory,
               callStatus: validatedQuery.callStatus
             },
             data: dataList,
@@ -414,6 +418,7 @@ async function handler(req: ApiRequestProps<{}, ExportQueryParams>, res: ApiResp
               endTime: validatedQuery.endTime,
               appId: validatedQuery.appId,
               modelName: validatedQuery.modelName,
+              modelCategory: validatedQuery.modelCategory,
               callStatus: validatedQuery.callStatus
             },
             granularity: (exportData as TrendStatisticsResponse).granularity,
@@ -427,7 +432,8 @@ async function handler(req: ApiRequestProps<{}, ExportQueryParams>, res: ApiResp
               startTime: validatedQuery.startTime,
               endTime: validatedQuery.endTime,
               appId: validatedQuery.appId,
-              modelName: validatedQuery.modelName
+              modelName: validatedQuery.modelName,
+              modelCategory: validatedQuery.modelCategory
             },
             ...exportData
           };
