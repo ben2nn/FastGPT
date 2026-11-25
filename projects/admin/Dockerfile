@@ -29,6 +29,7 @@ WORKDIR /app
 
 ARG proxy
 ARG base_url
+ARG show_user_team
 
 # copy common node_modules and one project node_modules
 COPY package.json pnpm-workspace.yaml .npmrc tsconfig.json ./
@@ -43,6 +44,8 @@ RUN apk add --no-cache libc6-compat && npm install -g pnpm@9.4.0
 
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 ENV NEXT_PUBLIC_BASE_URL=$base_url
+# 是否显示「用户管理」「团队管理」菜单（NEXT_PUBLIC_ 变量在构建时内联，需通过 --build-arg 传入）
+ENV NEXT_PUBLIC_SHOW_USER_TEAM=$show_user_team
 RUN pnpm --filter=admin build
 
 # --------- runner -----------

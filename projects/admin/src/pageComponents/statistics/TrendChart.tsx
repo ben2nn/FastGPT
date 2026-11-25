@@ -73,37 +73,13 @@ const TrendChart = ({ filters, onError }: TrendChartProps) => {
   const gridColor = useColorModeValue('gray.100', 'gray.700');
 
   // 使用 react-query Hook 获取数据
-  const { data, isLoading, error } = useTrendStatistics(filters, 'day', {
+  const { data, isLoading } = useTrendStatistics(filters, 'day', {
     onError
   });
 
-  // 调试：打印数据
-  useEffect(() => {
-    console.log('[TrendChart] 数据状态:', {
-      data,
-      isLoading,
-      error,
-      filters,
-      hasData: !!data,
-      dataLength: data?.items?.length || 0
-    });
-  }, [data, isLoading, error, filters]);
-
   // 处理图表数据
   const chartData = useMemo(() => {
-    console.log('[TrendChart] 处理图表数据:', {
-      data,
-      hasData: !!data,
-      hasItemsArray: !!data?.items,
-      dataLength: data?.items?.length || 0,
-      granularity: data?.granularity
-    });
-
     if (!data || !data.items || data.items.length === 0) {
-      console.log('[TrendChart] 数据为空，返回空数组', {
-        data,
-        reason: !data ? '无data对象' : !data.items ? '无items数组' : '数组长度为0'
-      });
       return {
         timestamps: [],
         callCounts: [],
@@ -112,48 +88,32 @@ const TrendChart = ({ filters, onError }: TrendChartProps) => {
       };
     }
 
-    const result = {
+    return {
       timestamps: data.items.map((item) => formatTimestamp(item.timestamp, data.granularity)),
       callCounts: data.items.map((item) => item.callCount),
       totalTokens: data.items.map((item) => item.totalTokens),
       totalPoints: data.items.map((item) => item.totalPoints)
     };
-
-    console.log('[TrendChart] 处理后的图表数据:', result);
-    return result;
   }, [data]);
 
   // 初始化和更新图表
   useEffect(() => {
-    console.log('[TrendChart] useEffect 触发:', {
-      hasChartRef: !!chartRef.current,
-      isLoading,
-      chartDataLength: chartData.timestamps.length,
-      chartData
-    });
-
-    if (!chartRef.current) {
-      console.log('[TrendChart] chartRef.current 为空');
-      return;
-    }
-
-    if (isLoading) {
-      console.log('[TrendChart] 数据加载中，跳过渲染');
-      return;
-    }
+    if (!chartRef.current || isLoading) return;
 
     // 如果数据为空，跳过渲染
-    if (chartData.timestamps.length === 0) {
-      console.log('[TrendChart] 数据为空，跳过渲染');
-      return;
+    if (chartData.timestamps.length === 0) return;
+
+    // 加载态会卸载并重建图表容器 DOM，而旧实例仍绑定在已移除的节点上，
+    // 继续对该实例调用 setOption 不会在新容器中渲染，因此这里检测 DOM 不一致并重建实例
+    if (chartInstanceRef.current && chartInstanceRef.current.getDom() !== chartRef.current) {
+      chartInstanceRef.current.dispose();
+      chartInstanceRef.current = null;
     }
 
     // 初始化图表实例
     if (!chartInstanceRef.current) {
-      console.log('[TrendChart] 初始化图表实例');
       try {
         chartInstanceRef.current = echarts.init(chartRef.current);
-        console.log('[TrendChart] 图表实例初始化成功');
       } catch (error) {
         console.error('[TrendChart] 图表实例初始化失败:', error);
         return;
@@ -161,11 +121,6 @@ const TrendChart = ({ filters, onError }: TrendChartProps) => {
     }
 
     const chart = chartInstanceRef.current;
-    console.log('[TrendChart] 准备设置图表选项', {
-      timestamps: chartData.timestamps,
-      callCounts: chartData.callCounts,
-      totalTokens: chartData.totalTokens
-    });
 
     // 配置图表选项
     const option: echarts.EChartsOption = {
@@ -351,14 +306,9 @@ const TrendChart = ({ filters, onError }: TrendChartProps) => {
 
     // 设置图表选项
     try {
+      // 容器尺寸可能因布局变化而改变，先同步尺寸再渲染
+      chart.resize();
       chart.setOption(option);
-      console.log('[TrendChart] 图表选项设置成功');
-
-      // 强制刷新图表
-      setTimeout(() => {
-        chart.resize();
-        console.log('[TrendChart] 图表大小调整完成');
-      }, 100);
     } catch (error) {
       console.error('[TrendChart] 图表选项设置失败:', error);
     }
@@ -371,16 +321,11 @@ const TrendChart = ({ filters, onError }: TrendChartProps) => {
 
   // 响应式调整图表大小
   useEffect(() => {
-    if (!chartInstanceRef.current) return;
-
     const handleResize = () => {
       chartInstanceRef.current?.resize();
     };
 
     window.addEventListener('resize', handleResize);
-
-    // 初始调整大小
-    handleResize();
 
     return () => {
       window.removeEventListener('resize', handleResize);

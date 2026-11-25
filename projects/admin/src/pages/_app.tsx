@@ -12,17 +12,17 @@ import nextI18NextConfig from '../../next-i18next.config.js';
 import { theme } from '@fastgpt/web/styles/theme';
 import { AuthProvider } from '../web/context/AuthContext';
 import { useSystemStore } from '../web/common/system/useSystemStore';
+import { SHOW_USER_TEAM_MENU } from '../web/common/constants';
 
 // 全局样式
 import '../web/styles/global.scss';
 
-// 所有需要预加载的路由
+// 所有需要预加载的路由（用户/团队管理默认隐藏，仅在功能启用时预加载）
 const PREFETCH_ROUTES = [
   '/dashboard',
   '/statistics',
   '/tasks',
-  '/user/list',
-  '/team/list',
+  ...(SHOW_USER_TEAM_MENU ? ['/user/list', '/team/list'] : []),
   '/dataset/list',
   '/dataset/detail',
   '/import-export'

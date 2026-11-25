@@ -57,8 +57,6 @@ const FilterDatePanel: React.FC<FilterPanelProps> = ({
    */
   const handleQuickTimeChange = useCallback(
     (value: string) => {
-      console.log('[FilterDatePanel] 快捷时间选项点击:', value);
-
       setQuickTimeOption(value);
 
       const now = getNowInTimeZone();
@@ -82,19 +80,10 @@ const FilterDatePanel: React.FC<FilterPanelProps> = ({
       const newStartTime = start.format();
       const newEndTime = end.format();
 
-      console.log('[FilterDatePanel] 计算的时间范围:', {
-        value,
-        startTime: newStartTime,
-        endTime: newEndTime,
-        startFormatted: start.format('YYYY-MM-DD HH:mm:ss'),
-        endFormatted: end.format('YYYY-MM-DD HH:mm:ss')
-      });
-
       setStartTime(start.format('YYYY-MM-DDTHH:mm'));
       setEndTime(end.format('YYYY-MM-DDTHH:mm'));
 
       // 触发筛选条件变化回调
-      console.log('[FilterDatePanel] 调用 onFilterChange');
       onFilterChange({
         startTime: newStartTime,
         endTime: newEndTime

@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Box, Flex, Text, VStack } from '@chakra-ui/react';
 import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
 import MyIcon from '@fastgpt/web/components/common/Icon';
 import { useAuth } from '@/web/context/AuthContext';
+import { SHOW_USER_TEAM_MENU } from '@/web/common/constants';
 
 const MotionFlex = motion(Flex);
 
@@ -14,6 +15,27 @@ interface MenuItem {
   path: string;
   activeLinks: string[];
 }
+
+/**
+ * 用户管理 / 团队管理菜单
+ * 默认不显示，通过环境变量 NEXT_PUBLIC_SHOW_USER_TEAM=true 启用
+ */
+const userTeamMenuItems: MenuItem[] = [
+  {
+    label: '用户管理',
+    icon: 'navbar/userLight',
+    activeIcon: 'navbar/userFill',
+    path: '/user/list',
+    activeLinks: ['/user']
+  },
+  {
+    label: '团队管理',
+    icon: 'support/team/memberLight',
+    activeIcon: 'support/team/memberLight',
+    path: '/team/list',
+    activeLinks: ['/team']
+  }
+];
 
 const menuItems: MenuItem[] = [
   {
@@ -37,22 +59,7 @@ const menuItems: MenuItem[] = [
     path: '/tasks',
     activeLinks: ['/tasks']
   },
-  /** 
-  {
-    label: '用户管理',
-    icon: 'navbar/userLight',
-    activeIcon: 'navbar/userFill',
-    path: '/user/list',
-    activeLinks: ['/user']
-  },
-  {
-    label: '团队管理',
-    icon: 'support/team/memberLight',
-    activeIcon: 'support/team/memberLight',
-    path: '/team/list',
-    activeLinks: ['/team']
-  },
-  */
+  ...(SHOW_USER_TEAM_MENU ? userTeamMenuItems : []),
   {
     label: '知识库',
     icon: 'navbar/datasetLight',

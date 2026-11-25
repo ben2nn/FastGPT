@@ -96,6 +96,13 @@ const StatusChart = ({ filters, onError }: StatusChartProps) => {
       return;
     }
 
+    // 加载态会卸载并重建图表容器 DOM，而旧实例仍绑定在已移除的节点上，
+    // 继续对该实例调用 setOption 不会在新容器中渲染，因此这里检测 DOM 不一致并重建实例
+    if (chartInstanceRef.current && chartInstanceRef.current.getDom() !== chartRef.current) {
+      chartInstanceRef.current.dispose();
+      chartInstanceRef.current = null;
+    }
+
     // 初始化图表实例
     if (!chartInstanceRef.current) {
       chartInstanceRef.current = echarts.init(chartRef.current);
@@ -180,6 +187,8 @@ const StatusChart = ({ filters, onError }: StatusChartProps) => {
     };
 
     // 设置图表选项
+    // 容器高度可能随警告提示的显示/隐藏而变化，先同步尺寸再渲染
+    chart.resize();
     chart.setOption(option);
 
     // 清理函数
@@ -190,16 +199,11 @@ const StatusChart = ({ filters, onError }: StatusChartProps) => {
 
   // 响应式调整图表大小
   useEffect(() => {
-    if (!chartInstanceRef.current) return;
-
     const handleResize = () => {
       chartInstanceRef.current?.resize();
     };
 
     window.addEventListener('resize', handleResize);
-
-    // 初始调整大小
-    handleResize();
 
     return () => {
       window.removeEventListener('resize', handleResize);
